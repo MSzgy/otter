@@ -1,0 +1,33 @@
+# ─────── Python ───────
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# ─────── venv / uv ───────
+.venv/
+venv/
+.python-version
+
+# ─────── OS ───────
+.DS_Store
+
+# ─────── IDE / tooling(含本地状态 & API key,勿入库)───────
+.idea/
+.vscode/
+.claude/
+
+# ─────── Otter runtime data(项目根内,勿入版本控制)───────
+/data/
+/reports/
+/logs/
+/config/config.toml
+/config/prompts/
+
+# 但保留 example
+!/config/config.example.toml

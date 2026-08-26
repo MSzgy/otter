@@ -1,0 +1,13 @@
+# 日期:{{ date }}({{ weekday }})
+# 时区:{{ timezone }}
+# 窗口:{{ window_start }} → {{ window_end }}
+# 事件总数:{{ event_count }}
+
+{% if event_count == 0 %}
+(窗口内无事件)
+{% else %}
+{% for block in group_blocks %}
+{{ block }}
+
+{% endfor %}
+{% endif %}

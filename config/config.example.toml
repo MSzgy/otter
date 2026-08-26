@@ -1,0 +1,108 @@
+# Otter 示例配置 —— 复制为 config.toml 后按需修改
+# 位置:./config/config.toml(项目根内,gitignore)
+
+schema_version = 1
+
+[core]
+timezone   = "Asia/Shanghai"
+data_dir   = "./data"
+report_dir = "./reports"
+log_dir    = "./logs"
+log_level  = "INFO"
+
+[schedule]
+enabled       = true
+daily_report  = "0 9 * * *"        # cron,时区见 [core].timezone
+lookback_days = 1
+
+# ─────────────── LLM ───────────────
+[llm]
+provider = "claude"
+
+[llm.claude]
+model         = "claude-sonnet-4-6"
+api_key_ref   = "keychain:otter/claude"
+# base_url 是 /v1/messages 的父路径。走公网留空即可;
+# 这里指向本机代理(路径前缀 /anthropic 是该代理约定)
+base_url      = "http://localhost:6655/anthropic"
+max_tokens    = 4096
+temperature   = 0.2
+cache_control = false                     # 一天一次不划算,后期接追问式交互再开
+
+[llm.mock]
+# 无需配置,返回固定内容,便于离线调试
+
+# ─────────────── 身份 ───────────────
+[identity]
+primary = "guoyang.zou@sap.com"
+# aliases = []                     # MVP 后接个人 GitHub 时再加
+
+# ─────────────── Collectors ───────────────
+[collectors.git]
+enabled        = true
+# paths 支持两种含义:
+#   - 单个仓库路径(有 .git/)→ 直接采
+#   - 目录 → 递归发现子目录里的仓库(限深度,跳过 node_modules 等噪声)
+paths = [
+    "/Users/I568963/Desktop/IA",
+    "/Users/I568963/Library/CloudStorage/OneDrive-SAPSE/IA_Joule_Capability",
+]
+include_merges = false
+max_depth      = 3
+# author 缺省用 [identity].primary,想覆盖时再填
+# author       = "guoyang.zou@sap.com"
+
+[collectors.github]
+enabled     = true
+username    = "I568963"
+api_key_ref = "keychain:otter/github"
+base_url    = "https://github.tools.sap/api/v3"
+# 采集的类型:自己 push、自己给别人的 review、issue/PR 评论
+event_types = [
+    "PushEvent",
+    "PullRequestReviewEvent",
+    "IssueCommentEvent",
+]
+# 额外拉别人对你 PR 的 review(通过 search + reviews API,慢一点但值得)
+include_reviews_received = true
+
+[collectors.outlook]
+# 走 Microsoft Graph API 拉三样:发出的邮件、Focused 收件、日历会议。
+# 先跑 `otter outlook auth` 完成 device flow,拿到 refresh_token 写进 Keychain,
+# 然后把下面这行改成 true。
+enabled = false
+# Microsoft 官方公共客户端("Microsoft Graph Command Line Tools"),多数企业租户默认许可;
+# 若 SAP Conditional Access 拒绝,自己去 Azure AD 注册一个 public client 换 GUID。
+client_id = "14d82eec-204b-4c2f-b7e8-296a70dab67e"
+# common = 允许 work+personal;单租户填 SAP 租户 GUID
+tenant_id = "common"
+refresh_token_ref = "keychain:otter/outlook"
+scopes = ["Mail.Read", "Calendars.Read"]
+include_sent             = true
+include_received_focused = true
+include_meetings         = true
+body_maxlen              = 500
+
+# ─────────────── Enrichers(顺序敏感)───────────────
+[enrichers]
+pipeline = []                      # POC 阶段留空,后续加 dedupe/cluster/redact/tagger
+
+# ─────────────── Notifiers ───────────────
+# pipeline 顺序执行,单个失败只 warn 不中断。
+# 内置:file(把 md 副本写到指定目录,常配到 iCloud/OneDrive/Obsidian vault)
+#      stdout(打印到终端,便于 `otter report | pbcopy`)
+[notifiers]
+pipeline = ["stdout"]
+
+# 想同步到 iCloud / OneDrive / Obsidian,取消注释并把 pipeline 改成 ["file", "stdout"]
+# [notifiers.file]
+# dir               = "~/Library/Mobile Documents/com~apple~CloudDocs/otter"
+# filename_template = "{date}.md"
+# overwrite         = true
+
+[notifiers.stdout]
+header = true
+
+# ─────────────── Prompt(可覆盖内置模板)───────────────
+[prompts]
+# daily = "./config/prompts/daily.md.j2"
