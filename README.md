@@ -18,6 +18,21 @@ Otter 每天定时采集你散落在多个工具里的工作痕迹(本地 Git co
 
 ---
 
+## 桌面水獭（新增）
+
+现在可以在 macOS 上运行桌面水獭，点击查看/生成工作简报，显示任务状态并在完成时通知。默认离线演示，可在设置中连接现有 Otter 配置。聊天、提醒、语音与硬件见后续路线图。
+
+```bash
+uv sync --extra dev
+cd desktop
+npm ci
+npm start
+```
+
+详见 [桌面启动、打包与验证](docs/desktop/README.md)。原有 CLI 继续可用。
+
+---
+
 ## 快速开始
 
 前置:macOS + [uv](https://github.com/astral-sh/uv)(`brew install uv`)。

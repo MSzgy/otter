@@ -31,3 +31,12 @@ venv/
 
 # 但保留 example
 !/config/config.example.toml
+
+# Desktop build / test artifacts
+/desktop/node_modules/
+/desktop/dist/
+/desktop/release/
+/desktop/build/
+/desktop/test-results/
+/desktop/playwright-report/
+/output/

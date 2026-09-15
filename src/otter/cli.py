@@ -63,11 +63,9 @@ def _load_config(config_path: str | None):
 
 def _open_store(cfg):
     """打开并迁移 Store。"""
-    from otter.core.store import Store
+    from otter.application.reports import open_store
 
-    store = Store(cfg.data_path() / "otter.db")
-    store.migrate()
-    return store
+    return open_store(cfg)
 
 
 def _default_report_date(cfg) -> str:
@@ -94,38 +92,15 @@ def _window_from_date(cfg, date: str) -> tuple[datetime, datetime]:
 
 def _make_orchestrator(cfg, store):
     """组装 Orchestrator。lazy import,避免非编排命令(show/doctor/secret)拖 langgraph。"""
-    from otter.core.keychain import DefaultSecretResolver
-    from otter.core.orchestrator import Orchestrator
-    from otter.summarizer.renderer import Renderer
+    from otter.application.reports import make_orchestrator
 
-    return Orchestrator(
-        config=cfg,
-        store=store,
-        renderer=Renderer(config=cfg.prompts, project_root=cfg.report_path().parent),
-        resolver=DefaultSecretResolver(),
-    )
+    return make_orchestrator(cfg, store)
 
 
 def _run_notifier_pipeline(cfg, report) -> None:
-    """按 config.notifiers.pipeline 顺序调 Notifier。单个失败只 warn 不中断。"""
-    from otter.core.keychain import DefaultSecretResolver
-    from otter.core.notifier import NotifierError
-    from otter.core.registry import NOTIFIERS
+    from otter.application.reports import notify_report
 
-    pipeline = cfg.notifiers.pipeline
-    if not pipeline:
-        return
-
-    resolver = DefaultSecretResolver()
-    for name in pipeline:
-        try:
-            cls = NOTIFIERS.get(name)
-            notifier = cls(config=cfg.notifiers.config_for(name), resolver=resolver)
-            notifier.notify(report)
-        except NotifierError as e:
-            err_console.print(f"[yellow]![/] notifier {name} 失败:{e}")
-        except Exception as e:
-            err_console.print(f"[yellow]![/] notifier {name} 异常:{e!r}")
+    notify_report(cfg, report, lambda message: err_console.print(f"[yellow]![/] {message}"))
 
 
 # ────────────────────── 根 ──────────────────────
