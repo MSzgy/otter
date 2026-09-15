@@ -56,10 +56,13 @@ class Backend extends EventEmitter {
     if (this.closed) return Promise.reject(new Error("后台未连接。"));
     return new Promise((resolve, reject) => {
       const id = ++this.sequence;
-      const timer = setTimeout(() => {
-        this.pending.delete(id);
-        reject(new Error("后台响应超时。"));
-      }, 20000);
+      const timer = setTimeout(
+        () => {
+          this.pending.delete(id);
+          reject(new Error("后台响应超时。"));
+        },
+        method === "models.test" ? 35000 : 20000,
+      );
       this.pending.set(id, { resolve, reject, timer });
       this.process.stdin.write(
         JSON.stringify({ jsonrpc: "2.0", id, method, params }) + "\n",

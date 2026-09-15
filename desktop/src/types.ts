@@ -1,6 +1,7 @@
 export type Health = {
   protocol_version: number;
   provider: string;
+  model: string;
   demo: boolean;
   timezone: string;
   today: string;

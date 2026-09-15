@@ -1,4 +1,5 @@
 """Bounded JSON-RPC over stdio. A single worker owns report jobs and its Store."""
+
 from __future__ import annotations
 
 import argparse
@@ -15,8 +16,10 @@ from pathlib import Path
 from typing import Any
 from zoneinfo import ZoneInfo
 
+from otter.application.model_settings import ModelSettings
 from otter.application.reports import make_orchestrator, notify_report, open_store
 from otter.core.config import Config, load
+from otter.core.llm import LLMError
 from otter.core.paths import _reset_cache_for_tests
 
 MAX_LINE = 64 * 1024
@@ -39,9 +42,10 @@ def valid_date(value: Any) -> str:
 
 
 class Runtime:
-    def __init__(self, config: Config, emit):
+    def __init__(self, config: Config, emit, model_path: Path | None = None):
         self.config = config
         self.emit = emit
+        self.models = ModelSettings(config, model_path)
         self.lock = threading.RLock()
         self.worker = ThreadPoolExecutor(max_workers=1, thread_name_prefix="otter-report")
         self.jobs: dict[str, dict] = {}
@@ -54,18 +58,33 @@ class Runtime:
         if method == "health.get":
             now = datetime.now(ZoneInfo(self.config.core.timezone))
             return {
-                "protocol_version": 1, "provider": self.config.llm.provider,
+                "protocol_version": 1,
+                "provider": self.config.llm.provider,
                 "demo": self.config.llm.provider == "mock",
+                "model": self.config.llm.provider_config().get("model", ""),
                 "timezone": self.config.core.timezone,
                 "today": now.date().isoformat(),
                 "yesterday": (now.date() - timedelta(days=1)).isoformat(),
-                "collectors": [name for name, cfg in self.config.collectors.items()
-                               if cfg.get("enabled", True)],
+                "collectors": [
+                    name for name, cfg in self.config.collectors.items() if cfg.get("enabled", True)
+                ],
             }
+        if method == "models.get":
+            with self.lock:
+                return self.models.public()
+        if method in {"models.save", "models.reset"}:
+            with self.lock:
+                if self.active:
+                    raise RequestError("请等待简报生成完成后修改模型。")
+                return self.models.save(params) if method == "models.save" else self.models.reset()
+        if method == "models.test":
+            return self.models.test(params)
         if method == "reports.list":
             with open_store(self.config) as store:
-                return [r.model_dump(mode="json", exclude={"content_md", "trace_path"})
-                        for r in store.list_reports(limit=60)]
+                return [
+                    r.model_dump(mode="json", exclude={"content_md", "trace_path"})
+                    for r in store.list_reports(limit=60)
+                ]
         if method == "reports.get":
             date = valid_date(params.get("date"))
             with open_store(self.config) as store:
@@ -110,7 +129,8 @@ class Runtime:
                 except BlockingIOError:
                     raise RequestError("另一个 Otter 桌面实例正在生成简报。") from None
                 self._update(
-                    job_id, status="running",
+                    job_id,
+                    status="running",
                     message="采集工作记录" if collect else "整理简报",
                 )
                 warnings: list[str] = []
@@ -119,8 +139,9 @@ class Runtime:
                     if collect:
                         daily = orch.run_daily(date)
                         if daily.collect.collector_errors:
-                            warnings.append("部分数据源采集失败：" + "、".join(
-                                daily.collect.collector_errors))
+                            warnings.append(
+                                "部分数据源采集失败：" + "、".join(daily.collect.collector_errors)
+                            )
                     else:
                         since, until = orch._window_from_date(date)
                         orch.report_only(date, since, until)
@@ -134,7 +155,8 @@ class Runtime:
         except Exception:
             # Providers may put tokens or private request bodies in exceptions.
             self._update(
-                job_id, status="failed",
+                job_id,
+                status="failed",
                 message="生成失败，请检查模型、密钥和数据源配置。",
             )
         finally:
@@ -146,7 +168,7 @@ class Runtime:
         self.worker.shutdown(wait=True, cancel_futures=True)
 
 
-def serve(config: Config, incoming, outgoing) -> None:
+def serve(config: Config, incoming, outgoing, model_path: Path | None = None) -> None:
     output_lock = threading.Lock()
 
     def write(payload):
@@ -157,7 +179,29 @@ def serve(config: Config, incoming, outgoing) -> None:
     def emit(method, payload):
         write({"jsonrpc": "2.0", "method": method, "params": payload})
 
-    runtime = Runtime(config, emit)
+    runtime = Runtime(config, emit, model_path)
+    tester = ThreadPoolExecutor(max_workers=1, thread_name_prefix="otter-model-test")
+    test_slot = threading.Lock()
+
+    def test_model(request_id, params):
+        try:
+            result = runtime.dispatch("models.test", params)
+            write({"jsonrpc": "2.0", "id": request_id, "result": result})
+        except LLMError as exc:
+            write(
+                {"jsonrpc": "2.0", "id": request_id, "error": {"code": -32602, "message": str(exc)}}
+            )
+        except Exception:
+            write(
+                {
+                    "jsonrpc": "2.0",
+                    "id": request_id,
+                    "error": {"code": -32603, "message": "连接失败，请检查配置与钥匙串权限。"},
+                }
+            )
+        finally:
+            test_slot.release()
+
     try:
         while True:
             line = incoming.readline(MAX_LINE + 1)
@@ -182,16 +226,34 @@ def serve(config: Config, incoming, outgoing) -> None:
                 params = request.get("params", {})
                 if not isinstance(params, dict):
                     raise RequestError("params 必须为对象。")
+                if request["method"] == "models.test":
+                    if not test_slot.acquire(blocking=False):
+                        raise RequestError("连接测试正在进行，请稍后重试。")
+                    tester.submit(test_model, request_id, params)
+                    continue
                 result = runtime.dispatch(request["method"], params)
                 write({"jsonrpc": "2.0", "id": request_id, "result": result})
-            except (RequestError, json.JSONDecodeError) as exc:
-                message = str(exc) if isinstance(exc, RequestError) else "JSON 格式无效。"
-                write({"jsonrpc": "2.0", "id": request_id,
-                       "error": {"code": -32600, "message": message}})
+            except (RequestError, LLMError, json.JSONDecodeError) as exc:
+                message = (
+                    str(exc) if isinstance(exc, (RequestError, LLMError)) else "JSON 格式无效。"
+                )
+                write(
+                    {
+                        "jsonrpc": "2.0",
+                        "id": request_id,
+                        "error": {"code": -32600, "message": message},
+                    }
+                )
             except Exception:
-                write({"jsonrpc": "2.0", "id": request_id,
-                       "error": {"code": -32603, "message": "操作失败，请检查配置或数据库。"}})
+                write(
+                    {
+                        "jsonrpc": "2.0",
+                        "id": request_id,
+                        "error": {"code": -32603, "message": "操作失败，请检查配置或数据库。"},
+                    }
+                )
     finally:
+        tester.shutdown(wait=True)
         runtime.close()
 
 
@@ -199,6 +261,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", required=True)
     parser.add_argument("--root", required=True)
+    parser.add_argument("--model-settings", type=Path)
     args = parser.parse_args()
     os.environ["OTTER_PROJECT_ROOT"] = str(Path(args.root).resolve())
     _reset_cache_for_tests()
@@ -206,7 +269,9 @@ def main():
     # Any collector/provider/notifier printing goes to stderr, not the protocol pipe.
     with contextlib.redirect_stdout(sys.stderr):
         try:
-            serve(load(Path(args.config).resolve()), sys.stdin, protocol_output)
+            serve(
+                load(Path(args.config).resolve()), sys.stdin, protocol_output, args.model_settings
+            )
         except Exception:
             print("Otter 后台启动失败，请检查所选配置、时区与数据目录。", file=sys.stderr)
             raise SystemExit(1) from None

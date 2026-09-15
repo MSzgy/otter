@@ -4,6 +4,7 @@ import Markdown from "react-markdown";
 import { Otter, type Mood } from "./Otter";
 import type { Health, Job, Report, Prefs, Snapshot } from "./types";
 import "./style.css";
+import { ModelSettings } from "./ModelSettings";
 const api = window.otter;
 function message(error: unknown) {
   return error instanceof Error
@@ -364,7 +365,7 @@ function Panel() {
                   生成前采集已启用的数据源
                   <span>
                     {health && !health.demo
-                      ? `模型：${health.provider} · 生成将调用已配置的模型`
+                      ? `模型：${health.model || health.provider} · 生成将调用已配置的模型`
                       : "仅演示已有流程"}
                   </span>
                 </label>
@@ -481,6 +482,11 @@ function Panel() {
                   连接现有工作空间，选择你喜欢的相处方式。
                 </p>
               </div>
+              <ModelSettings
+                key={prefs.config}
+                connected={!!health}
+                blocked={!!busy || connecting}
+              />
               <section className="settings-section">
                 <h2>工作空间</h2>
                 <p>
@@ -545,7 +551,11 @@ function Panel() {
                 <h2>连接状态</h2>
                 <dl>
                   <dt>模型</dt>
-                  <dd>{health?.provider || "未连接"}</dd>
+                  <dd>
+                    {health
+                      ? `${health.provider}${health.model ? " / " + health.model : ""}`
+                      : "未连接"}
+                  </dd>
                   <dt>时区</dt>
                   <dd>{health?.timezone || "—"}</dd>
                   <dt>启用的数据源</dt>

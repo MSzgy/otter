@@ -11,6 +11,7 @@ const {
   Notification,
 } = require("electron");
 const fs = require("node:fs");
+const { createHash } = require("node:crypto");
 const path = require("node:path");
 const { fileURLToPath } = require("node:url");
 const { Backend } = require("./bridge.cjs");
@@ -104,6 +105,14 @@ async function connect() {
       selected.config,
       "--root",
       selected.root,
+      "--model-settings",
+      path.join(
+        app.getPath("userData"),
+        "models",
+        createHash("sha256")
+          .update(JSON.stringify([selected.config, selected.root]))
+          .digest("hex") + ".json",
+      ),
     ];
     const child = new Backend(command, args, {
       cwd: app.isPackaged ? app.getPath("userData") : root,
@@ -244,6 +253,10 @@ ipcMain.handle("otter:call", async (event, method, params) => {
       "reports.get",
       "reports.generate",
       "jobs.list",
+      "models.get",
+      "models.test",
+      "models.save",
+      "models.reset",
     ].includes(method)
   )
     throw new Error("不支持的操作。");
@@ -255,7 +268,17 @@ ipcMain.handle("otter:call", async (event, method, params) => {
   )
     throw new Error("参数无效。");
   if (!backend || switching) throw new Error("后台尚未就绪。");
-  return backend.call(method, params);
+  if (method.startsWith("models.") && event.sender !== panel.webContents)
+    throw new Error("请在设置面板中配置模型。");
+  const result = await backend.call(method, params);
+  if (["models.save", "models.reset"].includes(method)) {
+    currentHealth = await backend.call("health.get");
+    broadcast({
+      type: "connection",
+      data: { status: "online", health: currentHealth },
+    });
+  }
+  return result;
 });
 ipcMain.handle("otter:action", async (event, name, value) => {
   guard(event);
@@ -349,6 +372,14 @@ ipcMain.handle("otter:action", async (event, name, value) => {
     delete preferences.selection;
     save();
     await connect();
+    if (backend && !backend.closed) {
+      await backend.call("models.reset");
+      currentHealth = await backend.call("health.get");
+      broadcast({
+        type: "connection",
+        data: { status: "online", health: currentHealth },
+      });
+    }
     broadcast({ type: "preferences", data: preferencesPublic() });
     return;
   }

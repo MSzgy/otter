@@ -579,3 +579,81 @@ main {
 :root[data-view="pet"] {
   background: transparent;
 }
+.model-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.model-title h2 {
+  margin: 0;
+}
+.model-title span {
+  font-size: 11px;
+  color: #627b67;
+}
+.model-settings fieldset {
+  border: 0;
+  padding: 0;
+  margin: 20px 0 0;
+  min-width: 0;
+}
+.model-settings fieldset > label,
+.model-advanced label {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 12px;
+  margin: 15px 0 8px;
+  color: #435c4b;
+}
+.model-settings input:not([type="checkbox"]),
+.model-settings select {
+  font: inherit;
+  padding: 10px 12px;
+  border: 1px solid #d3ddd2;
+  background: #fff;
+  border-radius: 7px;
+  color: #2f493a;
+  width: 100%;
+  min-width: 0;
+}
+.model-settings small {
+  font-size: 10px;
+  color: #788575;
+  line-height: 1.8;
+}
+.model-settings fieldset .auth-check {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+}
+.model-settings details {
+  margin-top: 20px;
+}
+.model-settings summary {
+  cursor: pointer;
+  font-size: 12px;
+  color: #647d68;
+}
+.model-advanced {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0 18px;
+}
+.model-advanced label:last-child {
+  grid-column: 1/-1;
+}
+.model-settings .model-hint {
+  font-size: 10px;
+  margin: 12px 0;
+  color: #798777;
+}
+.model-success {
+  font-size: 12px;
+  padding: 12px;
+  background: #e7f0e4;
+  color: #315c48;
+  border-radius: 7px;
+  line-height: 1.7;
+}

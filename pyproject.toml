@@ -46,6 +46,7 @@ outlook = "otter.collectors.outlook:OutlookCollector"
 [project.entry-points."otter.llm"]
 claude = "otter.llm.claude:ClaudeProvider"
 mock = "otter.llm.mock:MockProvider"
+openai = "otter.llm.openai_compatible:OpenAICompatibleProvider"
 
 [project.entry-points."otter.enrichers"]
 # 后续填充

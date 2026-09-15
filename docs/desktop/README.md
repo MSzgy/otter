@@ -33,7 +33,36 @@ npm start
 
 首次生成默认只使用已入库事件；需要采集时勾选“生成前采集已启用的数据源”。查看历史不触发模型调用。部分 collector 失败会保留成功结果并明确提示，全部失败也会提示失败的数据源，不将结果当作完整报告。
 
-模型和数据源的详细参数仍使用原有 TOML 与 CLI 管理，包括 `otter secret`、GitHub/Outlook 授权。桌面不把密钥送到渲染页面。
+数据源及 Claude 等原有模型的详细参数仍使用 TOML 与 CLI 管理，包括 `otter secret`、GitHub/Outlook 授权。桌面不把密钥送到渲染页面。
+
+## 在 UI 配置 OpenAI 兼容模型
+
+偏好设置 → 模型配置：填写 API Base URL、模型 ID、API Key，先点击测试连接，再点击保存并启用。适配 `/chat/completions`（非流式），支持标准 Bearer 认证和无密钥本地服务。
+
+- Base URL 通常形如 `https://服务地址/v1`，根域名自动补 `/v1`；已有路径保留，也接受完整 `/chat/completions` 地址。不要在 URL 放密钥。
+- 模型 ID 由服务商提供；不同服务支持的 ID 不同。仅支持 Responses API 的服务不适用此适配器。
+- 高级参数支持最大输出长度、请求超时，以及 `max_tokens` / `max_completion_tokens` 两种限制参数。某些推理模型需选择后者。
+- API Key 存 macOS Keychain；界面只显示“已配置”，不会读取明文回显。留空保留原密钥，仅允许同一服务地址；更换地址需重新输入。无需认证的本地服务可取消勾选“使用 API Key”。
+- 测试连接发送固定短消息，不带工作数据、不生成报告，也不自动保存；可能产生少量服务费用。
+- 模型覆盖配置按原配置路径与项目根目录隔离，保存在桌面 userData 的 `models/` 下，只含设置及密钥引用。重连、重启后继续生效，不修改原 TOML，旧 CLI 仍使用 TOML 模型。
+- 点击“恢复原模型”恢复该工作区原 TOML 的模型；“使用离线演示”切回 mock。
+
+CLI 也可使用新 provider：
+
+```toml
+[llm]
+provider = "openai"
+
+[llm.openai]
+base_url = "https://你的服务地址/v1"
+model = "你的模型ID"
+api_key_ref = "keychain:otter/openai"
+max_tokens = 4096
+token_limit_field = "max_tokens"
+timeout_sec = 60
+```
+
+通过 `otter secret set keychain:otter/openai` 录入密钥；无认证服务可省略 `api_key_ref`。首次运行 UI 连接测试时，macOS 可能要求允许钥匙串访问。
 
 ## 存储与生命周期
 
