@@ -29,7 +29,17 @@ export type Prefs = {
   config: string;
   envConfig?: boolean;
 };
+export type ChatTurn = {
+  id: string;
+  session_id: string;
+  status: string;
+  content: string;
+  error: string;
+  model: string;
+};
 export type Snapshot = {
+  chat: ChatTurn | null;
+  view?: string;
   health: Health | null;
   job: Job | null;
   preferences: Prefs;

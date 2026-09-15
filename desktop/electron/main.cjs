@@ -26,6 +26,8 @@ let currentHealth = null,
   lastJob = null,
   offlineMessage = "",
   drag = null;
+let chatState = null,
+  activeView = "reports";
 const root = path.resolve(__dirname, "../..");
 const page = path.resolve(__dirname, "../dist/index.html");
 const prefsPath = () => path.join(app.getPath("userData"), "desktop.json");
@@ -93,6 +95,7 @@ async function connect() {
     }
     currentHealth = null;
     lastJob = null;
+    chatState = null;
     offlineMessage = "";
     broadcast({ type: "connection", data: { status: "connecting" } });
     const selected = selection();
@@ -124,11 +127,24 @@ async function connect() {
     child.on("offline", (message) => {
       if (backend !== child) return;
       currentHealth = null;
+      chatState = null;
       offlineMessage = message;
       broadcast({ type: "connection", data: { status: "offline", message } });
     });
     child.on("event", (event) => {
       if (backend !== child) return;
+      if (event.type === "chat.changed") {
+        chatState = event.data;
+        // The pet only needs activity; do not send conversation text to its renderer.
+        if (panel && !panel.isDestroyed())
+          panel.webContents.send("otter:event", event);
+        if (pet && !pet.isDestroyed())
+          pet.webContents.send("otter:event", {
+            type: "chat.activity",
+            data: { status: chatState.status },
+          });
+        return;
+      }
       lastJob = event.data;
       broadcast(event);
       if (
@@ -203,10 +219,20 @@ function reposition() {
     pet.setPosition(p.x, p.y);
   }
 }
+function showChat() {
+  activeView = "chat";
+  showPanel();
+  if (panel && !panel.isDestroyed())
+    panel.webContents.send("otter:event", {
+      type: "navigation",
+      data: { view: "chat" },
+    });
+}
 function refreshTray() {
   tray.setContextMenu(
     Menu.buildFromTemplate([
       { label: "打开 Otter", click: showPanel },
+      { label: "与水獭聊天", click: showChat },
       {
         label: "显示桌面水獭",
         type: "checkbox",
@@ -237,6 +263,7 @@ function refreshTray() {
 function ensureIdle() {
   if (
     switching ||
+    (chatState?.status === "streaming" && backend && !backend.closed) ||
     (lastJob &&
       ["queued", "running"].includes(lastJob.status) &&
       backend &&
@@ -253,6 +280,13 @@ ipcMain.handle("otter:call", async (event, method, params) => {
       "reports.get",
       "reports.generate",
       "jobs.list",
+      "chat.sessions",
+      "chat.new",
+      "chat.history",
+      "chat.send",
+      "chat.cancel",
+      "chat.delete",
+      "chat.state",
       "models.get",
       "models.test",
       "models.save",
@@ -268,9 +302,14 @@ ipcMain.handle("otter:call", async (event, method, params) => {
   )
     throw new Error("参数无效。");
   if (!backend || switching) throw new Error("后台尚未就绪。");
-  if (method.startsWith("models.") && event.sender !== panel.webContents)
+  if (
+    (method.startsWith("models.") || method.startsWith("chat.")) &&
+    event.sender !== panel.webContents
+  )
     throw new Error("请在设置面板中配置模型。");
   const result = await backend.call(method, params);
+  if (method === "chat.delete" && chatState?.session_id === params.session_id)
+    chatState = null;
   if (["models.save", "models.reset"].includes(method)) {
     currentHealth = await backend.call("health.get");
     broadcast({
@@ -285,12 +324,20 @@ ipcMain.handle("otter:action", async (event, name, value) => {
   if (name === "snapshot")
     return {
       health: currentHealth,
+      chat:
+        event.sender === panel.webContents
+          ? chatState
+          : chatState
+            ? { status: chatState.status }
+            : null,
+      view: activeView,
       job: lastJob,
       preferences: preferencesPublic(),
       message: offlineMessage,
       switching,
     };
   if (name === "open-panel") return showPanel();
+  if (name === "open-chat") return showChat();
   if (name === "hide-pet") {
     preferences.hidden = true;
     pet.hide();

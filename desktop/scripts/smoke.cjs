@@ -24,6 +24,25 @@ const http = require("node:http");
         res.end(JSON.stringify({ error: "private-server-error" }));
         return;
       }
+      if (body.stream) {
+        res.setHeader("Content-Type", "text/event-stream");
+        const slow = body.messages.at(-1).content === "慢慢回答";
+        const first = slow ? "正在慢慢回复" : "你好，我是 Otter。";
+        res.write(
+          `data: ${JSON.stringify({ choices: [{ delta: { content: first } }] })}\n\n`,
+        );
+        const timer = setTimeout(
+          () => {
+            res.write(
+              `data: ${JSON.stringify({ choices: [{ delta: { content: slow ? "不应出现的迟到内容" : "很高兴和你聊天。" } }] })}\n\n`,
+            );
+            res.end("data: [DONE]\n\n");
+          },
+          slow ? 4000 : 150,
+        );
+        res.on("close", () => clearTimeout(timer));
+        return;
+      }
       const content =
         body.messages.at(-1).content === "Reply with only OK."
           ? "OK"
@@ -132,6 +151,59 @@ const http = require("node:http");
     await panel
       .getByRole("heading", { name: "OpenAI 兼容接口测试成功", exact: true })
       .waitFor({ timeout: 30000 });
+    await panel
+      .getByRole("button", { name: "与水獭聊天", exact: false })
+      .click();
+    await panel.getByRole("textbox", { name: "聊天输入" }).fill("你好小水獭");
+    await panel.getByRole("button", { name: "发送", exact: true }).click();
+    await panel
+      .getByText("你好，我是 Otter。很高兴和你聊天。", { exact: true })
+      .waitFor();
+    await panel.getByRole("button", { name: "发送", exact: true }).waitFor();
+    await panel
+      .getByRole("textbox", { name: "聊天输入" })
+      .fill("还记得我刚才说了什么吗");
+    await panel.getByRole("button", { name: "发送", exact: true }).click();
+    await panel.waitForFunction(
+      () =>
+        document.querySelectorAll(".chat-message.assistant").length === 2 &&
+        !document.querySelector(".chat-cursor"),
+    );
+    const chatCalls = requests.filter((r) => r.body.stream);
+    assert.deepEqual(
+      chatCalls[1].body.messages.map((m) => m.role),
+      ["system", "user", "assistant", "user"],
+    );
+    assert.equal(chatCalls[1].body.messages[1].content, "你好小水獭");
+    await panel.screenshot({ path: path.join(output, "otter-chat.png") });
+    await panel.getByRole("button", { name: "偏好设置" }).click();
+    await pet.getByRole("button", { name: "与水獭聊天", exact: true }).click();
+    await panel.getByRole("textbox", { name: "聊天输入" }).waitFor();
+    await panel.getByRole("textbox", { name: "聊天输入" }).fill("慢慢回答");
+    await panel.getByRole("button", { name: "发送", exact: true }).click();
+    await panel.getByText("正在慢慢回复", { exact: true }).waitFor();
+    await panel.getByRole("button", { name: "停止回复", exact: true }).click();
+    await panel.getByText("已停止回复", { exact: true }).waitFor();
+    await panel.evaluate(() => window.otter.action("reconnect"));
+    await panel.getByText("已停止回复", { exact: true }).waitFor();
+    await panel.waitForFunction(
+      () =>
+        document.querySelectorAll(".chat-message").length === 6 &&
+        document
+          .querySelector('[aria-label="聊天消息"]')
+          ?.getAttribute("aria-busy") === "false",
+    );
+    assert.equal(
+      await panel.getByText("不应出现的迟到内容", { exact: true }).count(),
+      0,
+    );
+    await panel.getByRole("button", { name: "新对话", exact: true }).click();
+    await panel
+      .getByRole("heading", { name: "我在这里，慢慢说。", exact: true })
+      .waitFor();
+    await panel.getByRole("button", { name: "删除对话", exact: true }).click();
+    await panel.getByRole("button", { name: "确认删除", exact: true }).click();
+    await panel.getByText("已停止回复", { exact: true }).waitFor();
     assert(requests.length >= 3);
     assert(requests.every((r) => r.url === "/v1/chat/completions" && !r.auth));
     await panel.getByRole("button", { name: "偏好设置" }).click();
@@ -159,7 +231,7 @@ const http = require("node:http");
     console.log("Window properties:", properties);
     assert.equal(errors.length, 0, errors.join("\n"));
     console.log(
-      "PASS: real Electron report generation, persistence after reconnect, quiet setting, OpenAI model test/save/reconnect/generation/reset, IPC allowlist.",
+      "PASS: real Electron report generation, persistence after reconnect, quiet setting, OpenAI model test/save/reconnect/generation/reset, streaming multi-turn chat, pet entry, cancel, history and deletion, IPC allowlist.",
     );
   } finally {
     if (app) await app.close();

@@ -18,6 +18,7 @@ from zoneinfo import ZoneInfo
 
 from otter.application.model_settings import ModelSettings
 from otter.application.reports import make_orchestrator, notify_report, open_store
+from otter.companion.chat import ChatService
 from otter.core.config import Config, load
 from otter.core.llm import LLMError
 from otter.core.paths import _reset_cache_for_tests
@@ -53,6 +54,7 @@ class Runtime:
         # Connections are opened/closed on their owning thread, never passed to workers.
         with open_store(config):
             pass
+        self.chat = ChatService(config.data_path() / "chat.sqlite3", emit)
 
     def dispatch(self, method: str, params: dict) -> Any:
         if method == "health.get":
@@ -69,13 +71,29 @@ class Runtime:
                     name for name, cfg in self.config.collectors.items() if cfg.get("enabled", True)
                 ],
             }
+        if method == "chat.sessions":
+            return self.chat.store.sessions()
+        if method == "chat.new":
+            return self.chat.store.new()
+        if method == "chat.history":
+            return self.chat.store.history(params.get("session_id"))
+        if method == "chat.state":
+            return self.chat.snapshot()
+        if method == "chat.send":
+            with self.lock:
+                return self.chat.send(params, self.config.llm)
+        if method == "chat.cancel":
+            return self.chat.cancel(params.get("turn_id"))
+        if method == "chat.delete":
+            return self.chat.delete(params.get("session_id"))
         if method == "models.get":
             with self.lock:
                 return self.models.public()
         if method in {"models.save", "models.reset"}:
             with self.lock:
-                if self.active:
-                    raise RequestError("请等待简报生成完成后修改模型。")
+                turn = self.chat.snapshot()
+                if self.active or (turn and turn["status"] == "streaming"):
+                    raise RequestError("请等待当前回复或简报完成后修改模型。")
                 return self.models.save(params) if method == "models.save" else self.models.reset()
         if method == "models.test":
             return self.models.test(params)
@@ -165,6 +183,7 @@ class Runtime:
                     self.active = None
 
     def close(self) -> None:
+        self.chat.close()
         self.worker.shutdown(wait=True, cancel_futures=True)
 
 

@@ -4,6 +4,7 @@ import Markdown from "react-markdown";
 import { Otter, type Mood } from "./Otter";
 import type { Health, Job, Report, Prefs, Snapshot } from "./types";
 import "./style.css";
+import { ChatPane } from "./ChatPane";
 import { ModelSettings } from "./ModelSettings";
 const api = window.otter;
 function message(error: unknown) {
@@ -16,6 +17,7 @@ function message(error: unknown) {
 }
 function useRuntime() {
   const [health, setHealth] = useState<Health | null>(null);
+  const [chatBusy, setChatBusy] = useState(false);
   const [job, setJob] = useState<Job | null>(null);
   const [prefs, setPrefs] = useState<Prefs>({
     quiet: false,
@@ -34,7 +36,10 @@ function useRuntime() {
         setHealth(event.data.health || null);
         setError(event.data.message || "");
         if (event.data.status === "connecting") setJob(null);
+        if (event.data.status !== "online") setChatBusy(false);
       }
+      if (["chat.changed", "chat.activity"].includes(event.type))
+        setChatBusy(event.data.status === "streaming");
       if (event.type === "job.changed") setJob(event.data);
       if (event.type === "preferences") setPrefs(event.data);
     });
@@ -46,6 +51,7 @@ function useRuntime() {
         if (active && revision === version) {
           setHealth(s.health);
           setJob(s.job);
+          setChatBusy(s.chat?.status === "streaming");
           setPrefs(s.preferences);
           setError(s.message);
           setConnecting(s.switching || (!s.health && !s.message));
@@ -62,10 +68,19 @@ function useRuntime() {
       unsubscribe();
     };
   }, []);
-  return { health, job, prefs, setPrefs, error, setError, connecting };
+  return {
+    health,
+    job,
+    prefs,
+    setPrefs,
+    error,
+    setError,
+    connecting,
+    chatBusy,
+  };
 }
 function Pet() {
-  const { health, job, prefs } = useRuntime();
+  const { health, job, prefs, chatBusy } = useRuntime();
   const [happy, setHappy] = useState(false);
   const start = useRef<{ x: number; y: number } | null>(null);
   const moved = useRef(false);
@@ -79,7 +94,8 @@ function Pet() {
     },
     [],
   );
-  const working = health && job && ["queued", "running"].includes(job.status);
+  const working =
+    chatBusy || (health && job && ["queued", "running"].includes(job.status));
   const mood: Mood = happy
     ? "happy"
     : !health
@@ -135,7 +151,7 @@ function Pet() {
       <button
         data-interactive
         className="pet-body"
-        aria-label="打开 Otter"
+        aria-label="与水獭聊天"
         onPointerDown={(e) => {
           if (e.button !== 0) return;
           start.current = { x: e.screenX, y: e.screenY };
@@ -151,7 +167,7 @@ function Pet() {
             setHappy(true);
             clearTimeout(happyTimer.current);
             happyTimer.current = setTimeout(() => setHappy(false), 1800);
-            void api.action("open-panel").catch(() => {});
+            void api.action("open-chat").catch(() => {});
           }
         }}
         onPointerCancel={() => {
@@ -167,16 +183,39 @@ function Pet() {
           : !health
             ? "点我打开 Otter"
             : working
-              ? "正在整理你的简报"
+              ? chatBusy
+                ? "让我想想…"
+                : "正在整理你的简报"
               : "我在这里"}
       </div>
     </div>
   );
 }
 function Panel() {
-  const { health, job, prefs, setPrefs, error, setError, connecting } =
-    useRuntime();
-  const [tab, setTab] = useState<"reports" | "settings">("reports");
+  const {
+    health,
+    job,
+    prefs,
+    setPrefs,
+    error,
+    setError,
+    connecting,
+    chatBusy,
+  } = useRuntime();
+  const [tab, setTab] = useState<"reports" | "settings" | "chat">("reports");
+  useEffect(() => {
+    let navigated = false;
+    const unsub = api.subscribe((event) => {
+      if (event.type === "navigation" && event.data.view === "chat") {
+        navigated = true;
+        setTab("chat");
+      }
+    });
+    void api.action<Snapshot>("snapshot").then((s) => {
+      if (!navigated && s.view === "chat") setTab("chat");
+    });
+    return unsub;
+  }, []);
   const [reports, setReports] = useState<Report[]>([]);
   const [selected, setSelected] = useState<Report | null>(null);
   const [date, setDate] = useState("");
@@ -253,6 +292,12 @@ function Panel() {
         </div>
         <nav aria-label="主导航">
           <button
+            className={tab === "chat" ? "active" : ""}
+            onClick={() => setTab("chat")}
+          >
+            <span>◌</span>与水獭聊天
+          </button>
+          <button
             className={tab === "reports" ? "active" : ""}
             onClick={() => setTab("reports")}
           >
@@ -271,7 +316,7 @@ function Panel() {
             mood={
               !health
                 ? "offline"
-                : busy
+                : busy || chatBusy
                   ? "working"
                   : prefs.quiet
                     ? "sleeping"
@@ -299,7 +344,11 @@ function Panel() {
       <main>
         <header className="topbar">
           <span>
-            {tab === "reports" ? "工作空间 / 简报" : "工作空间 / 设置"}
+            {tab === "reports"
+              ? "工作空间 / 简报"
+              : tab === "chat"
+                ? "Otter / 聊天"
+                : "工作空间 / 设置"}
           </span>
           <span>OTTER DESKTOP</span>
         </header>
@@ -312,7 +361,13 @@ function Panel() {
               </button>
             </div>
           )}
-          {tab === "reports" ? (
+          {tab === "chat" ? (
+            <ChatPane
+              key={prefs.config}
+              health={health}
+              onSettings={() => setTab("settings")}
+            />
+          ) : tab === "reports" ? (
             <>
               <div className="heading">
                 <div>
@@ -485,7 +540,7 @@ function Panel() {
               <ModelSettings
                 key={prefs.config}
                 connected={!!health}
-                blocked={!!busy || connecting}
+                blocked={!!busy || connecting || chatBusy}
               />
               <section className="settings-section">
                 <h2>工作空间</h2>
@@ -562,7 +617,7 @@ function Panel() {
                   <dd>{health?.collectors.join("、") || "无"}</dd>
                 </dl>
                 <p>
-                  关闭面板后，水獭仍驻留在菜单栏。退出应用会停止后台任务。当前版本提供宠物互动和工作简报；对话、提醒与语音在后续阶段接入。
+                  关闭面板后，水獭仍驻留在菜单栏。退出应用会停止后台任务。当前版本提供宠物聊天和工作简报；提醒与语音在后续阶段接入。
                 </p>
               </section>
             </>
