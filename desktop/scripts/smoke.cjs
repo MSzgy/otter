@@ -81,6 +81,112 @@ const http = require("node:http");
     await panel
       .getByText("离线演示模式", { exact: true })
       .waitFor({ timeout: 30000 });
+    await panel.getByRole("button", { name: "陪伴互动", exact: false }).click();
+    await panel.getByRole("heading", { name: "和小水獭玩一会儿。" }).waitFor();
+    const beforeRequests = requests.length;
+    const labels = ["摸摸头", "喂小鱼", "玩小球", "跳个舞", "打招呼", "挠痒痒"];
+    const moods = ["开心", "吃小鱼", "玩小球", "跳舞", "打招呼", "被挠痒痒"];
+    for (let i = 0; i < labels.length; i++) {
+      await panel.getByRole("button", { name: labels[i], exact: true }).click();
+      await pet
+        .getByRole("img", { name: `水獭：${moods[i]}`, exact: true })
+        .waitFor();
+      if (i === 1) {
+        await panel
+          .locator(".interaction-stage")
+          .getByRole("img", { name: "水獭：吃小鱼", exact: true })
+          .waitFor();
+        await panel.screenshot({
+          path: path.join(output, "otter-interactions.png"),
+        });
+        await pet.screenshot({
+          path: path.join(output, "otter-feeding.png"),
+          omitBackground: true,
+        });
+        await panel
+          .getByRole("button", { name: "喂小鱼", exact: true })
+          .click();
+        await panel
+          .getByText("小鱼还没吃完，等一会儿再喂吧。", { exact: true })
+          .waitFor();
+      }
+    }
+    assert.equal(
+      requests.length,
+      beforeRequests,
+      "Pet interactions must not call any model",
+    );
+    await panel.getByRole("button", { name: "睡一会儿", exact: true }).click();
+    await panel
+      .getByRole("button", { name: "叫醒水獭", exact: true })
+      .waitFor();
+    assert.equal(
+      await panel
+        .getByRole("button", { name: "玩小球", exact: true })
+        .isDisabled(),
+      true,
+    );
+    await pet.getByRole("button", { name: "与水獭聊天", exact: true }).click();
+    await panel
+      .getByRole("button", { name: "睡一会儿", exact: true })
+      .waitFor();
+    await new Promise((resolve) => setTimeout(resolve, 1200));
+    const beforeHead = await pet.evaluate(
+      async () => (await window.otter.action("snapshot")).pet.interactions,
+    );
+    await pet
+      .getByRole("button", { name: "与水獭聊天", exact: true })
+      .click({ position: { x: 83, y: 58 } });
+    await pet.waitForFunction(
+      async (count) =>
+        (await window.otter.action("snapshot")).pet.interactions === count + 1,
+      beforeHead,
+    );
+    // Intercept native popup solely to inspect its labels and invoke the same action callback.
+    await app.evaluate(({ Menu }) => {
+      globalThis.__popup = Menu.prototype.popup;
+      Menu.prototype.popup = function (options) {
+        globalThis.__petMenu = this;
+        globalThis.__petMenuOptions = options;
+      };
+    });
+    await pet
+      .getByRole("button", { name: "与水獭聊天", exact: true })
+      .click({ button: "right" });
+    for (let i = 0; i < 30; i++) {
+      if (await app.evaluate(() => !!globalThis.__petMenu)) break;
+      await new Promise((r) => setTimeout(r, 50));
+    }
+    const menuLabels = await app.evaluate(({ Menu }) => {
+      const menu = globalThis.__petMenu;
+      const labels = menu.items.map((item) => item.label);
+      menu.items.find((item) => item.label === "睡一会儿").click();
+      globalThis.__petMenuOptions.callback?.();
+      Menu.prototype.popup = globalThis.__popup;
+      return labels;
+    });
+    assert(
+      menuLabels.includes("喂小鱼") && menuLabels.includes("打开互动面板"),
+    );
+    await panel
+      .getByRole("button", { name: "叫醒水獭", exact: true })
+      .waitFor();
+    await panel.evaluate(() => window.otter.action("reconnect"));
+    const petSaved = JSON.parse(
+      fs.readFileSync(path.join(userData, "desktop.json"), "utf8"),
+    ).petState;
+    assert.equal(petSaved.asleep, true);
+    await panel.getByRole("button", { name: "叫醒水獭", exact: true }).click();
+    await panel
+      .getByRole("button", { name: "睡一会儿", exact: true })
+      .waitFor();
+    assert.equal(
+      await pet.evaluate(
+        async () => (await window.otter.action("snapshot")).pet.asleep,
+      ),
+      false,
+    );
+    await panel.getByRole("button", { name: "工作简报" }).click();
     await panel.getByRole("button", { name: "生成简报", exact: true }).click();
     await panel
       .getByRole("heading", { name: "欢迎来到 Otter" })
@@ -231,7 +337,7 @@ const http = require("node:http");
     console.log("Window properties:", properties);
     assert.equal(errors.length, 0, errors.join("\n"));
     console.log(
-      "PASS: real Electron report generation, persistence after reconnect, quiet setting, OpenAI model test/save/reconnect/generation/reset, streaming multi-turn chat, pet entry, cancel, history and deletion, IPC allowlist.",
+      "PASS: real Electron report generation, persistence after reconnect, quiet setting, OpenAI model test/save/reconnect/generation/reset, streaming multi-turn chat, pet entry, cancel, history and deletion, local pet actions, head tap, sleep/wake, native menu wiring, IPC allowlist.",
     );
   } finally {
     if (app) await app.close();

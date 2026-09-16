@@ -15,6 +15,9 @@ const { createHash } = require("node:crypto");
 const path = require("node:path");
 const { fileURLToPath } = require("node:url");
 const { Backend } = require("./bridge.cjs");
+const { PetState, ACTIONS } = require("./pet-state.cjs");
+let petState = new PetState(),
+  petEffectTimer;
 let pet,
   panel,
   tray,
@@ -228,11 +231,64 @@ function showChat() {
       data: { view: "chat" },
     });
 }
+function interactPet(action) {
+  const snapshot = petState.interact(action);
+  preferences.petState = petState.persisted();
+  save();
+  broadcast({ type: "pet.changed", data: snapshot });
+  clearTimeout(petEffectTimer);
+  if (snapshot.effect)
+    petEffectTimer = setTimeout(
+      () => broadcast({ type: "pet.changed", data: petState.snapshot() }),
+      Math.max(0, snapshot.effect.expiresAt - Date.now()) + 20,
+    );
+  return snapshot;
+}
+function showPetInteractions() {
+  activeView = "pet";
+  showPanel();
+  if (panel && !panel.isDestroyed())
+    panel.webContents.send("otter:event", {
+      type: "navigation",
+      data: { view: "pet" },
+    });
+}
+function petMenu() {
+  const asleep = petState.snapshot().asleep;
+  return Menu.buildFromTemplate([
+    { label: "与水獭聊天", click: showChat },
+    ...Object.entries(ACTIONS)
+      .filter(([key]) => key !== (asleep ? "sleep" : "wake"))
+      .map(([key, value]) => ({
+        label: value.label,
+        enabled: !asleep || key === "wake",
+        click: () => {
+          try {
+            interactPet(key);
+          } catch (error) {
+            broadcast({ type: "pet.notice", data: { message: error.message } });
+          }
+        },
+      })),
+    { type: "separator" },
+    { label: "打开互动面板", click: showPetInteractions },
+    {
+      label: "隐藏水獭",
+      click: () => {
+        preferences.hidden = true;
+        pet.hide();
+        save();
+        refreshTray();
+      },
+    },
+  ]);
+}
 function refreshTray() {
   tray.setContextMenu(
     Menu.buildFromTemplate([
       { label: "打开 Otter", click: showPanel },
       { label: "与水獭聊天", click: showChat },
+      { label: "陪伴互动", click: showPetInteractions },
       {
         label: "显示桌面水獭",
         type: "checkbox",
@@ -324,6 +380,7 @@ ipcMain.handle("otter:action", async (event, name, value) => {
   if (name === "snapshot")
     return {
       health: currentHealth,
+      pet: petState.snapshot(),
       chat:
         event.sender === panel.webContents
           ? chatState
@@ -338,6 +395,19 @@ ipcMain.handle("otter:action", async (event, name, value) => {
     };
   if (name === "open-panel") return showPanel();
   if (name === "open-chat") return showChat();
+  if (name === "pet.interact" && typeof value === "string")
+    return interactPet(value);
+  if (name === "pet.menu" && event.sender === pet.webContents) {
+    pet.setIgnoreMouseEvents(false);
+    petMenu().popup({
+      window: pet,
+      callback: () => {
+        if (!pet.isDestroyed())
+          pet.setIgnoreMouseEvents(true, { forward: true });
+      },
+    });
+    return;
+  }
   if (name === "hide-pet") {
     preferences.hidden = true;
     pet.hide();
@@ -451,6 +521,7 @@ else {
     } catch {
       preferences = {};
     }
+    petState = new PetState(preferences.petState);
     const area = screen.getPrimaryDisplay().workArea;
     const position = preferences.position || {
       x: area.x + area.width - 270,
@@ -519,6 +590,7 @@ else {
     if (quitting) return;
     event.preventDefault();
     quitting = true;
+    clearTimeout(petEffectTimer);
     (backend ? backend.stop() : Promise.resolve()).finally(() => app.quit());
   });
 }

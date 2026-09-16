@@ -37,7 +37,23 @@ export type ChatTurn = {
   error: string;
   model: string;
 };
+export type PetSnapshot = {
+  asleep: boolean;
+  interactions: number;
+  lastAction: string | null;
+  lastAt: number;
+  mood: import("./Otter").Mood;
+  caption: string;
+  effect: {
+    id: string;
+    action: string;
+    mood: import("./Otter").Mood;
+    caption: string;
+    expiresAt: number;
+  } | null;
+};
 export type Snapshot = {
+  pet: PetSnapshot;
   chat: ChatTurn | null;
   view?: string;
   health: Health | null;

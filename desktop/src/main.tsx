@@ -4,6 +4,7 @@ import Markdown from "react-markdown";
 import { Otter, type Mood } from "./Otter";
 import type { Health, Job, Report, Prefs, Snapshot } from "./types";
 import "./style.css";
+import { PetInteractions, usePetState } from "./PetInteractions";
 import { ChatPane } from "./ChatPane";
 import { ModelSettings } from "./ModelSettings";
 const api = window.otter;
@@ -81,29 +82,23 @@ function useRuntime() {
 }
 function Pet() {
   const { health, job, prefs, chatBusy } = useRuntime();
-  const [happy, setHappy] = useState(false);
+  const { pet: petLocal, notice, interact } = usePetState();
+  const [held, setHeld] = useState(false);
+  const gaze = useRef({ x: 0, y: 0 });
+  const head = useRef(false);
   const start = useRef<{ x: number; y: number } | null>(null);
   const moved = useRef(false);
   const hit = useRef(false);
-  const happyTimer = useRef<ReturnType<typeof setTimeout> | undefined>(
-    undefined,
-  );
-  useEffect(
-    () => () => {
-      if (happyTimer.current) clearTimeout(happyTimer.current);
-    },
-    [],
-  );
   const working =
     chatBusy || (health && job && ["queued", "running"].includes(job.status));
-  const mood: Mood = happy
-    ? "happy"
-    : !health
-      ? "offline"
-      : working
-        ? "working"
-        : prefs.quiet
-          ? "sleeping"
+  const mood: Mood = held
+    ? "held"
+    : petLocal.effect
+      ? petLocal.mood
+      : petLocal.asleep
+        ? "sleeping"
+        : working
+          ? "working"
           : "idle";
   function setHit(value: boolean) {
     if (hit.current !== value) {
@@ -123,7 +118,10 @@ function Pet() {
             ) > 4
           )
             moved.current = true;
-          if (moved.current) void api.action("drag-move").catch(() => {});
+          if (moved.current) {
+            setHeld(true);
+            void api.action("drag-move").catch(() => {});
+          }
         } else {
           const canvas = e.currentTarget.querySelector("canvas");
           if (canvas) {
@@ -134,6 +132,16 @@ function Pet() {
             const y = Math.floor(
               ((e.clientY - rect.top) * canvas.height) / rect.height,
             );
+            gaze.current = {
+              x: Math.max(
+                -1,
+                Math.min(1, ((e.clientX - rect.left) / rect.width - 0.5) * 2),
+              ),
+              y: Math.max(
+                -1,
+                Math.min(1, ((e.clientY - rect.top) / rect.height - 0.5) * 2),
+              ),
+            };
             const inside =
               x >= 0 && y >= 0 && x < canvas.width && y < canvas.height;
             setHit(
@@ -145,16 +153,36 @@ function Pet() {
         }
       }}
       onPointerLeave={() => {
-        if (!start.current) setHit(false);
+        if (!start.current) {
+          setHit(false);
+          gaze.current = { x: 0, y: 0 };
+        }
       }}
     >
       <button
         data-interactive
         className="pet-body"
         aria-label="与水獭聊天"
+        title="点头摸摸 · 点身体聊天 · 右键更多互动"
+        onContextMenu={(e) => {
+          e.preventDefault();
+          start.current = null;
+          setHeld(false);
+          void api
+            .action("drag-end")
+            .then(() => api.action("pet.menu"))
+            .finally(() => {
+              hit.current = false;
+            })
+            .catch(() => {});
+        }}
         onPointerDown={(e) => {
           if (e.button !== 0) return;
           start.current = { x: e.screenX, y: e.screenY };
+          const rect = e.currentTarget
+            .querySelector("canvas")
+            ?.getBoundingClientRect();
+          head.current = !!rect && (e.clientY - rect.top) / rect.height < 0.47;
           moved.current = false;
           e.currentTarget.setPointerCapture(e.pointerId);
           void api.action("drag-start").catch(() => {});
@@ -163,30 +191,33 @@ function Pet() {
           if (!start.current) return;
           start.current = null;
           void api.action("drag-end").catch(() => {});
+          setHeld(false);
           if (!moved.current) {
-            setHappy(true);
-            clearTimeout(happyTimer.current);
-            happyTimer.current = setTimeout(() => setHappy(false), 1800);
-            void api.action("open-chat").catch(() => {});
+            if (petLocal.asleep) void interact("wake");
+            else if (head.current) void interact("pet");
+            else void api.action("open-chat").catch(() => {});
           }
         }}
         onPointerCancel={() => {
+          setHeld(false);
           start.current = null;
           void api.action("drag-end").catch(() => {});
         }}
       >
-        <Otter mood={mood} size={200} />
+        <Otter mood={mood} size={200} gaze={gaze} />
       </button>
       <div className="pet-caption">
-        {happy
-          ? "见到你真好"
-          : !health
-            ? "点我打开 Otter"
-            : working
-              ? chatBusy
-                ? "让我想想…"
-                : "正在整理你的简报"
-              : "我在这里"}
+        {held
+          ? "被你提起来啦！"
+          : notice ||
+            petLocal.effect?.caption ||
+            (petLocal.asleep
+              ? "点一下，叫醒我"
+              : working
+                ? chatBusy
+                  ? "让我想想…"
+                  : "正在整理简报"
+                : "点头摸摸 · 右键互动")}
       </div>
     </div>
   );
@@ -202,17 +233,23 @@ function Panel() {
     connecting,
     chatBusy,
   } = useRuntime();
-  const [tab, setTab] = useState<"reports" | "settings" | "chat">("reports");
+  const { pet: petLocal } = usePetState();
+  const [tab, setTab] = useState<"reports" | "settings" | "chat" | "pet">(
+    "reports",
+  );
   useEffect(() => {
     let navigated = false;
     const unsub = api.subscribe((event) => {
-      if (event.type === "navigation" && event.data.view === "chat") {
+      if (
+        event.type === "navigation" &&
+        ["chat", "pet"].includes(event.data.view)
+      ) {
         navigated = true;
-        setTab("chat");
+        setTab(event.data.view);
       }
     });
     void api.action<Snapshot>("snapshot").then((s) => {
-      if (!navigated && s.view === "chat") setTab("chat");
+      if (!navigated && (s.view === "chat" || s.view === "pet")) setTab(s.view);
     });
     return unsub;
   }, []);
@@ -292,6 +329,12 @@ function Panel() {
         </div>
         <nav aria-label="主导航">
           <button
+            className={tab === "pet" ? "active" : ""}
+            onClick={() => setTab("pet")}
+          >
+            <span>♡</span>陪伴互动
+          </button>
+          <button
             className={tab === "chat" ? "active" : ""}
             onClick={() => setTab("chat")}
           >
@@ -314,12 +357,12 @@ function Panel() {
           <Otter
             size={158}
             mood={
-              !health
-                ? "offline"
-                : busy || chatBusy
-                  ? "working"
-                  : prefs.quiet
-                    ? "sleeping"
+              petLocal.effect
+                ? petLocal.mood
+                : petLocal.asleep
+                  ? "sleeping"
+                  : busy || chatBusy
+                    ? "working"
                     : "idle"
             }
           />
@@ -348,7 +391,9 @@ function Panel() {
               ? "工作空间 / 简报"
               : tab === "chat"
                 ? "Otter / 聊天"
-                : "工作空间 / 设置"}
+                : tab === "pet"
+                  ? "Otter / 陪伴互动"
+                  : "工作空间 / 设置"}
           </span>
           <span>OTTER DESKTOP</span>
         </header>
@@ -361,7 +406,9 @@ function Panel() {
               </button>
             </div>
           )}
-          {tab === "chat" ? (
+          {tab === "pet" ? (
+            <PetInteractions />
+          ) : tab === "chat" ? (
             <ChatPane
               key={prefs.config}
               health={health}
