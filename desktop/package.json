@@ -1,6 +1,6 @@
 {
   "name": "otter-desktop",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "private": true,
   "description": "Otter desktop companion",
   "author": "Otter contributors",
@@ -32,7 +32,10 @@
     ],
     "mac": {
       "category": "public.app-category.productivity",
-      "target": "dir"
+      "target": "dir",
+      "extendInfo": {
+        "NSAppleEventsUsageDescription": "在你开启浏览器感知后，Otter 读取当前标签页的标题和网址，仅在本机展示，不读取网页正文。"
+      }
     },
     "electronDist": "node_modules/electron/dist"
   },

@@ -4,6 +4,7 @@ import Markdown from "react-markdown";
 import { Otter, type Mood } from "./Otter";
 import type { Health, Job, Report, Prefs, Snapshot } from "./types";
 import "./style.css";
+import { AwarenessPane } from "./AwarenessPane";
 import { PetInteractions, usePetState } from "./PetInteractions";
 import { ChatPane } from "./ChatPane";
 import { ModelSettings } from "./ModelSettings";
@@ -234,9 +235,9 @@ function Panel() {
     chatBusy,
   } = useRuntime();
   const { pet: petLocal } = usePetState();
-  const [tab, setTab] = useState<"reports" | "settings" | "chat" | "pet">(
-    "reports",
-  );
+  const [tab, setTab] = useState<
+    "reports" | "settings" | "chat" | "pet" | "awareness"
+  >("reports");
   useEffect(() => {
     let navigated = false;
     const unsub = api.subscribe((event) => {
@@ -329,6 +330,12 @@ function Panel() {
         </div>
         <nav aria-label="主导航">
           <button
+            className={tab === "awareness" ? "active" : ""}
+            onClick={() => setTab("awareness")}
+          >
+            <span>◉</span>应用感知
+          </button>
+          <button
             className={tab === "pet" ? "active" : ""}
             onClick={() => setTab("pet")}
           >
@@ -393,7 +400,9 @@ function Panel() {
                 ? "Otter / 聊天"
                 : tab === "pet"
                   ? "Otter / 陪伴互动"
-                  : "工作空间 / 设置"}
+                  : tab === "awareness"
+                    ? "Otter / 应用感知"
+                    : "工作空间 / 设置"}
           </span>
           <span>OTTER DESKTOP</span>
         </header>
@@ -406,7 +415,9 @@ function Panel() {
               </button>
             </div>
           )}
-          {tab === "pet" ? (
+          {tab === "awareness" ? (
+            <AwarenessPane />
+          ) : tab === "pet" ? (
             <PetInteractions />
           ) : tab === "chat" ? (
             <ChatPane

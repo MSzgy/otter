@@ -15,6 +15,8 @@ const { createHash } = require("node:crypto");
 const path = require("node:path");
 const { fileURLToPath } = require("node:url");
 const { Backend } = require("./bridge.cjs");
+const { Awareness } = require("./awareness.cjs");
+let awareness;
 const { PetState, ACTIONS } = require("./pet-state.cjs");
 let petState = new PetState(),
   petEffectTimer;
@@ -393,6 +395,28 @@ ipcMain.handle("otter:action", async (event, name, value) => {
       message: offlineMessage,
       switching,
     };
+  if (name.startsWith("awareness.")) {
+    if (event.sender !== panel.webContents)
+      throw new Error("请在应用感知面板操作。");
+    if (name === "awareness.get") return awareness.snapshot();
+    if (name === "awareness.configure") {
+      const result = awareness.configure(value || {});
+      preferences.awareness = {
+        enabled: result.enabled,
+        browserEnabled: result.browserEnabled,
+      };
+      save();
+      return result;
+    }
+    if (name === "awareness.refresh") return awareness.refresh();
+    if (name === "awareness.browser" && typeof value === "string")
+      return awareness.browser(value);
+    if (name === "awareness.permissions")
+      return shell.openExternal(
+        "x-apple.systempreferences:com.apple.preference.security?Privacy_Automation",
+      );
+    throw new Error("不支持的感知操作。");
+  }
   if (name === "open-panel") return showPanel();
   if (name === "open-chat") return showChat();
   if (name === "pet.interact" && typeof value === "string")
@@ -580,6 +604,19 @@ else {
     tray.setTitle("🦦");
     tray.setToolTip("Otter · 桌面伙伴");
     refreshTray();
+    awareness = new Awareness({
+      emit: (state) => {
+        if (panel && !panel.isDestroyed())
+          panel.webContents.send("otter:event", {
+            type: "awareness.changed",
+            data: state,
+          });
+      },
+    });
+    awareness.configure({
+      enabled: preferences.awareness?.enabled === true,
+      browserEnabled: preferences.awareness?.browserEnabled === true,
+    });
     screen.on("display-removed", reposition);
     screen.on("display-metrics-changed", reposition);
     app.on("activate", showPanel);
@@ -591,6 +628,7 @@ else {
     event.preventDefault();
     quitting = true;
     clearTimeout(petEffectTimer);
+    awareness?.close();
     (backend ? backend.stop() : Promise.resolve()).finally(() => app.quit());
   });
 }

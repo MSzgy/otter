@@ -81,6 +81,34 @@ const http = require("node:http");
     await panel
       .getByText("离线演示模式", { exact: true })
       .waitFor({ timeout: 30000 });
+    await panel.getByRole("button", { name: "应用感知", exact: false }).click();
+    await panel
+      .getByRole("heading", { name: "感知已关闭", exact: true })
+      .waitFor();
+    await panel
+      .getByRole("checkbox", { name: "开启应用感知", exact: true })
+      .click();
+    await panel.waitForFunction(
+      () => document.querySelectorAll(".running-app").length > 0,
+    );
+    const observed = await panel.evaluate(() =>
+      window.otter.action("awareness.get"),
+    );
+    assert(observed.apps.length > 0 && observed.front);
+    assert.equal(observed.browserEnabled, false);
+    assert.equal(observed.browser, null);
+    await panel
+      .getByRole("checkbox", { name: "开启应用感知", exact: true })
+      .click();
+    await panel
+      .getByRole("heading", { name: "感知已关闭", exact: true })
+      .waitFor();
+    assert.equal(
+      (await panel.evaluate(() => window.otter.action("awareness.get"))).apps
+        .length,
+      0,
+    );
+    await panel.screenshot({ path: path.join(output, "otter-awareness.png") });
     await panel.getByRole("button", { name: "陪伴互动", exact: false }).click();
     await panel.getByRole("heading", { name: "和小水獭玩一会儿。" }).waitFor();
     const beforeRequests = requests.length;
@@ -337,7 +365,7 @@ const http = require("node:http");
     console.log("Window properties:", properties);
     assert.equal(errors.length, 0, errors.join("\n"));
     console.log(
-      "PASS: real Electron report generation, persistence after reconnect, quiet setting, OpenAI model test/save/reconnect/generation/reset, streaming multi-turn chat, pet entry, cancel, history and deletion, local pet actions, head tap, sleep/wake, native menu wiring, IPC allowlist.",
+      "PASS: real Electron report generation, persistence after reconnect, quiet setting, OpenAI model test/save/reconnect/generation/reset, streaming multi-turn chat, pet entry, cancel, history and deletion, local pet actions, head tap, sleep/wake, native menu wiring, live app awareness toggle/clear, IPC allowlist.",
     );
   } finally {
     if (app) await app.close();
