@@ -10,6 +10,13 @@ type Message = {
   status: string;
   error: string;
   session_id: string;
+  context?: string;
+};
+type Attachment = {
+  id: string;
+  text: string;
+  label: string;
+  createdAt: number;
 };
 const api = window.otter;
 export function ChatPane({
@@ -23,6 +30,43 @@ export function ChatPane({
   const [session, setSession] = useState("");
   const [messages, setMessages] = useState<Message[]>([]);
   const [draft, setDraft] = useState("");
+  const [attachment, setAttachment] = useState<Attachment | null>(null);
+  const [contextError, setContextError] = useState("");
+  useEffect(() => {
+    let alive = true,
+      revision = 0;
+    const off = api.subscribe((event) => {
+      if (event.type === "context.draft") {
+        revision++;
+        setAttachment(event.data);
+        setContextError("");
+      }
+      if (event.type === "context.error") {
+        revision++;
+        setContextError(event.data.message);
+      }
+    });
+    const version = revision;
+    void api
+      .action<{ draft: Attachment | null; error: string }>("context.get")
+      .then((value) => {
+        if (alive && revision === version) {
+          setAttachment(value.draft);
+          setContextError(value.error);
+        }
+      });
+    return () => {
+      alive = false;
+      off();
+    };
+  }, []);
+  async function removeAttachment() {
+    const id = attachment?.id;
+    setAttachment(null);
+    setContextError("");
+    await api.action("context.clear", id);
+  }
+
   const [turn, setTurn] = useState<ChatTurn | null>(null);
   const [error, setError] = useState("");
   const [sending, setSending] = useState(false);
@@ -144,6 +188,7 @@ export function ChatPane({
     const text = draft.trim(),
       id = crypto.randomUUID().replaceAll("-", ""),
       selected = session;
+    const attached = attachment;
     setSending(true);
     setError("");
     setDraft("");
@@ -156,6 +201,7 @@ export function ChatPane({
         status: "complete",
         error: "",
         session_id: selected,
+        context: attached?.text || "",
       },
     ]);
     const revision = eventRevision.current;
@@ -164,7 +210,14 @@ export function ChatPane({
         session_id: selected,
         text,
         request_id: id,
+        context: attached?.text || "",
       });
+      if (attached) {
+        await api.action("context.clear", attached.id);
+        setAttachment((current) =>
+          current?.id === attached.id ? null : current,
+        );
+      }
       if (eventRevision.current === revision) applyTurn(result);
       await refreshSessions();
     } catch (e) {
@@ -290,6 +343,12 @@ export function ChatPane({
               <div className="chat-author">
                 {m.role === "user" ? "你" : "Otter 🦦"}
               </div>
+              {m.context && (
+                <details className="sent-context">
+                  <summary>附带的上下文</summary>
+                  <pre>{m.context}</pre>
+                </details>
+              )}
               <div className="chat-bubble">
                 <Markdown
                   skipHtml
@@ -327,6 +386,57 @@ export function ChatPane({
           ))
         )}
         <div ref={end} />
+      </div>
+      {contextError && (
+        <div className="alert" role="alert">
+          {contextError}
+          <button
+            onClick={() => {
+              setContextError("");
+              void api.action("context.clear", attachment?.id);
+            }}
+          >
+            关闭
+          </button>
+        </div>
+      )}
+      {attachment && (
+        <section className="context-preview" aria-label="发送前上下文预览">
+          <div>
+            <strong>{attachment.label} · 发送前预览</strong>
+            <button onClick={() => void removeAttachment()}>移除附件</button>
+          </div>
+          <textarea
+            aria-label="附带上下文"
+            maxLength={5000}
+            value={attachment.text}
+            onChange={(e) =>
+              setAttachment((a) => (a ? { ...a, text: e.target.value } : null))
+            }
+          />
+          <small>
+            可以编辑。仅在发送消息时附带；发送后随聊天记录保存在本机。
+          </small>
+          <div className="context-prompts">
+            {["解释这段内容", "翻译成中文", "提炼重点"].map((text) => (
+              <button key={text} onClick={() => setDraft(text)}>
+                {text}
+              </button>
+            ))}
+          </div>
+        </section>
+      )}
+      <div className="chat-context-actions">
+        <button
+          onClick={() =>
+            void api
+              .action("context.scene")
+              .catch((e) => setContextError(e.message))
+          }
+        >
+          附带当前场景
+        </button>
+        <span>选中文字：⌘⇧E（可在设置中修改）</span>
       </div>
       <form className="chat-composer" onSubmit={send}>
         <textarea

@@ -97,6 +97,19 @@ const http = require("node:http");
     assert(observed.apps.length > 0 && observed.front);
     assert.equal(observed.browserEnabled, false);
     assert.equal(observed.browser, null);
+    const requestsBeforePreview = requests.length;
+    await panel
+      .getByRole("button", { name: "聊聊当前场景", exact: true })
+      .click();
+    await panel
+      .getByRole("textbox", { name: "附带上下文", exact: true })
+      .waitFor();
+    assert.equal(requests.length, requestsBeforePreview);
+    await panel.getByRole("button", { name: "移除附件", exact: true }).click();
+    await panel
+      .getByRole("textbox", { name: "附带上下文", exact: true })
+      .waitFor({ state: "detached" });
+    await panel.getByRole("button", { name: "应用感知", exact: false }).click();
     await panel
       .getByRole("checkbox", { name: "开启应用感知", exact: true })
       .click();
@@ -288,6 +301,22 @@ const http = require("node:http");
     await panel
       .getByRole("button", { name: "与水獭聊天", exact: false })
       .click();
+    await panel.getByRole("button", { name: "应用感知", exact: false }).click();
+    await panel
+      .getByRole("checkbox", { name: "开启应用感知", exact: true })
+      .click();
+    await panel.waitForFunction(
+      () => document.querySelectorAll(".running-app").length > 0,
+    );
+    await panel
+      .getByRole("button", { name: "聊聊当前场景", exact: true })
+      .click();
+    await panel
+      .getByRole("textbox", { name: "附带上下文", exact: true })
+      .fill("来源：测试选区；内容：hello context");
+    await panel.screenshot({
+      path: path.join(output, "otter-context-preview.png"),
+    });
     await panel.getByRole("textbox", { name: "聊天输入" }).fill("你好小水獭");
     await panel.getByRole("button", { name: "发送", exact: true }).click();
     await panel
@@ -308,7 +337,14 @@ const http = require("node:http");
       chatCalls[1].body.messages.map((m) => m.role),
       ["system", "user", "assistant", "user"],
     );
-    assert.equal(chatCalls[1].body.messages[1].content, "你好小水獭");
+    assert(chatCalls[1].body.messages[1].content.startsWith("你好小水獭"));
+    assert(chatCalls[0].body.messages[1].content.includes("测试选区"));
+    assert.equal(
+      await panel
+        .getByRole("textbox", { name: "附带上下文", exact: true })
+        .count(),
+      0,
+    );
     await panel.screenshot({ path: path.join(output, "otter-chat.png") });
     await panel.getByRole("button", { name: "偏好设置" }).click();
     await pet.getByRole("button", { name: "与水獭聊天", exact: true }).click();
@@ -363,6 +399,19 @@ const http = require("node:http");
       })),
     );
     console.log("Window properties:", properties);
+    const keys = await panel.evaluate(() =>
+      window.otter.action("shortcuts.get"),
+    );
+    const registrations = await app.evaluate(
+      ({ globalShortcut }, keys) => ({
+        chat: globalShortcut.isRegistered(keys.chat),
+        selection: globalShortcut.isRegistered(keys.selection),
+      }),
+      keys,
+    );
+    assert.equal(registrations.chat, keys.chatRegistered);
+    assert.equal(registrations.selection, keys.selectionRegistered);
+    console.log("Shortcut registration:", registrations);
     assert.equal(errors.length, 0, errors.join("\n"));
     console.log(
       "PASS: real Electron report generation, persistence after reconnect, quiet setting, OpenAI model test/save/reconnect/generation/reset, streaming multi-turn chat, pet entry, cancel, history and deletion, local pet actions, head tap, sleep/wake, native menu wiring, live app awareness toggle/clear, IPC allowlist.",

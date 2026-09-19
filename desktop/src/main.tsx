@@ -4,6 +4,7 @@ import Markdown from "react-markdown";
 import { Otter, type Mood } from "./Otter";
 import type { Health, Job, Report, Prefs, Snapshot } from "./types";
 import "./style.css";
+import { QuickAccessCard } from "./QuickAccessCard";
 import { AwarenessPane } from "./AwarenessPane";
 import { PetInteractions, usePetState } from "./PetInteractions";
 import { ChatPane } from "./ChatPane";
@@ -595,6 +596,7 @@ function Panel() {
                   连接现有工作空间，选择你喜欢的相处方式。
                 </p>
               </div>
+              <QuickAccessCard />
               <ModelSettings
                 key={prefs.config}
                 connected={!!health}

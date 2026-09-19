@@ -9,6 +9,7 @@ const {
   dialog,
   shell,
   Notification,
+  globalShortcut,
 } = require("electron");
 const fs = require("node:fs");
 const { createHash } = require("node:crypto");
@@ -17,6 +18,22 @@ const { fileURLToPath } = require("node:url");
 const { Backend } = require("./bridge.cjs");
 const { Awareness } = require("./awareness.cjs");
 let awareness;
+const {
+  ContextDraft,
+  buildScene,
+  selectionRead,
+  selectionDraft,
+} = require("./context.cjs");
+const contextDraft = new ContextDraft();
+let shortcutStatus = {
+  enabled: true,
+  chat: "CommandOrControl+Shift+Space",
+  selection: "CommandOrControl+Shift+E",
+  chatRegistered: false,
+  selectionRegistered: false,
+};
+let selectionPending = false;
+let contextError = "";
 const { PetState, ACTIONS } = require("./pet-state.cjs");
 let petState = new PetState(),
   petEffectTimer;
@@ -98,6 +115,13 @@ async function connect() {
       backend = null;
       await old.stop();
     }
+    contextDraft.clear();
+    contextError = "";
+    if (panel && !panel.isDestroyed())
+      panel.webContents.send("otter:event", {
+        type: "context.draft",
+        data: null,
+      });
     currentHealth = null;
     lastJob = null;
     chatState = null;
@@ -233,6 +257,66 @@ function showChat() {
       data: { view: "chat" },
     });
 }
+function draftToChat(text, label) {
+  contextError = "";
+  const draft = contextDraft.set(text, label);
+  showChat();
+  panel.webContents.send("otter:event", { type: "context.draft", data: draft });
+  return draft;
+}
+function selectionExecutable() {
+  return app.isPackaged
+    ? path.join(process.resourcesPath, "native/otter-selection")
+    : path.join(root, "desktop/build/native/otter-selection");
+}
+async function captureSelection() {
+  if (selectionPending) return;
+  selectionPending = true;
+  try {
+    const result = await selectionRead(selectionExecutable());
+    draftToChat(selectionDraft(result), "选中文字");
+  } catch (error) {
+    contextError = error.message;
+    showChat();
+    panel.webContents.send("otter:event", {
+      type: "context.error",
+      data: { message: error.message },
+    });
+  } finally {
+    selectionPending = false;
+  }
+}
+function registerShortcuts(settings) {
+  const config = {
+    enabled: settings?.enabled !== false,
+    chat: settings?.chat || "CommandOrControl+Shift+Space",
+    selection: settings?.selection || "CommandOrControl+Shift+E",
+  };
+  if (
+    typeof config.chat !== "string" ||
+    typeof config.selection !== "string" ||
+    config.chat.length > 80 ||
+    config.selection.length > 80 ||
+    config.chat === config.selection
+  )
+    throw new Error("请设置两个不同的有效快捷键。");
+  globalShortcut.unregisterAll();
+  let chatRegistered = false,
+    selectionRegistered = false;
+  if (config.enabled) {
+    try {
+      chatRegistered = globalShortcut.register(config.chat, () => showChat());
+    } catch {}
+    try {
+      selectionRegistered = globalShortcut.register(
+        config.selection,
+        () => void captureSelection(),
+      );
+    } catch {}
+  }
+  shortcutStatus = { ...config, chatRegistered, selectionRegistered };
+  return shortcutStatus;
+}
 function interactPet(action) {
   const snapshot = petState.interact(action);
   preferences.petState = petState.persisted();
@@ -291,6 +375,7 @@ function refreshTray() {
       { label: "打开 Otter", click: showPanel },
       { label: "与水獭聊天", click: showChat },
       { label: "陪伴互动", click: showPetInteractions },
+      { label: "用选中文字提问", click: () => void captureSelection() },
       {
         label: "显示桌面水獭",
         type: "checkbox",
@@ -395,6 +480,36 @@ ipcMain.handle("otter:action", async (event, name, value) => {
       message: offlineMessage,
       switching,
     };
+  if (name.startsWith("context.") || name.startsWith("shortcuts.")) {
+    if (event.sender !== panel.webContents) throw new Error("请在主面板操作。");
+    if (name === "context.get")
+      return { draft: contextDraft.get(), error: contextError };
+    if (name === "context.clear") {
+      contextDraft.clear(value);
+      contextError = "";
+      return;
+    }
+    if (name === "context.scene")
+      return draftToChat(buildScene(awareness.snapshot()), "应用与标签页场景");
+    if (name === "context.permission-status")
+      return selectionRead(selectionExecutable(), true);
+    if (name === "context.permissions")
+      return shell.openExternal(
+        "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility",
+      );
+    if (name === "shortcuts.get") return shortcutStatus;
+    if (name === "shortcuts.save") {
+      const result = registerShortcuts(value);
+      preferences.shortcuts = {
+        enabled: result.enabled,
+        chat: result.chat,
+        selection: result.selection,
+      };
+      save();
+      return result;
+    }
+    throw new Error("不支持的操作。");
+  }
   if (name.startsWith("awareness.")) {
     if (event.sender !== panel.webContents)
       throw new Error("请在应用感知面板操作。");
@@ -620,6 +735,7 @@ else {
     screen.on("display-removed", reposition);
     screen.on("display-metrics-changed", reposition);
     app.on("activate", showPanel);
+    registerShortcuts(preferences.shortcuts);
     await connect();
   });
   app.on("window-all-closed", () => {});
@@ -629,6 +745,7 @@ else {
     quitting = true;
     clearTimeout(petEffectTimer);
     awareness?.close();
+    globalShortcut.unregisterAll();
     (backend ? backend.stop() : Promise.resolve()).finally(() => app.quit());
   });
 }

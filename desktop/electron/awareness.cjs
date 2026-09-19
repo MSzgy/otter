@@ -103,6 +103,7 @@ class Awareness {
       status: "off",
       apps: [],
       front: null,
+      lastExternal: null,
       browser: null,
       browserStatus: "off",
       updatedAt: null,
@@ -133,6 +134,7 @@ class Awareness {
         status: "off",
         apps: [],
         front: null,
+        lastExternal: null,
         browser: null,
         browserStatus: "off",
         updatedAt: null,
@@ -171,6 +173,16 @@ class Awareness {
         .slice(0, 200)
         .sort((a, b) => a.name.localeCompare(b.name));
       this.state.front = cleanApp(result.front);
+      if (
+        this.state.front &&
+        !["dev.otter.desktop", "com.github.Electron"].includes(
+          this.state.front.bundleId,
+        )
+      )
+        this.state.lastExternal = {
+          ...this.state.front,
+          observedAt: Date.now(),
+        };
       this.state.updatedAt = Date.now();
       this.state.status = "ready";
       if (!["denied", "error"].includes(this.state.browserStatus))

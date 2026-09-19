@@ -142,6 +142,18 @@ export function AwarenessPane() {
           {state.message}
         </div>
       )}
+      {state.enabled && (
+        <div className="button-row">
+          <button
+            className="primary"
+            disabled={pending || (!state.front && !state.browser)}
+            onClick={() => act("context.scene")}
+          >
+            聊聊当前场景
+          </button>
+          <small>先预览，不会直接发送</small>
+        </div>
+      )}
       {!state.enabled ? (
         <div className="empty awareness-empty">
           <h3>感知已关闭</h3>

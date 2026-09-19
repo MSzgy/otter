@@ -171,3 +171,51 @@ def test_truncated_stream_does_not_look_complete():
 
     with pytest.raises(LLMError, match="未完成"):
         asyncio.run(collect())
+
+
+def test_explicit_context_is_persisted_and_sent_only_when_attached(tmp_path):
+    seen = []
+    done = threading.Event()
+
+    async def stream(_config, messages, _resolver):
+        seen.append(messages)
+        yield "OK"
+
+    service = ChatService(
+        tmp_path / "chat.db",
+        lambda _m, t: done.set() if t["status"] == "complete" else None,
+        stream=stream,
+    )
+    try:
+        session = service.store.new()["id"]
+        service.send(
+            {**request(session), "context": "来源应用：测试编辑器\n选中文字：hello"}, llm()
+        )
+        assert done.wait(3)
+        assert "测试编辑器" in seen[0][-1]["content"]
+        assert service.store.history(session)[0]["context"].startswith("来源应用")
+        done.clear()
+        clean = service.store.new()["id"]
+        service.send(request(clean), llm())
+        assert done.wait(3)
+        assert "测试编辑器" not in str(seen[-1])
+    finally:
+        service.close()
+
+
+def test_chat_database_v1_migrates_without_losing_messages(tmp_path):
+    import sqlite3
+
+    path = tmp_path / "chat.db"
+    with sqlite3.connect(path) as db:
+        db.executescript("""
+        CREATE TABLE conversations(id TEXT PRIMARY KEY,title TEXT NOT NULL,updated REAL NOT NULL);
+        CREATE TABLE messages(id TEXT PRIMARY KEY,session_id TEXT NOT NULL,turn_id TEXT NOT NULL,
+          role TEXT NOT NULL,content TEXT NOT NULL,status TEXT NOT NULL,created REAL NOT NULL,
+          error TEXT NOT NULL DEFAULT '');
+        INSERT INTO conversations VALUES('s','existing',1);
+        INSERT INTO messages VALUES('m','s','t','user','existing text','complete',1,'');
+        """)
+    store = ChatStore(path)
+    rows = store.history("s")
+    assert rows[0]["content"] == "existing text" and rows[0]["context"] == ""
