@@ -19,6 +19,7 @@ from zoneinfo import ZoneInfo
 from otter.application.model_settings import ModelSettings
 from otter.application.reports import make_orchestrator, notify_report, open_store
 from otter.companion.chat import ChatService
+from otter.companion.voice import transcribe
 from otter.core.config import Config, load
 from otter.core.llm import LLMError
 from otter.core.paths import _reset_cache_for_tests
@@ -43,8 +44,11 @@ def valid_date(value: Any) -> str:
 
 
 class Runtime:
-    def __init__(self, config: Config, emit, model_path: Path | None = None):
+    def __init__(
+        self, config: Config, emit, model_path: Path | None = None, audio_dir: Path | None = None
+    ):
         self.config = config
+        self.audio_dir = audio_dir
         self.emit = emit
         self.models = ModelSettings(config, model_path)
         self.lock = threading.RLock()
@@ -95,6 +99,8 @@ class Runtime:
                 if self.active or (turn and turn["status"] == "streaming"):
                     raise RequestError("请等待当前回复或简报完成后修改模型。")
                 return self.models.save(params) if method == "models.save" else self.models.reset()
+        if method == "voice.transcribe":
+            return transcribe(self.config, self.audio_dir, params)
         if method == "models.test":
             return self.models.test(params)
         if method == "reports.list":
@@ -187,7 +193,13 @@ class Runtime:
         self.worker.shutdown(wait=True, cancel_futures=True)
 
 
-def serve(config: Config, incoming, outgoing, model_path: Path | None = None) -> None:
+def serve(
+    config: Config,
+    incoming,
+    outgoing,
+    model_path: Path | None = None,
+    audio_dir: Path | None = None,
+) -> None:
     output_lock = threading.Lock()
 
     def write(payload):
@@ -198,13 +210,13 @@ def serve(config: Config, incoming, outgoing, model_path: Path | None = None) ->
     def emit(method, payload):
         write({"jsonrpc": "2.0", "method": method, "params": payload})
 
-    runtime = Runtime(config, emit, model_path)
+    runtime = Runtime(config, emit, model_path, audio_dir)
     tester = ThreadPoolExecutor(max_workers=1, thread_name_prefix="otter-model-test")
     test_slot = threading.Lock()
 
-    def test_model(request_id, params):
+    def test_model(request_id, method, params):
         try:
-            result = runtime.dispatch("models.test", params)
+            result = runtime.dispatch(method, params)
             write({"jsonrpc": "2.0", "id": request_id, "result": result})
         except LLMError as exc:
             write(
@@ -245,10 +257,10 @@ def serve(config: Config, incoming, outgoing, model_path: Path | None = None) ->
                 params = request.get("params", {})
                 if not isinstance(params, dict):
                     raise RequestError("params 必须为对象。")
-                if request["method"] == "models.test":
+                if request["method"] in {"models.test", "voice.transcribe"}:
                     if not test_slot.acquire(blocking=False):
                         raise RequestError("连接测试正在进行，请稍后重试。")
-                    tester.submit(test_model, request_id, params)
+                    tester.submit(test_model, request_id, request["method"], params)
                     continue
                 result = runtime.dispatch(request["method"], params)
                 write({"jsonrpc": "2.0", "id": request_id, "result": result})
@@ -281,6 +293,7 @@ def main():
     parser.add_argument("--config", required=True)
     parser.add_argument("--root", required=True)
     parser.add_argument("--model-settings", type=Path)
+    parser.add_argument("--audio-dir", type=Path)
     args = parser.parse_args()
     os.environ["OTTER_PROJECT_ROOT"] = str(Path(args.root).resolve())
     _reset_cache_for_tests()
@@ -289,7 +302,11 @@ def main():
     with contextlib.redirect_stdout(sys.stderr):
         try:
             serve(
-                load(Path(args.config).resolve()), sys.stdin, protocol_output, args.model_settings
+                load(Path(args.config).resolve()),
+                sys.stdin,
+                protocol_output,
+                args.model_settings,
+                args.audio_dir,
             )
         except Exception:
             print("Otter 后台启动失败，请检查所选配置、时区与数据目录。", file=sys.stderr)

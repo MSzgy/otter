@@ -11,7 +11,8 @@ export type Mood =
   | "waving"
   | "tickled"
   | "waking"
-  | "held";
+  | "held"
+  | "speaking";
 
 // A replaceable 2D desktop body. Business code sends moods, never drawing coordinates.
 export function Otter({
@@ -110,6 +111,14 @@ export function Otter({
       ellipse(120, 114, 8, 5.5, "#39332e");
       stroke([120, 119, 120, 132, 111, 129], "#51483d", 2);
       stroke([120, 119, 120, 132, 129, 129], "#51483d", 2);
+      if (mood === "speaking")
+        ellipse(
+          120,
+          129,
+          5,
+          animate ? 2 + Math.abs(Math.sin(t * 12)) * 3 : 4,
+          "#6c4b3c",
+        );
       for (const y of [118, 125]) {
         stroke([87, y, 75, y - 3, 65, y - 2], "#ae987f", 1.4);
         stroke([153, y, 165, y - 3, 175, y - 2], "#ae987f", 1.4);
@@ -207,7 +216,7 @@ export function Otter({
       ref={canvas}
       style={{ width: size, height: size }}
       role="img"
-      aria-label={`水獭：${{ idle: "陪伴中", working: "正在工作", happy: "开心", offline: "离线", sleeping: "休息中", eating: "吃小鱼", playing: "玩小球", dancing: "跳舞", waving: "打招呼", tickled: "被挠痒痒", waking: "伸懒腰", held: "被提起来" }[mood]}`}
+      aria-label={`水獭：${{ idle: "陪伴中", working: "正在工作", happy: "开心", offline: "离线", sleeping: "休息中", eating: "吃小鱼", playing: "玩小球", dancing: "跳舞", waving: "打招呼", tickled: "被挠痒痒", waking: "伸懒腰", held: "被提起来", speaking: "正在说话" }[mood]}`}
     />
   );
 }

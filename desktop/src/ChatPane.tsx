@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import Markdown from "react-markdown";
+import { VoiceControls } from "./VoiceControls";
+import { parseReminder } from "./reminder-intent";
 import { Otter } from "./Otter";
 import type { Health, ChatTurn } from "./types";
 type Session = { id: string; title: string };
@@ -30,6 +32,26 @@ export function ChatPane({
   const [session, setSession] = useState("");
   const [messages, setMessages] = useState<Message[]>([]);
   const [draft, setDraft] = useState("");
+  const [reminderProposal, setReminderProposal] =
+    useState<ReturnType<typeof parseReminder>>(null);
+  const [reminderReceipt, setReminderReceipt] = useState("");
+  const skipReminder = useRef(false);
+  async function confirmReminder() {
+    if (!reminderProposal) return;
+    setSending(true);
+    try {
+      await api.action("assistant.create", reminderProposal);
+      setReminderReceipt(
+        `已创建提醒：${reminderProposal.title} · ${new Date(reminderProposal.dueAt).toLocaleString()}`,
+      );
+      setReminderProposal(null);
+      setDraft("");
+    } catch (e) {
+      fail(e);
+    } finally {
+      setSending(false);
+    }
+  }
   const [attachment, setAttachment] = useState<Attachment | null>(null);
   const [contextError, setContextError] = useState("");
   useEffect(() => {
@@ -149,6 +171,8 @@ export function ChatPane({
       if (event.type === "chat.changed") {
         eventRevision.current++;
         applyTurn(event.data);
+        if (event.data.status === "complete")
+          void api.action("voice.reply", event.data.id).catch(fail);
         if (event.data.status !== "streaming")
           void refreshSessions().catch(fail);
       }
@@ -185,6 +209,13 @@ export function ChatPane({
   async function send(e: React.FormEvent) {
     e.preventDefault();
     if (!draft.trim() || busy || !supported || !session) return;
+    const detected =
+      !skipReminder.current && !attachment ? parseReminder(draft) : null;
+    skipReminder.current = false;
+    if (detected) {
+      setReminderProposal(detected);
+      return;
+    }
     const text = draft.trim(),
       id = crypto.randomUUID().replaceAll("-", ""),
       selected = session;
@@ -232,6 +263,7 @@ export function ChatPane({
   async function stop() {
     try {
       if (turn) await api.call("chat.cancel", { turn_id: turn.id });
+      await api.action("voice.stop");
     } catch (e) {
       fail(e);
     }
@@ -343,6 +375,20 @@ export function ChatPane({
               <div className="chat-author">
                 {m.role === "user" ? "你" : "Otter 🦦"}
               </div>
+              {m.role === "assistant" &&
+                m.content &&
+                m.status !== "streaming" && (
+                  <button
+                    className="read-message"
+                    onClick={() =>
+                      void api
+                        .action("voice.speak", m.content.slice(0, 8000))
+                        .catch(fail)
+                    }
+                  >
+                    朗读
+                  </button>
+                )}
               {m.context && (
                 <details className="sent-context">
                   <summary>附带的上下文</summary>
@@ -387,6 +433,39 @@ export function ChatPane({
         )}
         <div ref={end} />
       </div>
+      {reminderReceipt && (
+        <div className="model-success" role="status">
+          {reminderReceipt}
+        </div>
+      )}
+      {reminderProposal && (
+        <section className="context-preview" aria-label="提醒确认">
+          <strong>确认创建本机提醒</strong>
+          <p>
+            {reminderProposal.title} ·{" "}
+            {new Date(reminderProposal.dueAt).toLocaleString()}
+          </p>
+          <div className="button-row">
+            <button
+              className="primary"
+              disabled={sending}
+              onClick={confirmReminder}
+            >
+              确认创建提醒
+            </button>
+            <button onClick={() => setReminderProposal(null)}>暂不创建</button>
+            <button
+              onClick={() => {
+                setReminderProposal(null);
+                skipReminder.current = true;
+                textarea.current?.form?.requestSubmit();
+              }}
+            >
+              作为普通聊天发送
+            </button>
+          </div>
+        </section>
+      )}
       {contextError && (
         <div className="alert" role="alert">
           {contextError}
@@ -408,7 +487,7 @@ export function ChatPane({
           </div>
           <textarea
             aria-label="附带上下文"
-            maxLength={5000}
+            maxLength={24000}
             value={attachment.text}
             onChange={(e) =>
               setAttachment((a) => (a ? { ...a, text: e.target.value } : null))
@@ -426,6 +505,14 @@ export function ChatPane({
           </div>
         </section>
       )}
+      <VoiceControls
+        enabled={health?.provider === "openai" && !busy}
+        onText={(text) =>
+          setDraft((current) =>
+            (current ? current + "\n" : "").concat(text).slice(0, 6000),
+          )
+        }
+      />
       <div className="chat-context-actions">
         <button
           onClick={() =>

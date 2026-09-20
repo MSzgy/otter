@@ -5,6 +5,9 @@ const os = require("node:os");
 const path = require("node:path");
 const assert = require("node:assert/strict");
 const http = require("node:http");
+const { extractPage } = require("../electron/page-reader.cjs");
+const { nativeRead } = require("../electron/awareness.cjs");
+const { execFileSync } = require("node:child_process");
 (async () => {
   const userData = fs.mkdtempSync(
     path.join(os.tmpdir(), "otter-desktop-smoke-"),
@@ -12,7 +15,40 @@ const http = require("node:http");
   const output = path.resolve(__dirname, "../../output/playwright");
   fs.mkdirSync(output, { recursive: true });
   const requests = [];
+  let openedLink = 0;
   const server = http.createServer((req, res) => {
+    if (req.method === "GET" && req.url === "/action-target") {
+      openedLink++;
+      res.setHeader("Content-Type", "text/html");
+      res.end(
+        "<title>Otter test</title><p>Otter link-opening verification. This test tab can be closed.</p>",
+      );
+      return;
+    }
+    if (req.method === "GET" && req.url !== "/article") {
+      res.statusCode = 404;
+      res.end();
+      return;
+    }
+    if (req.method === "GET" && req.url === "/article") {
+      res.setHeader("Content-Type", "text/html");
+      res.end(
+        '<!doctype html><title>Fixture article</title><article><h1>Test title</h1><p>Visible article body</p><div hidden>hidden secret</div><div style="opacity:0">transparent secret</div><textarea>form secret</textarea><div contenteditable="true">editable secret</div></article>',
+      );
+      return;
+    }
+    if (req.url === "/v1/audio/transcriptions") {
+      const chunks = [];
+      req.on("data", (c) => chunks.push(c));
+      req.on("end", () => {
+        const body = Buffer.concat(chunks);
+        assert(body.includes(Buffer.from("whisper-1")));
+        assert(body.includes(Buffer.from("recording.webm")));
+        res.setHeader("Content-Type", "application/json");
+        res.end(JSON.stringify({ text: "这是测试语音转写" }));
+      });
+      return;
+    }
     let text = "";
     req.on("data", (chunk) => (text += chunk));
     req.on("end", () => {
@@ -75,6 +111,31 @@ const http = require("node:http");
       await new Promise((r) => setTimeout(r, 100));
     }
     assert(panel && pet, "Both windows should exist");
+    const readerPromise = app.waitForEvent("window");
+    const readerHandle = await app.evaluateHandle(
+      ({ BrowserWindow }, url) => {
+        const win = new BrowserWindow({
+          show: false,
+          webPreferences: {
+            sandbox: true,
+            nodeIntegration: false,
+            contextIsolation: true,
+          },
+        });
+        void win.loadURL(url);
+        return win;
+      },
+      apiUrl.replace("/v1", "/article"),
+    );
+    const reader = await readerPromise;
+    await reader
+      .getByText("Visible article body", { exact: true })
+      .waitFor({ state: "attached" });
+    const extracted = JSON.parse(await reader.evaluate(extractPage));
+    assert(extracted.text.includes("Visible article body"));
+    assert(!extracted.text.includes("secret"));
+    await readerHandle.evaluate((win) => win.destroy());
+
     panel.on("pageerror", (e) => errors.push(e.message));
     pet.on("pageerror", (e) => errors.push(e.message));
     console.log(await panel.locator("body").ariaSnapshot());
@@ -332,6 +393,47 @@ const http = require("node:http");
         document.querySelectorAll(".chat-message.assistant").length === 2 &&
         !document.querySelector(".chat-cursor"),
     );
+    await panel.evaluate(() => {
+      const context = new AudioContext();
+      const oscillator = context.createOscillator();
+      const destination = context.createMediaStreamDestination();
+      oscillator.connect(destination);
+      oscillator.start();
+      Object.defineProperty(navigator.mediaDevices, "getUserMedia", {
+        value: async () => {
+          await context.resume();
+          return destination.stream;
+        },
+      });
+      window.__testAudio = { context, oscillator };
+    });
+    const voiceButton = panel.getByRole("button", {
+      name: "按住说话",
+      exact: true,
+    });
+    await voiceButton.scrollIntoViewIfNeeded();
+    const voiceBox = await voiceButton.boundingBox();
+    await panel.mouse.move(
+      voiceBox.x + voiceBox.width / 2,
+      voiceBox.y + voiceBox.height / 2,
+    );
+    await panel.mouse.down();
+    await panel.getByText("正在录音，松开转写", { exact: true }).waitFor();
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    await panel.mouse.up();
+    await panel.waitForFunction(
+      () =>
+        document.querySelector('[aria-label="聊天输入"]').value ===
+        "这是测试语音转写",
+    );
+    await panel
+      .getByRole("textbox", { name: "聊天输入", exact: true })
+      .fill("");
+    await panel.evaluate(() => {
+      window.__testAudio.oscillator.stop();
+      return window.__testAudio.context.close();
+    });
+    assert.equal(fs.readdirSync(path.join(userData, "audio-temp")).length, 0);
     const chatCalls = requests.filter((r) => r.body.stream);
     assert.deepEqual(
       chatCalls[1].body.messages.map((m) => m.role),
@@ -381,6 +483,191 @@ const http = require("node:http");
       .getByRole("button", { name: "恢复原模型", exact: true })
       .click();
     await panel.getByText("离线演示模式", { exact: true }).waitFor();
+    await panel.getByRole("button", { name: "生活助手", exact: false }).click();
+    await panel
+      .getByRole("button", { name: "开始 25 分钟专注", exact: true })
+      .click();
+    await panel
+      .getByRole("heading", { name: "正在专注", exact: true })
+      .waitFor();
+    assert(
+      (await panel.evaluate(() => window.otter.action("assistant.get"))).focus,
+    );
+    await panel.getByRole("button", { name: "结束专注", exact: true }).click();
+    await panel
+      .getByRole("textbox", { name: "新待办", exact: true })
+      .fill("测试待办");
+    await panel.getByRole("button", { name: "添加待办", exact: true }).click();
+    await panel.getByText("测试待办", { exact: true }).waitFor();
+    await panel
+      .getByRole("textbox", { name: "现场名称", exact: true })
+      .fill("测试工作现场");
+    await panel
+      .getByRole("textbox", { name: "页面与工作背景", exact: true })
+      .fill("https://example.com/test");
+    await panel
+      .getByRole("textbox", { name: "当前问题", exact: true })
+      .fill("怎样继续？");
+    await panel
+      .getByRole("textbox", { name: "下一步", exact: true })
+      .fill("先验证保存与恢复");
+    await panel
+      .getByRole("button", { name: "保存工作现场", exact: true })
+      .click();
+    const countBeforeRestore = requests.length;
+    await panel
+      .getByRole("button", { name: "在聊天中继续", exact: true })
+      .click();
+    await panel
+      .getByRole("textbox", { name: "附带上下文", exact: true })
+      .waitFor();
+    assert(
+      (
+        await panel
+          .getByRole("textbox", { name: "附带上下文", exact: true })
+          .inputValue()
+      ).includes("先验证保存与恢复"),
+    );
+    assert.equal(requests.length, countBeforeRestore);
+    await panel.getByRole("button", { name: "移除附件", exact: true }).click();
+    await panel
+      .getByRole("textbox", { name: "聊天输入", exact: true })
+      .fill("3秒后提醒我测试计时");
+    await panel.getByRole("button", { name: "发送", exact: true }).click();
+    await panel
+      .getByRole("button", { name: "确认创建提醒", exact: true })
+      .waitFor();
+    assert.equal(requests.length, countBeforeRestore);
+    await panel
+      .getByRole("button", { name: "确认创建提醒", exact: true })
+      .click();
+    await panel.waitForFunction(async () =>
+      (await window.otter.action("assistant.get")).reminders.some(
+        (r) => r.title === "测试计时" && r.status === "due",
+      ),
+    );
+    await panel.getByRole("button", { name: "生活助手", exact: false }).click();
+    await panel.getByRole("button", { name: "知道了", exact: true }).click();
+    await panel
+      .getByText("测试计时", { exact: true })
+      .waitFor({ state: "detached" });
+    await panel.locator("main").evaluate((element) => (element.scrollTop = 0));
+    await panel.screenshot({ path: path.join(output, "otter-assistant.png") });
+    await panel.getByRole("button", { name: "删除现场", exact: true }).click();
+    await panel
+      .getByRole("button", { name: "确认删除现场", exact: true })
+      .click();
+    assert.equal(
+      (await panel.evaluate(() => window.otter.action("assistant.get")))
+        .sessions.length,
+      0,
+    );
+    if (process.env.OTTER_TEST_OS_ACTIONS === "1") {
+      await panel
+        .getByRole("combobox", { name: "操作类型", exact: true })
+        .selectOption("open_url");
+      await panel
+        .getByRole("textbox", { name: "操作目标", exact: true })
+        .fill(apiUrl.replace("/v1", "/action-target"));
+      await panel
+        .getByRole("button", { name: "预览操作", exact: true })
+        .click();
+      await panel
+        .getByRole("button", { name: "取消操作", exact: true })
+        .click();
+      assert.equal(openedLink, 0);
+      await panel
+        .getByRole("button", { name: "预览操作", exact: true })
+        .click();
+      await panel
+        .getByRole("button", { name: "确认执行", exact: true })
+        .click();
+      for (let i = 0; i < 100 && openedLink === 0; i++)
+        await new Promise((r) => setTimeout(r, 100));
+      assert(
+        openedLink > 0,
+        "Default browser should open the confirmed local URL",
+      );
+      const beforeApps = await nativeRead("apps");
+      const hadCalculator = beforeApps.apps.some(
+        (a) => a.bundleId === "com.apple.calculator",
+      );
+      await panel
+        .getByRole("combobox", { name: "操作类型", exact: true })
+        .selectOption("open_app");
+      await panel
+        .getByRole("textbox", { name: "操作目标", exact: true })
+        .fill("com.apple.calculator");
+      await panel
+        .getByRole("button", { name: "预览操作", exact: true })
+        .click();
+      await panel
+        .getByRole("button", { name: "确认执行", exact: true })
+        .click();
+      let hasCalculator = false;
+      for (let i = 0; i < 20; i++) {
+        hasCalculator = (await nativeRead("apps")).apps.some(
+          (a) => a.bundleId === "com.apple.calculator",
+        );
+        if (hasCalculator) break;
+        await new Promise((r) => setTimeout(r, 200));
+      }
+      assert(hasCalculator);
+      if (!hadCalculator)
+        execFileSync("/usr/bin/osascript", [
+          "-l",
+          "JavaScript",
+          "-e",
+          'ObjC.import("AppKit");var a=$.NSRunningApplication.runningApplicationsWithBundleIdentifier("com.apple.calculator");for(var i=0;i<a.count;i++)a.objectAtIndex(i).terminate;',
+        ]);
+    }
+    await panel.getByRole("button", { name: "偏好设置" }).click();
+    await panel
+      .getByRole("checkbox", { name: "安静模式", exact: true })
+      .uncheck();
+    await panel
+      .getByRole("checkbox", { name: "开启主动陪伴", exact: true })
+      .check();
+    await panel
+      .getByRole("button", { name: "保存陪伴设置", exact: true })
+      .click();
+    await panel.getByText("陪伴设置已保存。", { exact: true }).waitFor();
+    await panel.getByRole("button", { name: "工作简报" }).click();
+    await panel.getByRole("button", { name: "生成简报", exact: true }).click();
+    await panel.waitForFunction(
+      async () => (await window.otter.action("ambient.get")).state.count === 1,
+    );
+    await panel.getByRole("button", { name: "偏好设置" }).click();
+    await panel
+      .getByRole("checkbox", { name: "开启主动陪伴", exact: true })
+      .uncheck();
+    await panel
+      .getByRole("button", { name: "保存陪伴设置", exact: true })
+      .click();
+    if (process.env.OTTER_TEST_SPEECH === "1") {
+      await panel
+        .getByRole("button", { name: "与水獭聊天", exact: false })
+        .click();
+      await panel.evaluate(() =>
+        window.otter.action(
+          "voice.speak",
+          "这是 Otter 的系统朗读测试。".repeat(30),
+        ),
+      );
+      await panel.waitForFunction(() =>
+        [...document.querySelectorAll("button")].some(
+          (b) => b.textContent === "停止朗读" && !b.disabled,
+        ),
+      );
+      await panel
+        .getByRole("button", { name: "停止朗读", exact: true })
+        .click();
+      assert.equal(
+        (await panel.evaluate(() => window.otter.action("voice.state")))
+          .speaking,
+        false,
+      );
+    }
     // Exercise privileged boundary with a non-allowlisted method.
     const denied = await panel.evaluate(async () => {
       try {
@@ -412,6 +699,12 @@ const http = require("node:http");
     assert.equal(registrations.chat, keys.chatRegistered);
     assert.equal(registrations.selection, keys.selectionRegistered);
     console.log("Shortcut registration:", registrations);
+    console.log(
+      "Native selection permission:",
+      await panel.evaluate(() =>
+        window.otter.action("context.permission-status"),
+      ),
+    );
     assert.equal(errors.length, 0, errors.join("\n"));
     console.log(
       "PASS: real Electron report generation, persistence after reconnect, quiet setting, OpenAI model test/save/reconnect/generation/reset, streaming multi-turn chat, pet entry, cancel, history and deletion, local pet actions, head tap, sleep/wake, native menu wiring, live app awareness toggle/clear, IPC allowlist.",

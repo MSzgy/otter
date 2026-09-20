@@ -92,7 +92,7 @@ class ChatStore:
             )
             result, size = [], 0
             for row in rows:
-                size += len(row["content"])
+                size += len(row["content"]) + len(row["context"])
                 if result and size > 400000:
                     break
                 result.append(dict(row))
@@ -149,11 +149,11 @@ class ChatStore:
                     content += "\n\n[用户确认附带的引用上下文]\n" + r["context"] + "\n[引用结束]"
                 turns.append([{"role": "user", "content": content}])
             elif r["role"] == "assistant" and r["turn_id"] in complete and turns:
-                turns[-1].append({"role": "assistant", "content": r["content"]})
+                turns[-1].append({"role": "assistant", "content": r["content"][:8000]})
         selected, length = [], 0
         for turn in reversed(turns[-12:]):
             size = sum(len(m["content"]) for m in turn)
-            if selected and length + size > 24000:
+            if selected and length + size > 48000:
                 break
             selected.insert(0, turn)
             length += size
@@ -257,8 +257,8 @@ class ChatService:
         text, session = params.get("text"), params.get("session_id")
         request_id = params.get("request_id")
         context = params.get("context", "")
-        if not isinstance(context, str) or len(context) > 5000:
-            raise LLMError("附带上下文最多 5000 字，请缩短后发送。")
+        if not isinstance(context, str) or len(context) > 24000:
+            raise LLMError("附带上下文最多 24000 字，请缩短后发送。")
         if not isinstance(text, str) or not text.strip() or len(text) > MAX_TEXT:
             raise LLMError("请输入 1–6000 字的消息。")
         if not isinstance(request_id, str) or len(request_id) != 32:

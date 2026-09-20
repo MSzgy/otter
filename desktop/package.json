@@ -1,6 +1,6 @@
 {
   "name": "otter-desktop",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "private": true,
   "description": "Otter desktop companion",
   "author": "Otter contributors",
@@ -39,7 +39,8 @@
       "category": "public.app-category.productivity",
       "target": "dir",
       "extendInfo": {
-        "NSAppleEventsUsageDescription": "在你开启浏览器感知后，Otter 读取当前标签页的标题和网址，仅在本机展示，不读取网页正文。"
+        "NSAppleEventsUsageDescription": "在你主动操作时读取浏览器标签页或可见网页正文，用于预览；仅在确认发送后交给已配置的模型。",
+        "NSMicrophoneUsageDescription": "按住录音按钮时采集语音，松开后发送到你配置的音频转写服务。"
       }
     },
     "electronDist": "node_modules/electron/dist"

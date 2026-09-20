@@ -213,6 +213,22 @@ export function AwarenessPane() {
                   Brave。其他浏览器会显示在应用列表中，暂不读取标签页。
                 </p>
               )}
+              {browserApps.length > 0 && (
+                <div className="browser-actions page-read-actions">
+                  {browserApps.map((a) => (
+                    <button
+                      key={a.bundleId + ":page"}
+                      disabled={pending}
+                      onClick={() => act("context.page", a.bundleId)}
+                    >
+                      {pending ? "读取中…" : `阅读 ${a.name} 当前网页`}
+                    </button>
+                  ))}
+                  <small>
+                    只在点击时读取已加载的可见正文，先预览再发送；不读取表单内容。
+                  </small>
+                </div>
+              )}
               {state.browser ? (
                 <article className="tab-card">
                   <div className="tab-meta">
@@ -258,7 +274,7 @@ export function AwarenessPane() {
       <div className="awareness-privacy">
         <h2>这一版能感知到什么</h2>
         <p>
-          运行中的普通桌面应用、当前前台应用，以及支持的浏览器当前选中标签页。不会读取页面正文、表单、截图、聊天内容或历史记录。网址会移除查询参数与片段；标题和路径仍可能包含私人信息，只在内存中保留最近一次结果。
+          运行中的普通桌面应用、当前前台应用，以及支持的浏览器当前选中标签页。自动感知不读取页面正文；仅点击“阅读当前网页”才读取正文到预览，不读取表单、截图或浏览历史。网址会移除查询参数与片段；标题和路径仍可能包含私人信息，只在内存中保留最近一次结果。
         </p>
         <p>
           信息不写入数据库，也不会自动加入水獭聊天。隐私/无痕窗口未单独识别；不希望读取时请关闭浏览器感知。关闭应用感知同时关闭标签页读取并清空结果。

@@ -63,7 +63,7 @@ class ContextDraft {
   set(text, label) {
     this.value = {
       id: String(++this.sequence),
-      text: text.slice(0, 5000),
+      text: text.slice(0, 24000),
       label,
       createdAt: Date.now(),
     };

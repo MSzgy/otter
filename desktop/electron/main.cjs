@@ -10,14 +10,46 @@ const {
   shell,
   Notification,
   globalShortcut,
+  powerMonitor,
 } = require("electron");
 const fs = require("node:fs");
-const { createHash } = require("node:crypto");
+const { createHash, randomUUID } = require("node:crypto");
 const path = require("node:path");
 const { fileURLToPath } = require("node:url");
 const { Backend } = require("./bridge.cjs");
-const { Awareness } = require("./awareness.cjs");
+const { Awareness, nativeRead } = require("./awareness.cjs");
+const { execFile } = require("node:child_process");
+const { ActionGate } = require("./actions.cjs");
+const actionGate = new ActionGate({
+  resolveApp: (id) => nativeRead("resolve-app", id),
+  execute: (proposal) =>
+    proposal.kind === "open_url"
+      ? shell.openExternal(proposal.target)
+      : new Promise((resolve, reject) =>
+          execFile(
+            "/usr/bin/open",
+            ["-b", proposal.target],
+            { timeout: 10000 },
+            (error) =>
+              error
+                ? reject(new Error("应用打开失败，请确认已安装。"))
+                : resolve(),
+          ),
+        ),
+});
 let awareness;
+const { SpeechPlayer } = require("./speech.cjs");
+let speechPlayer,
+  voiceTranscribing = false,
+  lastSpokenTurn = "";
+const { AssistantStore } = require("./assistant-store.cjs");
+let assistantStore;
+const { Ambient } = require("./ambient.cjs");
+let ambient = new Ambient(),
+  lastAmbientApp = "";
+let assistantError = "生活助手尚未就绪。";
+const { readPage } = require("./page-reader.cjs");
+let pageReading = false;
 const {
   ContextDraft,
   buildScene,
@@ -137,6 +169,8 @@ async function connect() {
       selected.config,
       "--root",
       selected.root,
+      "--audio-dir",
+      path.join(app.getPath("userData"), "audio-temp"),
       "--model-settings",
       path.join(
         app.getPath("userData"),
@@ -176,9 +210,11 @@ async function connect() {
       }
       lastJob = event.data;
       broadcast(event);
+      if (event.data.status === "finished") ambientEvent("report");
       if (
         event.data.status === "finished" &&
         !preferences.quiet &&
+        !assistantStore?.snapshot().focus &&
         Notification.isSupported()
       ) {
         const note = new Notification({
@@ -217,8 +253,15 @@ function windowOptions() {
 function protect(win) {
   win.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
   win.webContents.on("will-navigate", (event) => event.preventDefault());
-  win.webContents.session.setPermissionRequestHandler((_w, _p, cb) =>
-    cb(false),
+  win.webContents.session.setPermissionRequestHandler(
+    (contents, permission, callback, details) => {
+      const audioOnly =
+        permission === "media" &&
+        contents === panel?.webContents &&
+        details.mediaTypes?.includes("audio") &&
+        !details.mediaTypes?.includes("video");
+      callback(!!audioOnly);
+    },
   );
 }
 function showPanel() {
@@ -316,6 +359,24 @@ function registerShortcuts(settings) {
   }
   shortcutStatus = { ...config, chatRegistered, selectionRegistered };
   return shortcutStatus;
+}
+function ambientEvent(kind) {
+  const petSnapshot = petState.snapshot();
+  const reaction = ambient.event(kind, {
+    quiet: !!preferences.quiet,
+    focus: !!assistantStore?.snapshot().focus,
+    busy: !!petSnapshot.effect || chatState?.status === "streaming",
+    sleeping: petSnapshot.asleep,
+  });
+  if (!reaction) return;
+  preferences.ambient = ambient.snapshot();
+  save();
+  if (reaction.action) {
+    try {
+      interactPet(reaction.action);
+    } catch {}
+  }
+  broadcast({ type: "pet.notice", data: { message: reaction.caption } });
 }
 function interactPet(action) {
   const snapshot = petState.interact(action);
@@ -441,7 +502,7 @@ ipcMain.handle("otter:call", async (event, method, params) => {
     !params ||
     typeof params !== "object" ||
     Array.isArray(params) ||
-    JSON.stringify(params).length > 16000
+    JSON.stringify(params).length > 64000
   )
     throw new Error("参数无效。");
   if (!backend || switching) throw new Error("后台尚未就绪。");
@@ -480,6 +541,125 @@ ipcMain.handle("otter:action", async (event, name, value) => {
       message: offlineMessage,
       switching,
     };
+  if (name.startsWith("voice.")) {
+    if (event.sender !== panel.webContents)
+      throw new Error("请在聊天面板使用语音。");
+    if (name === "voice.state") return { speaking: !!speechPlayer?.child };
+    if (name === "voice.settings")
+      return {
+        model: preferences.voice?.model || "whisper-1",
+        autoSpeak: preferences.voice?.autoSpeak === true,
+      };
+    if (name === "voice.configure") {
+      if (
+        typeof value?.model !== "string" ||
+        !value.model.trim() ||
+        value.model.length > 200 ||
+        typeof value.autoSpeak !== "boolean"
+      )
+        throw new Error("语音设置无效。");
+      preferences.voice = {
+        model: value.model.trim(),
+        autoSpeak: value.autoSpeak,
+      };
+      save();
+      return preferences.voice;
+    }
+    if (name === "voice.stop") {
+      speechPlayer.stop();
+      return;
+    }
+    if (name === "voice.speak") return speechPlayer.speak(value);
+    if (name === "voice.reply") {
+      if (
+        preferences.voice?.autoSpeak &&
+        chatState?.id === value &&
+        chatState.status === "complete" &&
+        lastSpokenTurn !== value
+      ) {
+        lastSpokenTurn = value;
+        return speechPlayer.speak(chatState.content.slice(0, 8000));
+      }
+      return;
+    }
+    if (name === "voice.transcribe") {
+      if (!backend || switching || voiceTranscribing)
+        throw new Error("后台未就绪或正在转写，请稍候。");
+      if (
+        !(value instanceof Uint8Array) ||
+        value.byteLength < 1 ||
+        value.byteLength > 2 * 1024 * 1024
+      )
+        throw new Error("录音为空或超过 2 MB。");
+      const dir = path.join(app.getPath("userData"), "audio-temp");
+      fs.mkdirSync(dir, { recursive: true });
+      const id = randomUUID().replaceAll("-", "");
+      const file = path.join(dir, id + ".webm");
+      fs.writeFileSync(file, value, { mode: 0o600, flag: "wx" });
+      voiceTranscribing = true;
+      try {
+        return await backend.call("voice.transcribe", {
+          file_id: id,
+          model: preferences.voice?.model || "whisper-1",
+        });
+      } finally {
+        voiceTranscribing = false;
+        fs.rmSync(file, { force: true });
+      }
+    }
+    throw new Error("不支持的语音操作。");
+  }
+  if (name.startsWith("actions.")) {
+    if (event.sender !== panel.webContents)
+      throw new Error("请在主面板确认操作。");
+    if (name === "actions.prepare") return actionGate.prepare(value || {});
+    if (name === "actions.confirm") return actionGate.confirm(value);
+    if (name === "actions.cancel") {
+      actionGate.cancel(value);
+      return;
+    }
+    throw new Error("不支持的操作。");
+  }
+  if (name.startsWith("ambient.")) {
+    if (event.sender !== panel.webContents) throw new Error("请在主面板操作。");
+    if (name === "ambient.get") return ambient.snapshot();
+    if (name === "ambient.configure") {
+      const result = ambient.configure(value);
+      preferences.ambient = result;
+      save();
+      return result;
+    }
+    throw new Error("不支持的陪伴设置。");
+  }
+  if (name.startsWith("assistant.")) {
+    if (event.sender !== panel.webContents) throw new Error("请在主面板操作。");
+    if (!assistantStore) throw new Error(assistantError);
+    if (name === "assistant.get") return assistantStore.snapshot();
+    if (name === "assistant.create") return assistantStore.create(value || {});
+    if (name === "assistant.change")
+      return assistantStore.change(value?.id, value?.status);
+    if (name === "assistant.clear") return assistantStore.clearFinished();
+    if (name === "assistant.todo-add")
+      return assistantStore.addTodo(value || {});
+    if (name === "assistant.todo-toggle")
+      return assistantStore.changeTodo(value, false);
+    if (name === "assistant.todo-delete")
+      return assistantStore.changeTodo(value, true);
+    if (name === "assistant.work-save")
+      return assistantStore.saveSession(value || {});
+    if (name === "assistant.work-delete")
+      return assistantStore.deleteSession(value);
+    if (name === "assistant.work-restore") {
+      const item = assistantStore.getSession(value);
+      return draftToChat(
+        `保存的工作现场：${item.title}\n保存时间：${new Date(item.createdAt).toLocaleString()}\n\n上次问题：${item.question}\n下一步：${item.nextStep}\n\n背景：${item.context}`,
+        "继续上次工作",
+      );
+    }
+    if (name === "assistant.scene-preview")
+      return buildScene(awareness.snapshot());
+    throw new Error("不支持的生活助手操作。");
+  }
   if (name.startsWith("context.") || name.startsWith("shortcuts.")) {
     if (event.sender !== panel.webContents) throw new Error("请在主面板操作。");
     if (name === "context.get")
@@ -488,6 +668,32 @@ ipcMain.handle("otter:action", async (event, name, value) => {
       contextDraft.clear(value);
       contextError = "";
       return;
+    }
+    if (name === "context.page") {
+      const state = awareness.snapshot();
+      if (!state.enabled || !state.browserEnabled)
+        throw new Error("请先开启应用和浏览器感知。");
+      if (
+        typeof value !== "string" ||
+        !state.apps.some((a) => a.bundleId === value)
+      )
+        throw new Error("请先打开支持的浏览器。");
+      if (pageReading) throw new Error("正在读取网页，请稍后再试。");
+      pageReading = true;
+      const generation = awareness.generation;
+      try {
+        const text = await readPage(value);
+        const current = awareness.snapshot();
+        if (
+          !current.enabled ||
+          !current.browserEnabled ||
+          generation !== awareness.generation
+        )
+          throw new Error("读取已取消：浏览器感知已关闭。");
+        return draftToChat(text, "网页正文");
+      } finally {
+        pageReading = false;
+      }
     }
     if (name === "context.scene")
       return draftToChat(buildScene(awareness.snapshot()), "应用与标签页场景");
@@ -661,6 +867,7 @@ else {
       preferences = {};
     }
     petState = new PetState(preferences.petState);
+    ambient = new Ambient(preferences.ambient);
     const area = screen.getPrimaryDisplay().workArea;
     const position = preferences.position || {
       x: area.x + area.width - 270,
@@ -721,6 +928,20 @@ else {
     refreshTray();
     awareness = new Awareness({
       emit: (state) => {
+        const id = state.front?.bundleId || "";
+        if (id !== lastAmbientApp) {
+          lastAmbientApp = id;
+          if (
+            [
+              "com.microsoft.VSCode",
+              "com.apple.dt.Xcode",
+              "com.apple.Terminal",
+              "com.googlecode.iterm2",
+              "com.jetbrains.intellij",
+            ].includes(id)
+          )
+            ambientEvent("coding");
+        }
         if (panel && !panel.isDestroyed())
           panel.webContents.send("otter:event", {
             type: "awareness.changed",
@@ -735,6 +956,55 @@ else {
     screen.on("display-removed", reposition);
     screen.on("display-metrics-changed", reposition);
     app.on("activate", showPanel);
+    try {
+      assistantStore = new AssistantStore(
+        path.join(app.getPath("userData"), "assistant.json"),
+        {
+          emit: (state) => {
+            if (panel && !panel.isDestroyed())
+              panel.webContents.send("otter:event", {
+                type: "assistant.changed",
+                data: state,
+              });
+          },
+          notify: (value) => {
+            if (value.title === "专注结束") ambientEvent("focus");
+            if (Notification.isSupported()) {
+              const notification = new Notification({
+                title: value.title,
+                body: value.body,
+              });
+              notification.on("click", () => {
+                showPanel();
+                panel.webContents.send("otter:event", {
+                  type: "navigation",
+                  data: { view: "assistant" },
+                });
+              });
+              notification.show();
+            }
+            broadcast({
+              type: "pet.notice",
+              data: { message: value.title + "：" + value.body },
+            });
+          },
+        },
+      );
+      assistantStore.start();
+      powerMonitor.on("resume", () => assistantStore.tick());
+    } catch {
+      assistantError =
+        "生活助手数据无法读取，请保留 assistant.json 并检查备份；其他功能仍可使用。";
+    }
+    speechPlayer = new SpeechPlayer({
+      emit: (state) => broadcast({ type: "voice.activity", data: state }),
+    });
+    const audioTemp = path.join(app.getPath("userData"), "audio-temp");
+    if (fs.existsSync(audioTemp))
+      for (const name of fs.readdirSync(audioTemp)) {
+        if (/^[0-9a-f]{32}\.webm$/.test(name))
+          fs.rmSync(path.join(audioTemp, name), { force: true });
+      }
     registerShortcuts(preferences.shortcuts);
     await connect();
   });
@@ -745,6 +1015,8 @@ else {
     quitting = true;
     clearTimeout(petEffectTimer);
     awareness?.close();
+    assistantStore?.close();
+    speechPlayer?.stop();
     globalShortcut.unregisterAll();
     (backend ? backend.stop() : Promise.resolve()).finally(() => app.quit());
   });

@@ -1,13 +1,13 @@
 # 桌面首批实现验证
 
-验证日期：2026-09-19。环境：macOS Apple Silicon；Electron 44.3.0；Python 3.13.2；Node.js 22.14.0。
+验证日期：2026-09-20。环境：macOS Apple Silicon；Electron 44.3.0；Python 3.13.2；Node.js 22.14.0。
 
 |项目|结果|
 |---|---|
-|Python 回归与桌面 Runtime 测试|265 项通过|
+|Python 回归与桌面 Runtime 测试|269 项通过|
 |Python Ruff 检查|通过|
 |TypeScript 类型检查及 Vite 构建|通过|
-|Node 协议、宠物状态与感知测试|14 项通过|
+|Node 协议、宠物状态与感知测试|27 项通过|
 |开发版真实 Electron 窗口测试|通过|
 |独立 Otter.app 同一套窗口测试|通过|
 |冻结 Python 后台从仓库外目录生成简报|通过|
@@ -55,3 +55,15 @@ NSWorkspace 脚本已在本机只读验证，可读取运行应用与前台应�
 选区 Swift 助手编译成功，权限检查返回 permission_required。尚未授权真实跨应用 AX 读取，因此这项仍是待验证，不能以单元测试替代真实选区成功证据。完整 P0–P3 目标仍在推进，见 PRIORITY-PROGRESS.md。
 
 独立 Otter 0.5.0 安装包也已通过同一套场景预览、移除、确认发送和快捷键注册检查。
+
+## P1–P3 补充（0.6.0）
+
+当前源码通过 269 项 Python 测试、27 项 Node 测试、TypeScript/Vite 构建。真实窗口流程新增：固定测试文章可见文本提取且隐藏/透明/表单内容被排除；提醒确认后实际到期、专注计时和取消、工作现场保存/恢复预览/删除、待办添加、主动陪伴设置并真实报告完成触发。
+
+语音用 AudioContext 生成信号经实际 MediaRecorder 录成 WebM，通过 IPC 和受限临时文件交给 Python，再上传到本机模拟转写服务；结果回填聊天框，临时文件清空。没有采集真人麦克风或调用真实收费语音模型。`OTTER_TEST_SPEECH=1` 已触发实际 macOS say 并在 UI 停止；未声称人工确认扬声器听感。
+
+`OTTER_TEST_OS_ACTIONS=1` 已确认默认浏览器实际请求本机目标 URL、Calculator 实际出现在运行应用列表；只关闭测试新启动的 Calculator。取消操作没有执行，重复/过期/非法协议被单测拒绝。这个扩展测试会短暂打开外部应用和本机测试页，默认 smoke 不执行这两类额外系统动作。
+
+剩余外部验证：Otter 的 AX 选区权限、浏览器自动化/Apple Events JavaScript 许可下的真实页面读取、真人麦克风输入与所选真实语音服务兼容性。完整目标不能仅凭模拟数据标记完成，详见 PRIORITY-PROGRESS.md。
+
+独立 Otter 0.6.0 安装包已通过完整 smoke 与扩展系统动作/朗读验收。安装包内选区助手仍报告 permission_required。单独尝试原生快捷键时，UI 工具未在隔离测试窗口存活期间完成按键，故不作为按键成功证据；OS 注册结果仍为成功。

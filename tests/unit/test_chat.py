@@ -219,3 +219,15 @@ def test_chat_database_v1_migrates_without_losing_messages(tmp_path):
     store = ChatStore(path)
     rows = store.history("s")
     assert rows[0]["content"] == "existing text" and rows[0]["context"] == ""
+
+
+def test_long_page_remains_available_for_immediate_followup(tmp_path):
+    store = ChatStore(tmp_path / "chat.db")
+    session = store.new()["id"]
+    store.begin(session, "first", "总结页面", "PAGE_SOURCE:" + "x" * 20000)
+    store.update("first", "a" * 90000, "complete")
+    store.begin(session, "second", "再解释一下第二点")
+    context = store.context(session, "second")
+    assert "PAGE_SOURCE:" in context[1]["content"]
+    assert len(context[2]["content"]) == 8000
+    assert len(store.history(session)[1]["content"]) == 90000

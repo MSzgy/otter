@@ -61,7 +61,11 @@ class Backend extends EventEmitter {
           this.pending.delete(id);
           reject(new Error("后台响应超时。"));
         },
-        method === "models.test" ? 35000 : 20000,
+        method === "voice.transcribe"
+          ? 60000
+          : method === "models.test"
+            ? 35000
+            : 20000,
       );
       this.pending.set(id, { resolve, reject, timer });
       this.process.stdin.write(

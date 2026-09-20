@@ -4,6 +4,8 @@ import Markdown from "react-markdown";
 import { Otter, type Mood } from "./Otter";
 import type { Health, Job, Report, Prefs, Snapshot } from "./types";
 import "./style.css";
+import { AmbientSettings } from "./AmbientSettings";
+import { AssistantPane } from "./AssistantPane";
 import { QuickAccessCard } from "./QuickAccessCard";
 import { AwarenessPane } from "./AwarenessPane";
 import { PetInteractions, usePetState } from "./PetInteractions";
@@ -21,6 +23,7 @@ function message(error: unknown) {
 function useRuntime() {
   const [health, setHealth] = useState<Health | null>(null);
   const [chatBusy, setChatBusy] = useState(false);
+  const [speaking, setSpeaking] = useState(false);
   const [job, setJob] = useState<Job | null>(null);
   const [prefs, setPrefs] = useState<Prefs>({
     quiet: false,
@@ -34,6 +37,7 @@ function useRuntime() {
     let revision = 0;
     const unsubscribe = api.subscribe((event) => {
       revision++;
+      if (event.type === "voice.activity") setSpeaking(event.data.speaking);
       if (event.type === "connection") {
         setConnecting(event.data.status === "connecting");
         setHealth(event.data.health || null);
@@ -80,10 +84,11 @@ function useRuntime() {
     setError,
     connecting,
     chatBusy,
+    speaking,
   };
 }
 function Pet() {
-  const { health, job, prefs, chatBusy } = useRuntime();
+  const { health, job, prefs, chatBusy, speaking } = useRuntime();
   const { pet: petLocal, notice, interact } = usePetState();
   const [held, setHeld] = useState(false);
   const gaze = useRef({ x: 0, y: 0 });
@@ -95,13 +100,15 @@ function Pet() {
     chatBusy || (health && job && ["queued", "running"].includes(job.status));
   const mood: Mood = held
     ? "held"
-    : petLocal.effect
-      ? petLocal.mood
-      : petLocal.asleep
-        ? "sleeping"
-        : working
-          ? "working"
-          : "idle";
+    : speaking
+      ? "speaking"
+      : petLocal.effect
+        ? petLocal.mood
+        : petLocal.asleep
+          ? "sleeping"
+          : working
+            ? "working"
+            : "idle";
   function setHit(value: boolean) {
     if (hit.current !== value) {
       hit.current = value;
@@ -211,15 +218,17 @@ function Pet() {
       <div className="pet-caption">
         {held
           ? "被你提起来啦！"
-          : notice ||
-            petLocal.effect?.caption ||
-            (petLocal.asleep
-              ? "点一下，叫醒我"
-              : working
-                ? chatBusy
-                  ? "让我想想…"
-                  : "正在整理简报"
-                : "点头摸摸 · 右键互动")}
+          : speaking
+            ? "我在说给你听…"
+            : notice ||
+              petLocal.effect?.caption ||
+              (petLocal.asleep
+                ? "点一下，叫醒我"
+                : working
+                  ? chatBusy
+                    ? "让我想想…"
+                    : "正在整理简报"
+                  : "点头摸摸 · 右键互动")}
       </div>
     </div>
   );
@@ -237,21 +246,29 @@ function Panel() {
   } = useRuntime();
   const { pet: petLocal } = usePetState();
   const [tab, setTab] = useState<
-    "reports" | "settings" | "chat" | "pet" | "awareness"
+    "reports" | "settings" | "chat" | "pet" | "awareness" | "assistant"
   >("reports");
+  const mainScroll = useRef<HTMLElement | null>(null);
+  useEffect(() => {
+    mainScroll.current?.scrollTo({ top: 0 });
+  }, [tab]);
   useEffect(() => {
     let navigated = false;
     const unsub = api.subscribe((event) => {
       if (
         event.type === "navigation" &&
-        ["chat", "pet"].includes(event.data.view)
+        ["chat", "pet", "assistant"].includes(event.data.view)
       ) {
         navigated = true;
         setTab(event.data.view);
       }
     });
     void api.action<Snapshot>("snapshot").then((s) => {
-      if (!navigated && (s.view === "chat" || s.view === "pet")) setTab(s.view);
+      if (
+        !navigated &&
+        (s.view === "chat" || s.view === "pet" || s.view === "assistant")
+      )
+        setTab(s.view);
     });
     return unsub;
   }, []);
@@ -331,6 +348,12 @@ function Panel() {
         </div>
         <nav aria-label="主导航">
           <button
+            className={tab === "assistant" ? "active" : ""}
+            onClick={() => setTab("assistant")}
+          >
+            <span>◷</span>生活助手
+          </button>
+          <button
             className={tab === "awareness" ? "active" : ""}
             onClick={() => setTab("awareness")}
           >
@@ -392,7 +415,7 @@ function Panel() {
               : "后台未连接"}
         </div>
       </aside>
-      <main>
+      <main ref={mainScroll}>
         <header className="topbar">
           <span>
             {tab === "reports"
@@ -403,7 +426,9 @@ function Panel() {
                   ? "Otter / 陪伴互动"
                   : tab === "awareness"
                     ? "Otter / 应用感知"
-                    : "工作空间 / 设置"}
+                    : tab === "assistant"
+                      ? "Otter / 生活助手"
+                      : "工作空间 / 设置"}
           </span>
           <span>OTTER DESKTOP</span>
         </header>
@@ -416,7 +441,9 @@ function Panel() {
               </button>
             </div>
           )}
-          {tab === "awareness" ? (
+          {tab === "assistant" ? (
+            <AssistantPane />
+          ) : tab === "awareness" ? (
             <AwarenessPane />
           ) : tab === "pet" ? (
             <PetInteractions />
@@ -596,6 +623,7 @@ function Panel() {
                   连接现有工作空间，选择你喜欢的相处方式。
                 </p>
               </div>
+              <AmbientSettings />
               <QuickAccessCard />
               <ModelSettings
                 key={prefs.config}
