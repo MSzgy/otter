@@ -71,6 +71,7 @@ func recognize(_ image: CGImage) throws -> String {
     return (request.results ?? []).compactMap { $0.topCandidates(1).first?.string }.joined(separator:"\n")
 }
 @available(macOS 14.0, *)
+@MainActor
 func readOCR(_ pid: pid_t) async -> [String: Any] {
     guard CGPreflightScreenCaptureAccess() else { return ["status":"permission_required","permission":"screen_recording"] }
     do {
@@ -119,8 +120,10 @@ let method=args[3]
 if method == "ax" { output(readAX(pid));exit(0) }
 if method == "ocr" {
     if #available(macOS 14.0, *) {
-        Task { output(await readOCR(pid));exit(0) }
-        dispatchMain()
+        // ScreenCaptureKit window filters require an initialized AppKit display connection.
+        _ = NSApplication.shared
+        Task { @MainActor in output(await readOCR(pid));exit(0) }
+        RunLoop.main.run()
     } else { output(["status":"unsupported_os"]);exit(0) }
 }
 output(["status":"invalid_request"])

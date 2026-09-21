@@ -175,6 +175,73 @@ const { execFileSync } = require("node:child_process");
         await panel.getByText(/需要系统授权，授权后重新读取即可/).waitFor();
     }
 
+    if (process.env.OTTER_TEST_WINDOW_OCR === "1") {
+      assert(ownApp, "Isolated test app must be present in awareness list");
+      assert(
+        contentPermissions.screenRecording,
+        "Otter needs screen recording permission for real window OCR",
+      );
+      await panel.evaluate(() => {
+        const marker = document.createElement("div");
+        marker.id = "otter-ocr-fixture";
+        marker.textContent = "OTTER WINDOW CONTENT CHECK";
+        marker.style.cssText =
+          "position:fixed;inset:0;z-index:2147483647;background:white;color:black;font:48px Arial;display:flex;align-items:center;justify-content:center";
+        document.body.append(marker);
+      });
+      await app.evaluate(({ BrowserWindow }) => {
+        const window = BrowserWindow.getAllWindows().find((w) =>
+          w.webContents.getURL().includes("view=panel"),
+        );
+        window.show();
+        window.focus();
+      });
+      await panel.bringToFront();
+      await panel.evaluate(
+        () =>
+          new Promise((resolve) =>
+            requestAnimationFrame(() => requestAnimationFrame(resolve)),
+          ),
+      );
+      await panel.screenshot(); // Wait for the fixture to be painted; do not save it.
+      try {
+        const captured = await panel.evaluate(
+          (target) =>
+            window.otter.action("awareness.content", {
+              pid: target.pid,
+              bundleId: target.bundleId,
+              method: "ocr",
+            }),
+          ownApp,
+        );
+        assert.equal(
+          captured.status,
+          "ready",
+          JSON.stringify({
+            status: captured.status,
+            permission: captured.permission,
+            windows: captured.windows.map((w) => ({
+              title: w.title,
+              length: w.text.length,
+            })),
+          }),
+        );
+        assert(
+          captured.windows.some((w) =>
+            /OTTER WINDOW CONTENT CHECK/.test(w.text),
+          ),
+          "Native OCR must recognize the visible test marker",
+        );
+        console.log(
+          "PASS: native capture and Vision OCR recognized isolated Otter window marker",
+        );
+      } finally {
+        await panel.evaluate(() =>
+          document.getElementById("otter-ocr-fixture")?.remove(),
+        );
+      }
+    }
+
     const requestsBeforePreview = requests.length;
     await panel
       .getByRole("button", { name: "聊聊当前场景", exact: true })
