@@ -38,6 +38,8 @@ const actionGate = new ActionGate({
         ),
 });
 let awareness;
+const { AppContentReader } = require("./app-content.cjs");
+let appContentReader;
 const { SpeechPlayer } = require("./speech.cjs");
 let speechPlayer,
   voiceTranscribing = false,
@@ -527,6 +529,7 @@ ipcMain.handle("otter:action", async (event, name, value) => {
   guard(event);
   if (name === "snapshot")
     return {
+      version: app.getVersion(),
       health: currentHealth,
       pet: petState.snapshot(),
       chat:
@@ -669,20 +672,37 @@ ipcMain.handle("otter:action", async (event, name, value) => {
       contextError = "";
       return;
     }
+    if (name === "context.app") {
+      if (!awareness.snapshot().enabled) throw new Error("请先开启应用感知。");
+      return draftToChat(appContentReader.context(value), "应用窗口内容");
+    }
     if (name === "context.page") {
       const state = awareness.snapshot();
       if (!state.enabled || !state.browserEnabled)
         throw new Error("请先开启应用和浏览器感知。");
-      if (
-        typeof value !== "string" ||
-        !state.apps.some((a) => a.bundleId === value)
-      )
+      const browserId = typeof value === "string" ? value : value?.bundleId;
+      if (!state.apps.some((a) => a.bundleId === browserId))
         throw new Error("请先打开支持的浏览器。");
+      let target = {};
+      if (typeof value === "object" && value) {
+        const observed = state.tabs.find(
+          (t) =>
+            t.bundleId === browserId &&
+            t.windowId === value.windowId &&
+            t.tabId === value.tabId,
+        );
+        if (!observed) throw new Error("标签页列表已变化，请重新刷新并选择。");
+        target = {
+          windowId: observed.windowId,
+          tabId: observed.tabId,
+          title: observed.title,
+        };
+      }
       if (pageReading) throw new Error("正在读取网页，请稍后再试。");
       pageReading = true;
       const generation = awareness.generation;
       try {
-        const text = await readPage(value);
+        const text = await readPage(browserId, target);
         const current = awareness.snapshot();
         if (
           !current.enabled ||
@@ -720,8 +740,23 @@ ipcMain.handle("otter:action", async (event, name, value) => {
     if (event.sender !== panel.webContents)
       throw new Error("请在应用感知面板操作。");
     if (name === "awareness.get") return awareness.snapshot();
+    if (name === "awareness.content-permissions")
+      return appContentReader.permissions();
+    if (name === "awareness.request-permission")
+      return appContentReader.request(value);
+    if (name === "awareness.content") {
+      const state = awareness.snapshot();
+      if (!state.enabled) throw new Error("请先开启应用感知。");
+      const target = state.apps.find(
+        (a) => a.pid === value?.pid && a.bundleId === value?.bundleId,
+      );
+      if (!target) throw new Error("应用已退出或列表已变化，请刷新。");
+      return appContentReader.read(target, value.method);
+    }
+
     if (name === "awareness.configure") {
       const result = awareness.configure(value || {});
+      if (!result.enabled) appContentReader.clear();
       preferences.awareness = {
         enabled: result.enabled,
         browserEnabled: result.browserEnabled,
@@ -866,6 +901,11 @@ else {
     } catch {
       preferences = {};
     }
+    appContentReader = new AppContentReader(
+      app.isPackaged
+        ? path.join(process.resourcesPath, "native/otter-app-content")
+        : path.join(root, "desktop/build/native/otter-app-content"),
+    );
     petState = new PetState(preferences.petState);
     ambient = new Ambient(preferences.ambient);
     const area = screen.getPrimaryDisplay().workArea;
@@ -1015,6 +1055,7 @@ else {
     quitting = true;
     clearTimeout(petEffectTimer);
     awareness?.close();
+    appContentReader?.clear();
     assistantStore?.close();
     speechPlayer?.stop();
     globalShortcut.unregisterAll();

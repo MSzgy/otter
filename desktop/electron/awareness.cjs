@@ -19,7 +19,7 @@ function nativeRead(kind, id, signal) {
       ["-l", "JavaScript", "-e", script, ...(id ? [id] : [])],
       {
         timeout: kind === "browser" ? 12000 : 5000,
-        maxBuffer: 512 * 1024,
+        maxBuffer: 2 * 1024 * 1024,
         signal,
       },
       (error, stdout, stderr) => {
@@ -105,6 +105,9 @@ class Awareness {
       front: null,
       lastExternal: null,
       browser: null,
+      tabs: [],
+      tabWindowCount: 0,
+      tabsTruncated: false,
       browserStatus: "off",
       updatedAt: null,
       message: "",
@@ -136,6 +139,9 @@ class Awareness {
         front: null,
         lastExternal: null,
         browser: null,
+        tabs: [],
+        tabWindowCount: 0,
+        tabsTruncated: false,
         browserStatus: "off",
         updatedAt: null,
         message: "",
@@ -147,6 +153,8 @@ class Awareness {
     this.state.message = this.platform === "darwin" ? "" : "当前仅支持 macOS。";
     if (!this.state.browserEnabled) {
       this.state.browser = null;
+      this.state.tabs = [];
+      this.state.tabWindowCount = 0;
       this.state.browserStatus = "off";
     }
     this.publish();
@@ -213,12 +221,24 @@ class Awareness {
       const result = await this.read("browser", id, signal);
       if (generation !== this.generation || !this.state.browserEnabled) return;
       this.state.browser = cleanTab(result, id);
+      this.state.tabs = (Array.isArray(result.tabs) ? result.tabs : [])
+        .slice(0, 200)
+        .map((tab) => ({
+          ...cleanTab({ ...tab, status: "ready" }, id),
+          windowId: String(tab.windowId),
+          tabId: String(tab.tabId),
+          windowIndex: Number(tab.windowIndex) || 1,
+          active: tab.active === true,
+        }));
+      this.state.tabWindowCount = Number(result.windowCount) || 0;
+      this.state.tabsTruncated = result.truncated === true;
       this.state.browserStatus = result.status === "ready" ? "ready" : "no_tab";
       this.state.message = "";
     } catch (error) {
       if (generation !== this.generation || signal.aborted) return;
       this.blocked.add(id);
       this.state.browser = null;
+      this.state.tabs = [];
       this.state.browserStatus = error.code === "DENIED" ? "denied" : "error";
       this.state.message =
         error.code === "DENIED"
@@ -233,7 +253,14 @@ class Awareness {
     if (!Object.hasOwn(BROWSERS, id)) throw new Error("暂不支持这个浏览器。");
     if (!this.state.apps.some((app) => app.bundleId === id))
       throw new Error("浏览器尚未运行，请打开浏览器并刷新应用列表。");
-    if (this.running) throw new Error("正在更新感知信息，请稍后重试。");
+    const deadline = Date.now() + 13000;
+    while (this.running && this.state.enabled && this.state.browserEnabled) {
+      if (Date.now() > deadline)
+        throw new Error("浏览器读取仍在等待系统响应，请先处理授权提示后重试。");
+      await new Promise((resolve) => setTimeout(resolve, 40));
+    }
+    if (!this.state.enabled || !this.state.browserEnabled)
+      throw new Error("浏览器感知已关闭。");
     this.running = true;
     const generation = this.generation;
     const controller = new AbortController();

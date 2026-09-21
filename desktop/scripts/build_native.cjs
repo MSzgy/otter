@@ -6,17 +6,22 @@ if (process.platform !== "darwin")
 const desktop = path.resolve(__dirname, "..");
 const out = path.join(desktop, "build/native");
 fs.mkdirSync(out, { recursive: true });
-const result = spawnSync(
-  "/usr/bin/xcrun",
-  [
-    "swiftc",
-    "-O",
-    "-module-cache-path",
-    path.join(out, "module-cache"),
-    path.join(desktop, "electron/native/selection.swift"),
-    "-o",
-    path.join(out, "otter-selection"),
-  ],
-  { stdio: "inherit" },
-);
-process.exit(result.status ?? 1);
+for (const [source, name] of [
+  ["selection.swift", "otter-selection"],
+  ["app-content.swift", "otter-app-content"],
+]) {
+  const result = spawnSync(
+    "/usr/bin/xcrun",
+    [
+      "swiftc",
+      "-O",
+      "-module-cache-path",
+      path.join(out, "module-cache"),
+      path.join(desktop, "electron/native", source),
+      "-o",
+      path.join(out, name),
+    ],
+    { stdio: "inherit" },
+  );
+  if (result.status !== 0) process.exit(result.status ?? 1);
+}

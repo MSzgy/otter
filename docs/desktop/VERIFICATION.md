@@ -1,13 +1,13 @@
 # 桌面首批实现验证
 
-验证日期：2026-09-20。环境：macOS Apple Silicon；Electron 44.3.0；Python 3.13.2；Node.js 22.14.0。
+验证日期：2026-09-21。环境：macOS Apple Silicon；Electron 44.3.0；Python 3.13.2；Node.js 22.14.0。
 
 |项目|结果|
 |---|---|
 |Python 回归与桌面 Runtime 测试|269 项通过|
 |Python Ruff 检查|通过|
 |TypeScript 类型检查及 Vite 构建|通过|
-|Node 协议、宠物状态与感知测试|27 项通过|
+|Node 协议、宠物状态与感知测试|36 项通过|
 |开发版真实 Electron 窗口测试|通过|
 |独立 Otter.app 同一套窗口测试|通过|
 |冻结 Python 后台从仓库外目录生成简报|通过|
@@ -67,3 +67,13 @@ NSWorkspace 脚本已在本机只读验证，可读取运行应用与前台应�
 剩余外部验证：Otter 的 AX 选区权限、浏览器自动化/Apple Events JavaScript 许可下的真实页面读取、真人麦克风输入与所选真实语音服务兼容性。完整目标不能仅凭模拟数据标记完成，详见 PRIORITY-PROGRESS.md。
 
 独立 Otter 0.6.0 安装包已通过完整 smoke 与扩展系统动作/朗读验收。安装包内选区助手仍报告 permission_required。单独尝试原生快捷键时，UI 工具未在隔离测试窗口存活期间完成按键，故不作为按键成功证据；OS 注册结果仍为成功。
+
+## 0.7.0：用户反馈修订
+
+- JXA 集合回归：用 callable collection（函数 length=0，但返回两个窗口）验证不会误判为空；枚举非活动标签、多个窗口；指定 ID 读取和过期目标处理均通过。
+- 真实 Chrome：打开两个自有本机测试页后，修复后的脚本正确列出两个既有标签，原生返回窗口数 1；测试只关闭自有 URL 标签。正文实际返回 `javascript_permission_required`，没有伪装成成功，也没有更改浏览器设置。
+- 原生窗口读取工具已编译，权限检查返回未授权；自有测试图的 Vision OCR 实测输出 `OTTER CONTENT CHECK`。这验证 OCR 引擎，不等同于已获准截取其他应用窗口。
+- AppContentReader 的来源标注、权限拒绝、取消后丢弃迟到结果和并发权限检查合并测试通过；真实 Otter 窗口测试确认内容读取入口与未授权提示、既有完整流程正常。
+- 尚未获得跨应用辅助功能/屏幕录制授权，因此没有声称所有应用内容实读成功。浏览器正文的系统/浏览器许可仍需用户授权后验证。
+
+独立 Otter 0.7.0 安装包已通过完整 Electron smoke，界面版本确认为 0.7.0，覆盖每应用内容入口、未授权反馈及既有功能回归。当前 36 项 Node 测试与 TypeScript/Vite 构建通过；Python 未修改，沿用 269 项通过结果。跨应用实际读取与 Chrome 正文仍待用户授予相应权限后验证。

@@ -53,6 +53,7 @@ export type PetSnapshot = {
   } | null;
 };
 export type Snapshot = {
+  version?: string;
   pet: PetSnapshot;
   chat: ChatTurn | null;
   view?: string;

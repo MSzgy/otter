@@ -21,6 +21,7 @@ function message(error: unknown) {
     : String(error);
 }
 function useRuntime() {
+  const [version, setVersion] = useState("");
   const [health, setHealth] = useState<Health | null>(null);
   const [chatBusy, setChatBusy] = useState(false);
   const [speaking, setSpeaking] = useState(false);
@@ -54,7 +55,10 @@ function useRuntime() {
     api
       .action<Snapshot>("snapshot")
       .then((s) => {
-        if (active) setPrefs(s.preferences);
+        if (active) {
+          setPrefs(s.preferences);
+          setVersion(s.version || "请重启应用");
+        }
         if (active && revision === version) {
           setHealth(s.health);
           setJob(s.job);
@@ -85,6 +89,7 @@ function useRuntime() {
     connecting,
     chatBusy,
     speaking,
+    version,
   };
 }
 function Pet() {
@@ -243,6 +248,7 @@ function Panel() {
     setError,
     connecting,
     chatBusy,
+    version,
   } = useRuntime();
   const { pet: petLocal } = usePetState();
   const [tab, setTab] = useState<
@@ -430,7 +436,7 @@ function Panel() {
                       ? "Otter / 生活助手"
                       : "工作空间 / 设置"}
           </span>
-          <span>OTTER DESKTOP</span>
+          <span>OTTER {version}</span>
         </header>
         <div className="content">
           {error && (

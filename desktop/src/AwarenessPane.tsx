@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import "./types";
+import { ApplicationContent } from "./ApplicationContent";
 type App = { name: string; bundleId: string; pid: number };
 type State = {
   enabled: boolean;
@@ -14,6 +15,18 @@ type State = {
     url: string;
     observedAt: number;
   } | null;
+  tabs: {
+    bundleId: string;
+    name: string;
+    windowId: string;
+    tabId: string;
+    windowIndex: number;
+    title: string;
+    url: string;
+    active: boolean;
+  }[];
+  tabWindowCount: number;
+  tabsTruncated: boolean;
   browserStatus: string;
   updatedAt: number | null;
   message: string;
@@ -26,6 +39,9 @@ const empty: State = {
   apps: [],
   front: null,
   browser: null,
+  tabs: [],
+  tabWindowCount: 0,
+  tabsTruncated: false,
   browserStatus: "off",
   updatedAt: null,
   message: "",
@@ -35,6 +51,7 @@ export function AwarenessPane() {
   const [state, setState] = useState<State>(empty);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState("");
+  const [tabFilter, setTabFilter] = useState("");
   useEffect(() => {
     let alive = true,
       revision = 0;
@@ -80,6 +97,9 @@ export function AwarenessPane() {
   const browserApps = state.apps.filter(
     (a) => state.supportedBrowsers[a.bundleId],
   );
+  const tabs = (state.tabs || []).filter((t) =>
+    (t.title + " " + t.url).toLowerCase().includes(tabFilter.toLowerCase()),
+  );
   const current = state.browser?.bundleId === state.front?.bundleId;
   return (
     <section className="awareness-pane" aria-label="应用感知">
@@ -114,7 +134,7 @@ export function AwarenessPane() {
           <div>
             <h2>浏览器标签页</h2>
             <p>
-              读取支持的浏览器当前窗口中选中的标签页标题和网址。首次可能弹出系统授权。
+              列出支持浏览器所有窗口的现有标签页；选择具体标签页读取。首次可能弹出系统授权。
             </p>
           </div>
           <input
@@ -229,6 +249,55 @@ export function AwarenessPane() {
                   </small>
                 </div>
               )}
+              {(state.tabs || []).length > 0 && (
+                <section
+                  className="browser-tab-list"
+                  aria-label="浏览器标签页列表"
+                >
+                  <div className="section-title">
+                    <h2>
+                      {state.tabs[0]?.name} 已打开标签页 ·{" "}
+                      {state.tabWindowCount} 个窗口 / {state.tabs.length}{" "}
+                      个标签页
+                    </h2>
+                  </div>
+                  <input
+                    aria-label="筛选标签页"
+                    placeholder="按标题或网址筛选"
+                    value={tabFilter}
+                    onChange={(e) => setTabFilter(e.target.value)}
+                  />
+                  {tabs.map((tab) => (
+                    <article
+                      key={tab.bundleId + ":" + tab.windowId + ":" + tab.tabId}
+                    >
+                      <div>
+                        <strong>{tab.title || "无标题"}</strong>
+                        <small>
+                          窗口 {tab.windowIndex}
+                          {tab.active ? " · 该窗口选中的标签页" : ""}
+                        </small>
+                        <p>{tab.url || "浏览器内部页面或非 HTTP(S) 页面"}</p>
+                      </div>
+                      <button
+                        disabled={pending || !tab.url}
+                        onClick={() =>
+                          act("context.page", {
+                            bundleId: tab.bundleId,
+                            windowId: tab.windowId,
+                            tabId: tab.tabId,
+                          })
+                        }
+                      >
+                        读取此页正文
+                      </button>
+                    </article>
+                  ))}
+                  {state.tabsTruncated && (
+                    <p>标签页过多，当前展示前 200 个。</p>
+                  )}
+                </section>
+              )}
               {state.browser ? (
                 <article className="tab-card">
                   <div className="tab-meta">
@@ -245,36 +314,20 @@ export function AwarenessPane() {
               ) : (
                 <p className="awareness-hint">
                   {state.browserStatus === "no_tab"
-                    ? "浏览器没有可读取的标签页。"
+                    ? "自动化接口没有返回窗口或标签页。请确认打开的是所选浏览器，并刷新；也可尝试下方窗口文字/OCR。"
                     : "尚未读取标签页。可切换到浏览器，或点击上方按钮读取。"}
                 </p>
               )}
             </>
           )}
-          <div className="section-title">
-            <h2>
-              运行中的应用{" "}
-              <span className="app-count">{state.apps.length}</span>
-            </h2>
-          </div>
-          <div className="running-apps">
-            {state.apps.map((a) => (
-              <div key={a.bundleId + ":" + a.pid} className="running-app">
-                <span className="app-letter">{a.name.slice(0, 1)}</span>
-                <div>
-                  <strong>{a.name}</strong>
-                  <small>{a.bundleId || "无应用标识"}</small>
-                </div>
-                {state.front?.pid === a.pid && <em>前台</em>}
-              </div>
-            ))}
-          </div>
+          <ApplicationContent apps={state.apps} enabled={state.enabled} />
         </>
       )}
       <div className="awareness-privacy">
         <h2>这一版能感知到什么</h2>
         <p>
-          运行中的普通桌面应用、当前前台应用，以及支持的浏览器当前选中标签页。自动感知不读取页面正文；仅点击“阅读当前网页”才读取正文到预览，不读取表单、截图或浏览历史。网址会移除查询参数与片段；标题和路径仍可能包含私人信息，只在内存中保留最近一次结果。
+          可列出运行应用和浏览器的现有标签页；点击应用读取按钮可读取窗口内容，点击标签页可读取该页正文。自动轮询不读取正文。OCR
+          仅在点击时临时截取所选应用窗口，在本机识别后丢弃图像。网址会移除查询参数与片段；标题和路径仍可能包含私人信息，只在内存中保留最近一次结果。
         </p>
         <p>
           信息不写入数据库，也不会自动加入水獭聊天。隐私/无痕窗口未单独识别；不希望读取时请关闭浏览器感知。关闭应用感知同时关闭标签页读取并清空结果。

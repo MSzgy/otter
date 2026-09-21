@@ -75,6 +75,18 @@ function extractPage() {
   });
 }
 function formatPage(result, id) {
+  const errors = {
+    stale_tab: "这个标签页已关闭、移动或改变，请刷新标签页列表后重新选择。",
+    no_window: "浏览器没有向自动化接口返回窗口，请确认窗口已打开。",
+    not_running: "浏览器已经退出。",
+    permission_required:
+      "需要 macOS 自动化权限，允许 Otter 读取这个浏览器后重试。",
+    javascript_permission_required:
+      "浏览器禁止从 Apple Events 读取网页正文。请在浏览器开发者菜单允许“来自 Apple 事件的 JavaScript”，或使用应用窗口文字/OCR读取。",
+    read_failed: "浏览器未能读取正文，可尝试应用窗口文字或 OCR。",
+    unsupported: "这个标签页不是普通 HTTP(S) 网页，请使用应用窗口读取。",
+  };
+  if (errors[result?.status]) throw new Error(errors[result.status]);
   if (
     !result ||
     result.status !== "ready" ||
@@ -89,7 +101,7 @@ function formatPage(result, id) {
   const text = result.text.slice(0, 20000);
   return `网页标题：${meta.title}\n来源：${meta.url}\n浏览器：${BROWSERS[id]}\n读取时间：${new Date().toLocaleString()}\n${result.truncated || result.text.length > 20000 ? "正文较长，以下为前 20000 字符摘录，并非全文。" : "以下为当前页面已加载的可见正文。"}\n\n${text}`;
 }
-function readPage(id) {
+function readPage(id, target = {}) {
   if (!Object.hasOwn(BROWSERS, id))
     return Promise.reject(new Error("暂不支持这个浏览器。"));
   const source = `(${extractPage.toString()})()`;
@@ -100,7 +112,7 @@ function readPage(id) {
   return new Promise((resolve, reject) =>
     execFile(
       "/usr/bin/osascript",
-      ["-l", "JavaScript", "-e", script, id, source],
+      ["-l", "JavaScript", "-e", script, id, source, JSON.stringify(target)],
       { timeout: 15000, maxBuffer: 256 * 1024 },
       (error, stdout) => {
         if (error) {

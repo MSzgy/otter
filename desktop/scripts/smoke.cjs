@@ -150,7 +150,7 @@ const { execFileSync } = require("node:child_process");
       .getByRole("checkbox", { name: "开启应用感知", exact: true })
       .click();
     await panel.waitForFunction(
-      () => document.querySelectorAll(".running-app").length > 0,
+      () => document.querySelectorAll(".app-content-list article").length > 0,
     );
     const observed = await panel.evaluate(() =>
       window.otter.action("awareness.get"),
@@ -158,6 +158,23 @@ const { execFileSync } = require("node:child_process");
     assert(observed.apps.length > 0 && observed.front);
     assert.equal(observed.browserEnabled, false);
     assert.equal(observed.browser, null);
+    const contentPermissions = await panel.evaluate(() =>
+      window.otter.action("awareness.content-permissions"),
+    );
+    assert.equal(typeof contentPermissions.accessibility, "boolean");
+    assert.equal(typeof contentPermissions.screenRecording, "boolean");
+    const ownPid = await app.evaluate(() => process.pid);
+    const ownApp = observed.apps.find((a) => a.pid === ownPid);
+    if (ownApp) {
+      const row = panel.locator(`[data-app-pid="${ownPid}"]`);
+      await row
+        .getByRole("button", { name: "读取窗口文字", exact: true })
+        .click();
+      await panel.locator(".application-text-result").waitFor();
+      if (!contentPermissions.accessibility)
+        await panel.getByText(/需要系统授权，授权后重新读取即可/).waitFor();
+    }
+
     const requestsBeforePreview = requests.length;
     await panel
       .getByRole("button", { name: "聊聊当前场景", exact: true })
@@ -367,7 +384,7 @@ const { execFileSync } = require("node:child_process");
       .getByRole("checkbox", { name: "开启应用感知", exact: true })
       .click();
     await panel.waitForFunction(
-      () => document.querySelectorAll(".running-app").length > 0,
+      () => document.querySelectorAll(".app-content-list article").length > 0,
     );
     await panel
       .getByRole("button", { name: "聊聊当前场景", exact: true })

@@ -112,3 +112,46 @@ test("file, internal and malformed URLs are not exposed", () => {
       "",
     );
 });
+test("all browser tabs are retained for selection and cleared with browser access", async () => {
+  const a = new Awareness({
+    platform: "darwin",
+    read: async (kind) =>
+      kind === "apps"
+        ? apps
+        : {
+            status: "ready",
+            title: "Active",
+            url: "https://example.com",
+            windowCount: 2,
+            tabs: [
+              {
+                windowId: "1",
+                tabId: "2",
+                windowIndex: 1,
+                title: "Inactive",
+                url: "https://example.com/a?token=x",
+                active: false,
+              },
+              {
+                windowId: "3",
+                tabId: "4",
+                windowIndex: 2,
+                title: "Active",
+                url: "https://example.com/b",
+                active: true,
+              },
+            ],
+          },
+  });
+  try {
+    a.configure({ enabled: true, browserEnabled: true });
+    await settle();
+    assert.equal(a.snapshot().tabs.length, 2);
+    assert.equal(a.snapshot().tabs[0].url, "https://example.com/a");
+    assert.equal(a.snapshot().tabWindowCount, 2);
+    a.configure({ enabled: true, browserEnabled: false });
+    assert.deepEqual(a.snapshot().tabs, []);
+  } finally {
+    a.close();
+  }
+});
