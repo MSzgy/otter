@@ -95,3 +95,5 @@ TCC 日志显示旧包主程序仍是未封装的 Electron 临时签名，系统
 新包启动及 UI 版本 0.7.2 已验证，聊天记录/模型配置保留。后续日志明确显示正确 subject `dev.otter.desktop`，但既有 TCC 记录仍保留旧 cdhash。用户明确批准刷新 Otter 授权后，已通过系统 `tccutil reset Accessibility dev.otter.desktop` 只重置该应用记录；重新添加授权仍待系统身份验证和最终实际读取。不得将签名校验或终端读取成功标为 UI 内容读取已通过。
 
 UI 增加结果自动滚动、聚焦和窗口数/字符数反馈；TypeScript/Vite 构建及 36 项 Node 测试通过。真实 ChatGPT 内容不写入验证文档或仓库，也未发到用户配置的模型。
+
+2026-09-24 用户完成系统身份验证并手动重新添加新版 Otter 后，实际 Otter 0.7.2 UI 的“重新检查权限”已显示“窗口文字：已授权”。通过界面读取 ChatGPT（com.openai.codex）返回 no_windows；这证明 Otter 的授权身份问题已解决，但尚未证明 ChatGPT 正文读取成功。自动化工具禁止控制承载对话的 com.openai.codex 应用，因此已请用户手动显示其主窗口再试；不绕过该限制。
