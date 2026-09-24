@@ -85,3 +85,13 @@ NSWorkspace 脚本已在本机只读验证，可读取运行应用与前台应�
 此测试发现 0.7.0 在 SCContentFilter 初始化时因显示连接问题 SIGABRT。修复为初始化 AppKit，并在 MainActor 与主 RunLoop 上运行捕获流程。开发版与 0.7.1 安装包都已真实识别 `OTTER WINDOW CONTENT CHECK`。这证明窗口截图至 OCR 链路，不证明所有应用、受保护窗口或 AX 文字读取都可用。初次修复后的空结果亦促使测试显式显示并聚焦测试窗口、等待绘制；持续空结果仍判失败，不以权限检测替代内容断言。
 
 0.7.1 安装包完整 smoke 最终通过，包含真实窗口 OCR 断言和原有功能回归；TypeScript/Vite 与原生编译通过。
+
+## 0.7.2：Otter 进程授权与签名修订
+
+2026-09-23/24 用户报告辅助功能已打开但读取 ChatGPT 无效。实际 Otter UI 复现 `permission_required`，重启与开关刷新未解决；从开发环境运行原生工具则可返回约 4,459 字符，后者不能证明 Otter 进程获得权限。
+
+TCC 日志显示旧包主程序仍是未封装的 Electron 临时签名，系统授权 subject 为 `dev.otter.desktop`，子进程读取时 subject 却落到主程序路径。改为 electron-builder 的本地 ad-hoc bundle 签名，校验 Identifier 与资源封装，并通过 `codesign --verify --deep --strict`。Files Provider 管理的 Documents 会再添加 FinderInfo，因此签名改在临时目录，输出 ZIP；个人 Applications 下的安装副本已通过严格签名验证。
+
+新包启动及 UI 版本 0.7.2 已验证，聊天记录/模型配置保留。后续日志明确显示正确 subject `dev.otter.desktop`，但既有 TCC 记录仍保留旧 cdhash。用户明确批准刷新 Otter 授权后，已通过系统 `tccutil reset Accessibility dev.otter.desktop` 只重置该应用记录；重新添加授权仍待系统身份验证和最终实际读取。不得将签名校验或终端读取成功标为 UI 内容读取已通过。
+
+UI 增加结果自动滚动、聚焦和窗口数/字符数反馈；TypeScript/Vite 构建及 36 项 Node 测试通过。真实 ChatGPT 内容不写入验证文档或仓库，也未发到用户配置的模型。

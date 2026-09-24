@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import "./types";
 type App = { name: string; bundleId: string; pid: number };
 type Content = {
@@ -35,6 +35,7 @@ export function ApplicationContent({
   apps: App[];
   enabled: boolean;
 }) {
+  const resultRef = useRef<HTMLDivElement>(null);
   const [content, setContent] = useState<Content | null>(null);
   const [pending, setPending] = useState("");
   const [error, setError] = useState("");
@@ -57,6 +58,11 @@ export function ApplicationContent({
   useEffect(() => {
     if (!enabled) setContent(null);
   }, [enabled]);
+  useEffect(() => {
+    if (pending || (!content && !error)) return;
+    resultRef.current?.scrollIntoView({ block: "center", behavior: "smooth" });
+    resultRef.current?.focus({ preventScroll: true });
+  }, [content, error, pending]);
   async function read(app: App, method: string) {
     setPending(`${app.pid}:${method}`);
     setError("");
@@ -136,62 +142,69 @@ export function ApplicationContent({
           授权窗口 OCR
         </button>
       </div>
-      {error && (
-        <div className="alert" role="alert">
-          {error}
-        </div>
-      )}
-      {content && (
-        <article className="application-text-result">
-          <div className="section-title">
-            <h2>
-              {content.app.name} ·{" "}
-              {content.method === "ocr" ? "窗口 OCR" : "窗口文字"}
-            </h2>
-            <time>{new Date(content.observedAt).toLocaleTimeString()}</time>
+      <div
+        ref={resultRef}
+        tabIndex={-1}
+        aria-label="应用内容读取结果"
+        aria-live="polite"
+      >
+        {error && (
+          <div className="alert" role="alert">
+            {error}
           </div>
-          {content.status === "ready" ? (
-            <>
-              <p className="awareness-hint">
-                {content.truncated
-                  ? "达到读取上限，以下为部分内容。"
-                  : "已读取应用窗口提供的文字。"}
-                {content.method === "ocr"
-                  ? "OCR 可能存在识别错误，不代表不可见或未加载的内容。"
-                  : ""}
-              </p>
-              {content.windows.map((w) => (
-                <details key={w.id} open>
-                  <summary>{w.title}</summary>
-                  <pre>{w.text || "这个窗口没有可读文字。"}</pre>
-                  {w.protectedFieldsSkipped && (
-                    <small>已跳过受保护输入框。</small>
-                  )}
-                </details>
-              ))}
-              <button
-                className="primary"
-                onClick={() =>
-                  window.otter
-                    .action("context.app", content.id)
-                    .catch((e) => setError(e.message))
-                }
-              >
-                用这些内容提问
-              </button>
-            </>
-          ) : (
-            <div role="status" className="awareness-hint">
-              {statusText[content.status] || "暂时无法读取此应用。"}
-              {content.permission === "accessibility"
-                ? "需要在 macOS 辅助功能中允许 Otter/窗口读取助手。"
-                : content.permission === "screen_recording"
-                  ? "需要在 macOS 屏幕录制中允许 Otter/窗口读取助手。"
-                  : ""}
+        )}
+        {content && (
+          <article className="application-text-result">
+            <div className="section-title">
+              <h2>
+                {content.app.name} ·{" "}
+                {content.method === "ocr" ? "窗口 OCR" : "窗口文字"}
+              </h2>
+              <time>{new Date(content.observedAt).toLocaleTimeString()}</time>
             </div>
-          )}
-        </article>
-      )}
+            {content.status === "ready" ? (
+              <>
+                <p className="awareness-hint">
+                  {content.truncated
+                    ? "达到读取上限，以下为部分内容。"
+                    : `已读取 ${content.windows.length} 个窗口，共 ${content.windows.reduce((sum, w) => sum + w.text.length, 0).toLocaleString()} 个字符。`}
+                  {content.method === "ocr"
+                    ? "OCR 可能存在识别错误，不代表不可见或未加载的内容。"
+                    : ""}
+                </p>
+                {content.windows.map((w) => (
+                  <details key={w.id} open>
+                    <summary>{w.title}</summary>
+                    <pre>{w.text || "这个窗口没有可读文字。"}</pre>
+                    {w.protectedFieldsSkipped && (
+                      <small>已跳过受保护输入框。</small>
+                    )}
+                  </details>
+                ))}
+                <button
+                  className="primary"
+                  onClick={() =>
+                    window.otter
+                      .action("context.app", content.id)
+                      .catch((e) => setError(e.message))
+                  }
+                >
+                  用这些内容提问
+                </button>
+              </>
+            ) : (
+              <div role="status" className="awareness-hint">
+                {statusText[content.status] || "暂时无法读取此应用。"}
+                {content.permission === "accessibility"
+                  ? "需要在 macOS 辅助功能中允许 Otter/窗口读取助手。"
+                  : content.permission === "screen_recording"
+                    ? "需要在 macOS 屏幕录制中允许 Otter/窗口读取助手。"
+                    : ""}
+              </div>
+            )}
+          </article>
+        )}
+      </div>
       <div className="app-content-list">
         {apps.map((app) => (
           <article key={`${app.bundleId}:${app.pid}`} data-app-pid={app.pid}>

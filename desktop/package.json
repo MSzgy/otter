@@ -1,6 +1,6 @@
 {
   "name": "otter-desktop",
-  "version": "0.7.1",
+  "version": "0.7.2",
   "private": true,
   "description": "Otter desktop companion",
   "author": "Otter contributors",
@@ -10,7 +10,7 @@
     "start": "npm run build && npm run bundle:native && electron .",
     "test": "node --test electron/*.test.cjs",
     "test:e2e": "npm run build && node scripts/smoke.cjs",
-    "package": "npm run build && npm run bundle:native && electron-builder --dir",
+    "package": "npm run build && npm run bundle:native && node scripts/package_local.cjs",
     "bundle:backend": "python3 scripts/build_backend.py",
     "bundle:native": "node scripts/build_native.cjs"
   },
@@ -45,9 +45,12 @@
       "extendInfo": {
         "NSAppleEventsUsageDescription": "在你主动操作时读取浏览器标签页或可见网页正文，用于预览；仅在确认发送后交给已配置的模型。",
         "NSMicrophoneUsageDescription": "按住录音按钮时采集语音，松开后发送到你配置的音频转写服务。"
-      }
+      },
+      "identity": "-",
+      "hardenedRuntime": false
     },
-    "electronDist": "node_modules/electron/dist"
+    "electronDist": "node_modules/electron/dist",
+    "afterPack": "scripts/prepare_signature.cjs"
   },
   "dependencies": {
     "react": "^19.3.0",

@@ -193,9 +193,9 @@ npm run bundle:backend
 npm run package
 ```
 
-输出在 `desktop/release/mac*/Otter.app`。Python、SQL 迁移、Jinja 模板、内建插件及其 metadata 一并打包，不要求目标机器装 uv。第三方 Python 插件需要在构建环境安装并显式纳入打包，目前只承诺内建插件。Git collector 仍需要系统 Git；已配置外部代理也需按原方式运行。
+输出压缩包在 `desktop/release/Otter-<arch>.zip`，已校验的应用保留在构建日志输出的临时目录。将应用安装到 `~/Applications` 或 `/Applications`；不要在受 iCloud/File Provider 管理的 Documents 目录内签名或运行。签名步骤先在临时目录完成，再生成压缩包，避免同步服务添加 Finder 元数据导致签名校验失败。Python、SQL 迁移、Jinja 模板、内建插件及其 metadata 一并打包，不要求目标机器装 uv。第三方 Python 插件需要在构建环境安装并显式纳入打包，目前只承诺内建插件。Git collector 仍需要系统 Git；已配置外部代理也需按原方式运行。
 
-本地包未配置开发者证书和公证，不作为已签名的对外发布版本。签名/公证和自动更新属于后续发布工作；不要用关闭系统安全设置的方式分发。
+本地包使用 ad-hoc 签名绑定 Otter 的 bundle identity，并校验资源封装；未配置 Developer ID 证书和公证，不作为对外发布版本。此本地配置不启用 Hardened Runtime，正式分发需切换 Developer ID、相应 entitlements 和公证。签名/公证和自动更新属于后续发布工作；不要用关闭系统安全设置的方式分发。
 
 ## 验证
 
