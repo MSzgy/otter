@@ -683,16 +683,27 @@ ipcMain.handle("otter:action", async (event, name, value) => {
       const browserId = typeof value === "string" ? value : value?.bundleId;
       if (!state.apps.some((a) => a.bundleId === browserId))
         throw new Error("请先打开支持的浏览器。");
-      let target = {};
-      if (typeof value === "object" && value) {
+      const candidates = state.apps.filter((a) => a.bundleId === browserId);
+      const pid =
+        typeof value === "object"
+          ? value?.pid
+          : candidates.length === 1
+            ? candidates[0].pid
+            : undefined;
+      if (!Number.isInteger(pid) || !candidates.some((a) => a.pid === pid))
+        throw new Error("请从列表选择具体浏览器实例，或刷新应用列表。");
+      let target = { pid };
+      if (typeof value === "object" && value && value.windowId !== undefined) {
         const observed = state.tabs.find(
           (t) =>
             t.bundleId === browserId &&
+            t.pid === pid &&
             t.windowId === value.windowId &&
             t.tabId === value.tabId,
         );
         if (!observed) throw new Error("标签页列表已变化，请重新刷新并选择。");
         target = {
+          pid,
           windowId: observed.windowId,
           tabId: observed.tabId,
           title: observed.title,
@@ -765,8 +776,7 @@ ipcMain.handle("otter:action", async (event, name, value) => {
       return result;
     }
     if (name === "awareness.refresh") return awareness.refresh();
-    if (name === "awareness.browser" && typeof value === "string")
-      return awareness.browser(value);
+    if (name === "awareness.browser") return awareness.browser(value);
     if (name === "awareness.permissions")
       return shell.openExternal(
         "x-apple.systempreferences:com.apple.preference.security?Privacy_Automation",

@@ -155,3 +155,44 @@ test("all browser tabs are retained for selection and cleared with browser acces
     a.close();
   }
 });
+
+test("same-bundle browsers keep PID in requests and tab provenance", async () => {
+  const id = "com.google.Chrome";
+  const calls = [];
+  const instances = [
+    { name: "Chrome", bundleId: id, pid: 11 },
+    { name: "Chrome", bundleId: id, pid: 22 },
+  ];
+  const a = new Awareness({
+    platform: "darwin",
+    read: async (kind, bundleId, signal, pid) => {
+      if (kind === "apps") return { apps: instances, front: instances[1] };
+      calls.push(pid);
+      return {
+        status: "ready",
+        title: "Test",
+        url: "https://example.com/",
+        windowCount: 1,
+        tabs: [
+          { windowId: 1, tabId: 1, title: "Test", url: "https://example.com/" },
+        ],
+      };
+    },
+  });
+  try {
+    a.configure({ enabled: true, browserEnabled: true });
+    await settle();
+    assert.equal(calls[0], 22);
+    assert.equal(a.snapshot().tabs[0].pid, 22);
+    await assert.rejects(a.browser(id), /具体浏览器实例/);
+    await a.browser({ bundleId: id, pid: 11 });
+    assert.equal(calls.at(-1), 11);
+    assert.equal(a.snapshot().browser.pid, 11);
+    await assert.rejects(
+      a.browser({ bundleId: id, pid: 999 }),
+      /实例可能已退出/,
+    );
+  } finally {
+    a.close();
+  }
+});

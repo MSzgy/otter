@@ -105,10 +105,10 @@ function readPage(id, target = {}) {
   if (!Object.hasOwn(BROWSERS, id))
     return Promise.reject(new Error("暂不支持这个浏览器。"));
   const source = `(${extractPage.toString()})()`;
-  const script = fs.readFileSync(
-    path.join(__dirname, "native/page.js"),
-    "utf8",
-  );
+  const script =
+    fs.readFileSync(path.join(__dirname, "native/browser-target.js"), "utf8") +
+    "\n" +
+    fs.readFileSync(path.join(__dirname, "native/page.js"), "utf8");
   return new Promise((resolve, reject) =>
     execFile(
       "/usr/bin/osascript",

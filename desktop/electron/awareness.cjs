@@ -8,15 +8,26 @@ const BROWSERS = Object.freeze({
   "com.brave.Browser": "Brave",
 });
 // Read the packaged source and use -e: osascript cannot open files inside app.asar directly.
-function nativeRead(kind, id, signal) {
-  const script = fs.readFileSync(
-    path.join(__dirname, "native", kind + ".js"),
-    "utf8",
-  );
+function nativeRead(kind, id, signal, pid) {
+  const script =
+    (kind === "browser"
+      ? fs.readFileSync(
+          path.join(__dirname, "native/browser-target.js"),
+          "utf8",
+        ) + "\n"
+      : "") +
+    fs.readFileSync(path.join(__dirname, "native", kind + ".js"), "utf8");
   return new Promise((resolve, reject) => {
     execFile(
       "/usr/bin/osascript",
-      ["-l", "JavaScript", "-e", script, ...(id ? [id] : [])],
+      [
+        "-l",
+        "JavaScript",
+        "-e",
+        script,
+        ...(id ? [id] : []),
+        ...(pid ? [String(pid)] : []),
+      ],
       {
         timeout: kind === "browser" ? 12000 : 5000,
         maxBuffer: 2 * 1024 * 1024,
@@ -200,9 +211,14 @@ class Awareness {
       if (
         this.state.browserEnabled &&
         Object.hasOwn(BROWSERS, id) &&
-        !this.blocked.has(id)
+        !this.blocked.has(`${id}:${this.state.front.pid}`)
       ) {
-        await this.captureBrowser(id, generation, controller.signal);
+        await this.captureBrowser(
+          id,
+          generation,
+          controller.signal,
+          this.state.front.pid,
+        );
       }
     } catch (error) {
       if (generation === this.generation && !controller.signal.aborted) {
@@ -216,15 +232,17 @@ class Awareness {
     }
     return this.snapshot();
   }
-  async captureBrowser(id, generation, signal) {
+  async captureBrowser(id, generation, signal, pid) {
     try {
-      const result = await this.read("browser", id, signal);
+      const result = await this.read("browser", id, signal, pid);
       if (generation !== this.generation || !this.state.browserEnabled) return;
       this.state.browser = cleanTab(result, id);
+      if (this.state.browser) this.state.browser.pid = pid;
       this.state.tabs = (Array.isArray(result.tabs) ? result.tabs : [])
         .slice(0, 200)
         .map((tab) => ({
           ...cleanTab({ ...tab, status: "ready" }, id),
+          pid,
           windowId: String(tab.windowId),
           tabId: String(tab.tabId),
           windowIndex: Number(tab.windowIndex) || 1,
@@ -236,7 +254,7 @@ class Awareness {
       this.state.message = "";
     } catch (error) {
       if (generation !== this.generation || signal.aborted) return;
-      this.blocked.add(id);
+      this.blocked.add(`${id}:${pid}`);
       this.state.browser = null;
       this.state.tabs = [];
       this.state.browserStatus = error.code === "DENIED" ? "denied" : "error";
@@ -247,7 +265,17 @@ class Awareness {
     }
     this.publish();
   }
-  async browser(id) {
+  async browser(target) {
+    const id = typeof target === "string" ? target : target?.bundleId;
+    const candidates = this.state.apps.filter((app) => app.bundleId === id);
+    const pid =
+      typeof target === "object"
+        ? target?.pid
+        : candidates.length === 1
+          ? candidates[0].pid
+          : undefined;
+    if (!Number.isInteger(pid) || !candidates.some((app) => app.pid === pid))
+      throw new Error("请从列表选择具体浏览器实例；实例可能已退出，请刷新。");
     if (!this.state.enabled || !this.state.browserEnabled)
       throw new Error("请先开启应用感知和浏览器标签页感知。");
     if (!Object.hasOwn(BROWSERS, id)) throw new Error("暂不支持这个浏览器。");
@@ -265,9 +293,9 @@ class Awareness {
     const generation = this.generation;
     const controller = new AbortController();
     this.controller = controller;
-    this.blocked.delete(id);
+    this.blocked.delete(`${id}:${pid}`);
     try {
-      await this.captureBrowser(id, generation, controller.signal);
+      await this.captureBrowser(id, generation, controller.signal, pid);
     } finally {
       this.running = false;
       if (this.controller === controller) this.controller = null;

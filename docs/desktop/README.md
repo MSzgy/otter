@@ -224,3 +224,5 @@ stdin/stdout 是受限控制协议，插件打印全部转至 stderr，stderr �
 ### 后续硬件接口
 
 当前水獭使用 `Mood`（idle/working/happy/offline/sleeping）与独立渲染组件，业务层不传绘图坐标。下一阶段将其扩展为统一 BodyAdapter（express/perform/stop/capabilities），让动画动作与 ESP32 预设动作共享意图；当前没有实体硬件执行器。
+
+0.7.3 浏览器感知按进程区分同一浏览器的多个实例。出现多个 Chrome 时，选择与目标窗口对应的实例；标签页保留实例身份，实例退出后不会自动回退读取另一个实例。

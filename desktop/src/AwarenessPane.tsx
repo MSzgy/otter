@@ -10,6 +10,7 @@ type State = {
   front: App | null;
   browser: {
     bundleId: string;
+    pid: number;
     name: string;
     title: string;
     url: string;
@@ -17,6 +18,7 @@ type State = {
   } | null;
   tabs: {
     bundleId: string;
+    pid: number;
     name: string;
     windowId: string;
     tabId: string;
@@ -100,7 +102,9 @@ export function AwarenessPane() {
   const tabs = (state.tabs || []).filter((t) =>
     (t.title + " " + t.url).toLowerCase().includes(tabFilter.toLowerCase()),
   );
-  const current = state.browser?.bundleId === state.front?.bundleId;
+  const current =
+    state.browser?.bundleId === state.front?.bundleId &&
+    state.browser?.pid === state.front?.pid;
   return (
     <section className="awareness-pane" aria-label="应用感知">
       <div className="heading">
@@ -221,9 +225,16 @@ export function AwarenessPane() {
                   <button
                     key={a.bundleId + ":" + a.pid}
                     disabled={pending}
-                    onClick={() => act("awareness.browser", a.bundleId)}
+                    onClick={() =>
+                      act("awareness.browser", {
+                        bundleId: a.bundleId,
+                        pid: a.pid,
+                      })
+                    }
                   >
-                    {pending ? "读取中…" : `读取 ${a.name} 标签页`}
+                    {pending
+                      ? "读取中…"
+                      : `读取 ${a.name}${browserApps.filter((b) => b.bundleId === a.bundleId).length > 1 ? ` · 实例 ${a.pid}` : ""} 标签页`}
                   </button>
                 ))}
               </div>
@@ -237,11 +248,18 @@ export function AwarenessPane() {
                 <div className="browser-actions page-read-actions">
                   {browserApps.map((a) => (
                     <button
-                      key={a.bundleId + ":page"}
+                      key={a.bundleId + ":" + a.pid + ":page"}
                       disabled={pending}
-                      onClick={() => act("context.page", a.bundleId)}
+                      onClick={() =>
+                        act("context.page", {
+                          bundleId: a.bundleId,
+                          pid: a.pid,
+                        })
+                      }
                     >
-                      {pending ? "读取中…" : `阅读 ${a.name} 当前网页`}
+                      {pending
+                        ? "读取中…"
+                        : `阅读 ${a.name}${browserApps.filter((b) => b.bundleId === a.bundleId).length > 1 ? ` · 实例 ${a.pid}` : ""} 当前网页`}
                     </button>
                   ))}
                   <small>
@@ -269,7 +287,15 @@ export function AwarenessPane() {
                   />
                   {tabs.map((tab) => (
                     <article
-                      key={tab.bundleId + ":" + tab.windowId + ":" + tab.tabId}
+                      key={
+                        tab.bundleId +
+                        ":" +
+                        tab.pid +
+                        ":" +
+                        tab.windowId +
+                        ":" +
+                        tab.tabId
+                      }
                     >
                       <div>
                         <strong>{tab.title || "无标题"}</strong>
@@ -284,6 +310,7 @@ export function AwarenessPane() {
                         onClick={() =>
                           act("context.page", {
                             bundleId: tab.bundleId,
+                            pid: tab.pid,
                             windowId: tab.windowId,
                             tabId: tab.tabId,
                           })
