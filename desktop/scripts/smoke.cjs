@@ -172,7 +172,7 @@ const { execFileSync } = require("node:child_process");
         .click();
       await panel.locator(".application-text-result").waitFor();
       if (!contentPermissions.accessibility)
-        await panel.getByText(/需要系统授权，授权后重新读取即可/).waitFor();
+        await panel.getByText(/当前 Otter 尚未获得对应系统权限/).waitFor();
     }
 
     if (process.env.OTTER_TEST_WINDOW_OCR === "1") {
@@ -267,6 +267,89 @@ const { execFileSync } = require("node:child_process");
       0,
     );
     await panel.screenshot({ path: path.join(output, "otter-awareness.png") });
+    const disabledAwareness = await panel.evaluate(() =>
+      window.otter.action("awareness.get"),
+    );
+    const browserFixture = {
+      ...disabledAwareness,
+      enabled: true,
+      browserEnabled: true,
+      status: "ready",
+      browserStatus: "ready",
+      supportedBrowsers: { "com.google.Chrome": "Google Chrome" },
+      apps: [
+        {
+          name: "Google Chrome",
+          bundleId: "com.google.Chrome",
+          pid: 91001,
+          path: "/Applications/Google Chrome.app",
+        },
+        {
+          name: "Google Chrome",
+          bundleId: "com.google.Chrome",
+          pid: 91002,
+          path: "/Volumes/Google Chrome/Google Chrome.app",
+        },
+      ],
+      tabs: [
+        {
+          name: "Google Chrome",
+          bundleId: "com.google.Chrome",
+          pid: 91001,
+          windowId: "1",
+          tabId: "1",
+          windowIndex: 1,
+          title: "Otter 阅读测试文章",
+          url: "https://example.com/",
+          active: true,
+        },
+      ],
+      tabWindowCount: 1,
+      browser: null,
+    };
+    // Native polling is off: only fixed fixture data is rendered here.
+    const publishAwareness = async (data) =>
+      app.evaluate(({ BrowserWindow }, state) => {
+        const window = BrowserWindow.getAllWindows().find((w) =>
+          w.webContents.getURL().includes("view=panel"),
+        );
+        window.webContents.send("otter:event", {
+          type: "awareness.changed",
+          data: state,
+        });
+      }, data);
+    await publishAwareness(browserFixture);
+    const picker = panel.getByRole("combobox", {
+      name: "选择浏览器",
+      exact: true,
+    });
+    await picker.waitFor();
+    assert.equal(await picker.inputValue(), "91001");
+    assert.equal(
+      await panel
+        .getByRole("button", { name: "刷新标签页", exact: true })
+        .count(),
+      1,
+    );
+    assert.equal(
+      await panel.getByRole("button", { name: /当前网页|实例/ }).count(),
+      0,
+    );
+    assert(!(await panel.locator("body").innerText()).includes("91001"));
+    await picker.selectOption("91002");
+    assert.equal(
+      await panel
+        .getByRole("button", { name: "读取此页正文", exact: true })
+        .count(),
+      0,
+    );
+    await picker.selectOption("91001");
+    await panel.getByText("Otter 阅读测试文章", { exact: true }).waitFor();
+    await panel.screenshot({
+      path: path.join(output, "otter-browser-picker.png"),
+    });
+    await publishAwareness(disabledAwareness);
+
     await panel.getByRole("button", { name: "陪伴互动", exact: false }).click();
     await panel.getByRole("heading", { name: "和小水獭玩一会儿。" }).waitFor();
     const beforeRequests = requests.length;

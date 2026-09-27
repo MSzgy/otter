@@ -68,6 +68,7 @@ function cleanApp(value) {
     name: value.name.slice(0, 160),
     bundleId: value.bundleId.slice(0, 250),
     pid: value.pid,
+    path: typeof value.path === "string" ? value.path.slice(0, 2048) : "",
   };
 }
 function cleanTab(result, id) {
@@ -108,6 +109,7 @@ class Awareness {
     this.generation = 0;
     this.running = false;
     this.blocked = new Set();
+    this.selectedBrowser = null;
     this.state = {
       enabled: false,
       browserEnabled: false,
@@ -207,17 +209,23 @@ class Awareness {
       if (!["denied", "error"].includes(this.state.browserStatus))
         this.state.message = "";
       this.publish();
-      const id = this.state.front?.bundleId;
+      const activeBrowser =
+        this.state.apps.find(
+          (a) =>
+            a.pid === this.selectedBrowser?.pid &&
+            a.bundleId === this.selectedBrowser?.bundleId,
+        ) || this.state.front;
+      const id = activeBrowser?.bundleId;
       if (
         this.state.browserEnabled &&
         Object.hasOwn(BROWSERS, id) &&
-        !this.blocked.has(`${id}:${this.state.front.pid}`)
+        !this.blocked.has(`${id}:${activeBrowser.pid}`)
       ) {
         await this.captureBrowser(
           id,
           generation,
           controller.signal,
-          this.state.front.pid,
+          activeBrowser.pid,
         );
       }
     } catch (error) {
@@ -294,6 +302,7 @@ class Awareness {
     const controller = new AbortController();
     this.controller = controller;
     this.blocked.delete(`${id}:${pid}`);
+    this.selectedBrowser = { bundleId: id, pid };
     try {
       await this.captureBrowser(id, generation, controller.signal, pid);
     } finally {

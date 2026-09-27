@@ -4,7 +4,7 @@ const vm = require("node:vm");
 const fs = require("node:fs");
 const path = require("node:path");
 function execute(file, app, args) {
-  const context = { browserTarget: () => app };
+  const context = { browserTarget: () => app, delay: () => {} };
   vm.createContext(context);
   vm.runInContext(
     fs.readFileSync(path.join(__dirname, "native", file), "utf8"),
@@ -170,4 +170,49 @@ test("adapter TypeErrors are not misreported as JavaScript permission errors", (
     JSON.stringify({ windowId: "10", tabId: "1" }),
   ]);
   assert.equal(result.status, "read_failed");
+});
+
+test("permission failure before JavaScript execution is classified instead of escaping", () => {
+  const app = {
+    running: () => true,
+    windows: () => {
+      const e = new Error("Denied");
+      e.errorNumber = -1743;
+      throw e;
+    },
+  };
+  assert.equal(
+    execute("page.js", app, ["com.google.Chrome", "source"]).status,
+    "permission_required",
+  );
+});
+
+test("show-and-retry activates only the verified selected tab and only when requested", () => {
+  const app = fixture(),
+    shown = [];
+  app.showTab = (window, tab, index) =>
+    shown.push([window.id(), tab.id(), index]);
+  const args = [
+    "com.google.Chrome",
+    "source",
+    JSON.stringify({ pid: 22, windowId: "10", tabId: "1" }),
+  ];
+  execute("page.js", app, args);
+  assert.equal(shown.length, 0);
+  args[2] = JSON.stringify({
+    pid: 22,
+    windowId: "10",
+    tabId: "1",
+    activate: true,
+  });
+  assert.equal(execute("page.js", app, args).text, "Body 1");
+  assert.deepEqual(shown, [[10, 1, 0]]);
+  args[2] = JSON.stringify({
+    pid: 22,
+    windowId: "10",
+    tabId: "999",
+    activate: true,
+  });
+  assert.equal(execute("page.js", app, args).status, "stale_tab");
+  assert.equal(shown.length, 1);
 });

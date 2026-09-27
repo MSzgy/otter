@@ -76,6 +76,10 @@ function extractPage() {
 }
 function formatPage(result, id) {
   const errors = {
+    timeout: "网页读取超时。请先在浏览器中打开此页，等待加载完成，再重试。",
+    reader_failed: "网页读取工具异常退出，请重试；这不一定是权限问题。",
+    invalid_response:
+      "浏览器没有返回有效正文。请刷新该页面后重试，或使用窗口文字 / OCR。",
     stale_tab: "这个标签页已关闭、移动或改变，请刷新标签页列表后重新选择。",
     no_window: "浏览器没有向自动化接口返回窗口，请确认窗口已打开。",
     not_running: "浏览器已经退出。",
@@ -101,7 +105,22 @@ function formatPage(result, id) {
   const text = result.text.slice(0, 20000);
   return `网页标题：${meta.title}\n来源：${meta.url}\n浏览器：${BROWSERS[id]}\n读取时间：${new Date().toLocaleString()}\n${result.truncated || result.text.length > 20000 ? "正文较长，以下为前 20000 字符摘录，并非全文。" : "以下为当前页面已加载的可见正文。"}\n\n${text}`;
 }
-function readPage(id, target = {}) {
+function processFailure(error, stderr = "") {
+  if (error.killed || error.code === "ETIMEDOUT") return "timeout";
+  if (/-1743|not authorized to send Apple events/i.test(stderr))
+    return "permission_required";
+  if (/-1712/.test(stderr)) return "timeout";
+  if (/-1728/.test(stderr)) return "stale_tab";
+  if (/-600\b|-609\b/.test(stderr)) return "not_running";
+  if (
+    /JavaScript.*(disabled|not allowed|not permitted)|Executing JavaScript through AppleScript is turned off|JavaScript.*(禁止|停用|关闭)/i.test(
+      stderr,
+    )
+  )
+    return "javascript_permission_required";
+  return "reader_failed";
+}
+function readPage(id, target = {}, execute = execFile) {
   if (!Object.hasOwn(BROWSERS, id))
     return Promise.reject(new Error("暂不支持这个浏览器。"));
   const source = `(${extractPage.toString()})()`;
@@ -110,26 +129,35 @@ function readPage(id, target = {}) {
     "\n" +
     fs.readFileSync(path.join(__dirname, "native/page.js"), "utf8");
   return new Promise((resolve, reject) =>
-    execFile(
+    execute(
       "/usr/bin/osascript",
       ["-l", "JavaScript", "-e", script, id, source, JSON.stringify(target)],
-      { timeout: 15000, maxBuffer: 256 * 1024 },
-      (error, stdout) => {
-        if (error) {
-          reject(
-            new Error(
-              "网页正文读取未获允许或暂不可用。请检查 macOS 自动化权限，以及浏览器的“允许来自 Apple 事件的 JavaScript”设置后手动重试。",
-            ),
-          );
-          return;
-        }
+      { timeout: 25000, maxBuffer: 1024 * 1024 },
+      (error, stdout, stderr) => {
         try {
-          resolve(formatPage(JSON.parse(stdout), id));
-        } catch (error) {
-          reject(error);
+          if (error)
+            return rejectFromStatus(
+              processFailure(error, String(stderr || "")),
+            );
+          let result;
+          try {
+            result = JSON.parse(stdout);
+          } catch {
+            return rejectFromStatus("invalid_response");
+          }
+          resolve(formatPage(result, id));
+        } catch (failure) {
+          reject(failure);
+        }
+        function rejectFromStatus(status) {
+          try {
+            formatPage({ status }, id);
+          } catch (failure) {
+            reject(failure);
+          }
         }
       },
     ),
   );
 }
-module.exports = { extractPage, formatPage, readPage };
+module.exports = { extractPage, formatPage, readPage, processFailure };

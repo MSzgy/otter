@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import "./types";
 import { ApplicationContent } from "./ApplicationContent";
-type App = { name: string; bundleId: string; pid: number };
+type App = { name: string; bundleId: string; pid: number; path?: string };
 type State = {
   enabled: boolean;
   browserEnabled: boolean;
@@ -53,7 +53,11 @@ export function AwarenessPane() {
   const [state, setState] = useState<State>(empty);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState("");
+  const [failedTab, setFailedTab] = useState<State["tabs"][number] | null>(
+    null,
+  );
   const [tabFilter, setTabFilter] = useState("");
+  const [selectedPid, setSelectedPid] = useState<number | null>(null);
   useEffect(() => {
     let alive = true,
       revision = 0;
@@ -83,6 +87,7 @@ export function AwarenessPane() {
     try {
       const s = await window.otter.action<State>(name, value);
       if (s && s.apps) setState(s);
+      return true;
     } catch (e) {
       setError(
         e instanceof Error
@@ -92,19 +97,49 @@ export function AwarenessPane() {
             )
           : String(e),
       );
+      return false;
     } finally {
       setPending(false);
     }
   }
+  async function readTab(tab: State["tabs"][number], activate = false) {
+    setFailedTab(null);
+    const ok = await act("context.page", {
+      bundleId: tab.bundleId,
+      pid: tab.pid,
+      windowId: tab.windowId,
+      tabId: tab.tabId,
+      activate,
+    });
+    if (!ok) setFailedTab(tab);
+  }
   const browserApps = state.apps.filter(
     (a) => state.supportedBrowsers[a.bundleId],
   );
-  const tabs = (state.tabs || []).filter((t) =>
+  const selected =
+    browserApps.find((a) => a.pid === selectedPid) ||
+    browserApps.find((a) => a.path?.includes("/Applications/")) ||
+    browserApps[0];
+  const matchingTabs = (state.tabs || []).filter(
+    (t) => t.pid === selected?.pid,
+  );
+  const tabs = matchingTabs.filter((t) =>
     (t.title + " " + t.url).toLowerCase().includes(tabFilter.toLowerCase()),
   );
-  const current =
-    state.browser?.bundleId === state.front?.bundleId &&
-    state.browser?.pid === state.front?.pid;
+  const matchingBrowser =
+    state.browser?.pid === selected?.pid ? state.browser : null;
+  const current = matchingBrowser?.pid === state.front?.pid;
+  function browserLabel(app: App) {
+    const peers = browserApps.filter((a) => a.bundleId === app.bundleId);
+    if (peers.length < 2) return app.name;
+    const location = app.path?.startsWith("/Volumes/")
+      ? "安装磁盘中的副本"
+      : app.path?.includes("/Applications/")
+        ? "应用程序中的副本"
+        : "其他副本";
+    const similar = peers.filter((a) => a.path === app.path);
+    return `${app.name} · ${location}${similar.length > 1 ? ` ${similar.findIndex((a) => a.pid === app.pid) + 1}` : ""}`;
+  }
   return (
     <section className="awareness-pane" aria-label="应用感知">
       <div className="heading">
@@ -159,6 +194,19 @@ export function AwarenessPane() {
       {error && (
         <div className="alert" role="alert">
           {error}
+          {failedTab && (
+            <div className="button-row">
+              <button
+                disabled={pending}
+                onClick={() => readTab(failedTab, true)}
+              >
+                显示网页并重试
+              </button>
+              <small>
+                将切换到目标网页，唤醒页面后重新读取；不会刷新或修改网页。
+              </small>
+            </div>
+          )}
         </div>
       )}
       {state.message && (
@@ -220,63 +268,74 @@ export function AwarenessPane() {
             </p>
           ) : (
             <>
-              <div className="browser-actions">
-                {browserApps.map((a) => (
+              {selected ? (
+                <div className="browser-picker">
+                  <label>
+                    选择浏览器
+                    <select
+                      aria-label="选择浏览器"
+                      value={selected.pid}
+                      disabled={pending}
+                      onChange={(e) => {
+                        setSelectedPid(Number(e.target.value));
+                        setTabFilter("");
+                        setError("");
+                      }}
+                    >
+                      {browserApps.map((a) => (
+                        <option key={a.pid} value={a.pid}>
+                          {browserLabel(a)}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
                   <button
-                    key={a.bundleId + ":" + a.pid}
+                    className="primary"
                     disabled={pending}
                     onClick={() =>
                       act("awareness.browser", {
-                        bundleId: a.bundleId,
-                        pid: a.pid,
+                        bundleId: selected.bundleId,
+                        pid: selected.pid,
                       })
                     }
                   >
-                    {pending
-                      ? "读取中…"
-                      : `读取 ${a.name}${browserApps.filter((b) => b.bundleId === a.bundleId).length > 1 ? ` · 实例 ${a.pid}` : ""} 标签页`}
+                    {pending ? "正在读取…" : "刷新标签页"}
                   </button>
-                ))}
-              </div>
-              {browserApps.length === 0 && (
+                  <p className="awareness-hint">
+                    {browserApps.filter((a) => a.bundleId === selected.bundleId)
+                      .length > 1
+                      ? "检测到同一浏览器的多份程序正在运行。优先选择“应用程序中的副本”；这不是窗口数量。"
+                      : "选择已打开的网页，再读取正文。"}
+                    正文会先显示预览，由你决定是否发送。
+                  </p>
+                </div>
+              ) : (
                 <p className="awareness-hint">
-                  请打开 Safari、Chrome、Edge 或
-                  Brave。其他浏览器会显示在应用列表中，暂不读取标签页。
+                  请先打开 Safari、Chrome、Edge 或 Brave。
                 </p>
               )}
-              {browserApps.length > 0 && (
-                <div className="browser-actions page-read-actions">
-                  {browserApps.map((a) => (
-                    <button
-                      key={a.bundleId + ":" + a.pid + ":page"}
-                      disabled={pending}
-                      onClick={() =>
-                        act("context.page", {
-                          bundleId: a.bundleId,
-                          pid: a.pid,
-                        })
-                      }
-                    >
-                      {pending
-                        ? "读取中…"
-                        : `阅读 ${a.name}${browserApps.filter((b) => b.bundleId === a.bundleId).length > 1 ? ` · 实例 ${a.pid}` : ""} 当前网页`}
-                    </button>
-                  ))}
-                  <small>
-                    只在点击时读取已加载的可见正文，先预览再发送；不读取表单内容。
-                  </small>
-                </div>
+              {error && selected && (
+                <button
+                  disabled={pending}
+                  onClick={() =>
+                    act("awareness.browser", {
+                      bundleId: selected.bundleId,
+                      pid: selected.pid,
+                    })
+                  }
+                >
+                  刷新标签页后重试
+                </button>
               )}
-              {(state.tabs || []).length > 0 && (
+              {matchingTabs.length > 0 && (
                 <section
                   className="browser-tab-list"
                   aria-label="浏览器标签页列表"
                 >
                   <div className="section-title">
                     <h2>
-                      {state.tabs[0]?.name} 已打开标签页 ·{" "}
-                      {state.tabWindowCount} 个窗口 / {state.tabs.length}{" "}
-                      个标签页
+                      {selected?.name} 已打开标签页 · {state.tabWindowCount}{" "}
+                      个窗口 / {matchingTabs.length} 个标签页
                     </h2>
                   </div>
                   <input
@@ -307,14 +366,7 @@ export function AwarenessPane() {
                       </div>
                       <button
                         disabled={pending || !tab.url}
-                        onClick={() =>
-                          act("context.page", {
-                            bundleId: tab.bundleId,
-                            pid: tab.pid,
-                            windowId: tab.windowId,
-                            tabId: tab.tabId,
-                          })
-                        }
+                        onClick={() => readTab(tab)}
                       >
                         读取此页正文
                       </button>
@@ -325,24 +377,25 @@ export function AwarenessPane() {
                   )}
                 </section>
               )}
-              {state.browser ? (
+              {matchingBrowser ? (
                 <article className="tab-card">
                   <div className="tab-meta">
-                    {state.browser.name} ·{" "}
+                    {matchingBrowser.name} ·{" "}
                     {current ? "最近采样时位于前台" : "最近读取，当前不在前台"}{" "}
-                    · {new Date(state.browser.observedAt).toLocaleTimeString()}
+                    ·{" "}
+                    {new Date(matchingBrowser.observedAt).toLocaleTimeString()}
                   </div>
-                  <h3>{state.browser.title || "无标题"}</h3>
+                  <h3>{matchingBrowser.title || "无标题"}</h3>
                   <p>
-                    {state.browser.url ||
+                    {matchingBrowser.url ||
                       "此标签页不是普通 HTTP(S) 网页，未展示地址。"}
                   </p>
                 </article>
               ) : (
                 <p className="awareness-hint">
                   {state.browserStatus === "no_tab"
-                    ? "自动化接口没有返回窗口或标签页。请确认打开的是所选浏览器，并刷新；也可尝试下方窗口文字/OCR。"
-                    : "尚未读取标签页。可切换到浏览器，或点击上方按钮读取。"}
+                    ? "此浏览器没有返回打开的网页。请选择另一份浏览器，或先打开一个网页再刷新。"
+                    : "点击“刷新标签页”，查看所选浏览器已经打开的网页。"}
                 </p>
               )}
             </>

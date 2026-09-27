@@ -17,7 +17,8 @@ type Content = {
   }[];
 };
 const statusText: Record<string, string> = {
-  permission_required: "需要系统授权，授权后重新读取即可。",
+  permission_required:
+    "当前 Otter 尚未获得对应系统权限。若刚更新应用，旧版本的授权可能需要重新添加。",
   labels_only: "只读到窗口标题或界面控件标签，未读到正文。请尝试窗口 OCR。",
   no_windows:
     "未找到可读取的窗口。请打开目标应用的文档窗口；OCR 需要窗口未最小化。",
@@ -45,14 +46,19 @@ export function ApplicationContent({
   } | null>(null);
   useEffect(() => {
     let active = true;
-    void window.otter
-      .action<typeof permissions>("awareness.content-permissions")
-      .then((p) => {
-        if (active) setPermissions(p);
-      })
-      .catch(() => {});
+    const refreshPermissions = () => {
+      void window.otter
+        .action<typeof permissions>("awareness.content-permissions")
+        .then((p) => {
+          if (active) setPermissions(p);
+        })
+        .catch(() => {});
+    };
+    refreshPermissions();
+    window.addEventListener("focus", refreshPermissions);
     return () => {
       active = false;
+      window.removeEventListener("focus", refreshPermissions);
     };
   }, []);
   useEffect(() => {
@@ -113,7 +119,8 @@ export function ApplicationContent({
       </div>
       <p className="awareness-hint">
         选择应用读取窗口文字；对于自绘界面、PDF 或图片，尝试窗口
-        OCR。所有结果先在本机显示。
+        OCR。不同应用公开文字的程度不同；例如图片、视频、自绘界面可能只能通过
+        OCR 识别。所有结果先在本机显示。
       </p>
       <div className="content-permissions">
         <span>
@@ -202,6 +209,23 @@ export function ApplicationContent({
                     : ""}
               </div>
             )}
+            {content.method === "ax" &&
+              ["empty", "labels_only", "read_failed", "no_windows"].includes(
+                content.status,
+              ) && (
+                <div className="button-row">
+                  <button
+                    className="primary"
+                    disabled={!!pending || !enabled}
+                    onClick={() => read(content.app, "ocr")}
+                  >
+                    改用窗口 OCR
+                  </button>
+                  <small>
+                    请先显示目标窗口；OCR 需要屏幕录制权限，只识别当前画面。
+                  </small>
+                </div>
+              )}
           </article>
         )}
       </div>

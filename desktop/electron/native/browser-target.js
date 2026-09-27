@@ -19,12 +19,13 @@ function browserTarget(id, pid) {
     };
   var app = $.SBApplication.applicationWithProcessIdentifier(pid);
   if (!app || app.isNil()) throw new Error("UNSUPPORTED_PROCESS");
+  app.timeout = 600; // Apple event timeout: 600 ticks (10 seconds).
   var failure = null;
   ObjC.registerSubclass({
     name: "OtterBrowserEventDelegate",
     methods: {
       "eventDidFail:withError:": {
-        types: ["id", ["id", "id"]],
+        types: ["id", ["void *", "id"]],
         implementation: function (event, error) {
           failure = {
             code: Number(error.code),
@@ -95,6 +96,7 @@ function browserTarget(id, pid) {
     windows: function () {
       return list(app, "windows", function (raw) {
         return {
+          raw: raw,
           id: function () {
             return scalar(raw, "id");
           },
@@ -109,6 +111,14 @@ function browserTarget(id, pid) {
           },
         };
       });
+    },
+    showTab: function (window, selected, index) {
+      if (id === "com.apple.Safari")
+        check(window.raw.setValueForKey(selected.raw, "currentTab"));
+      else check(window.raw.setValueForKey($(index + 1), "activeTabIndex"));
+      check(window.raw.setValueForKey($(1), "index"));
+      app.activate;
+      check(null);
     },
     doJavaScript: function (source, args) {
       return ObjC.unwrap(

@@ -196,3 +196,35 @@ test("same-bundle browsers keep PID in requests and tab provenance", async () =>
     a.close();
   }
 });
+
+test("manual browser choice is not replaced when another browser comes to front", async () => {
+  const id = "com.google.Chrome",
+    calls = [];
+  const instances = [
+    { name: "Chrome", bundleId: id, pid: 11, path: "/Applications/Chrome.app" },
+    {
+      name: "Chrome",
+      bundleId: id,
+      pid: 22,
+      path: "/Volumes/Chrome/Chrome.app",
+    },
+  ];
+  const a = new Awareness({
+    platform: "darwin",
+    read: async (kind, bundle, signal, pid) => {
+      if (kind === "apps") return { apps: instances, front: instances[1] };
+      calls.push(pid);
+      return { status: "no_tab", tabs: [] };
+    },
+  });
+  try {
+    a.configure({ enabled: true, browserEnabled: true });
+    await settle();
+    await a.browser({ bundleId: id, pid: 11 });
+    await a.refresh();
+    assert.equal(calls.at(-1), 11);
+    assert.equal(a.snapshot().apps[0].path, "/Applications/Chrome.app");
+  } finally {
+    a.close();
+  }
+});

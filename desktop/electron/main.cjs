@@ -707,6 +707,7 @@ ipcMain.handle("otter:action", async (event, name, value) => {
           windowId: observed.windowId,
           tabId: observed.tabId,
           title: observed.title,
+          activate: value.activate === true,
         };
       }
       if (pageReading) throw new Error("正在读取网页，请稍后再试。");
