@@ -45,7 +45,11 @@ class Backend extends EventEmitter {
               ? p.reject(new Error(message.error.message))
               : p.resolve(message.result);
           }
-        } else if (["job.changed", "chat.changed"].includes(message.method))
+        } else if (
+          ["job.changed", "chat.changed", "memory.changed"].includes(
+            message.method,
+          )
+        )
           this.emit("event", { type: message.method, data: message.params });
       } catch {
         /* A bad frame does not remove pending request timeouts. */

@@ -29,6 +29,11 @@ export type Prefs = {
   config: string;
   envConfig?: boolean;
 };
+export type MemoryRef = {
+  id: string;
+  title: string;
+  kind: "used" | "saved" | "removed";
+};
 export type ChatTurn = {
   id: string;
   session_id: string;
@@ -36,6 +41,7 @@ export type ChatTurn = {
   content: string;
   error: string;
   model: string;
+  memory_refs?: MemoryRef[];
 };
 export type PetSnapshot = {
   asleep: boolean;

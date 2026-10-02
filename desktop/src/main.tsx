@@ -10,6 +10,7 @@ import { QuickAccessCard } from "./QuickAccessCard";
 import { AwarenessPane } from "./AwarenessPane";
 import { PetInteractions, usePetState } from "./PetInteractions";
 import { ChatPane } from "./ChatPane";
+import { MemoryPane } from "./MemoryPane";
 import { ModelSettings } from "./ModelSettings";
 const api = window.otter;
 function message(error: unknown) {
@@ -252,8 +253,15 @@ function Panel() {
   } = useRuntime();
   const { pet: petLocal } = usePetState();
   const [tab, setTab] = useState<
-    "reports" | "settings" | "chat" | "pet" | "awareness" | "assistant"
+    | "reports"
+    | "settings"
+    | "chat"
+    | "pet"
+    | "awareness"
+    | "assistant"
+    | "memory"
   >("reports");
+  const [memoryFocus, setMemoryFocus] = useState<string | null>(null);
   const mainScroll = useRef<HTMLElement | null>(null);
   useEffect(() => {
     mainScroll.current?.scrollTo({ top: 0 });
@@ -378,6 +386,12 @@ function Panel() {
             <span>◌</span>与水獭聊天
           </button>
           <button
+            className={tab === "memory" ? "active" : ""}
+            onClick={() => setTab("memory")}
+          >
+            <span>❋</span>记忆与个性
+          </button>
+          <button
             className={tab === "reports" ? "active" : ""}
             onClick={() => setTab("reports")}
           >
@@ -434,7 +448,9 @@ function Panel() {
                     ? "Otter / 应用感知"
                     : tab === "assistant"
                       ? "Otter / 生活助手"
-                      : "工作空间 / 设置"}
+                      : tab === "memory"
+                        ? "Otter / 记忆与个性"
+                        : "工作空间 / 设置"}
           </span>
           <span>OTTER {version}</span>
         </header>
@@ -458,6 +474,16 @@ function Panel() {
               key={prefs.config}
               health={health}
               onSettings={() => setTab("settings")}
+              onEditMemory={(id) => {
+                setMemoryFocus(id);
+                setTab("memory");
+              }}
+            />
+          ) : tab === "memory" ? (
+            <MemoryPane
+              key={prefs.config}
+              focus={memoryFocus}
+              onFocused={() => setMemoryFocus(null)}
             />
           ) : tab === "reports" ? (
             <>

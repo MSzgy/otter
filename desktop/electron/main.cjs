@@ -210,6 +210,12 @@ async function connect() {
           });
         return;
       }
+      if (event.type === "memory.changed") {
+        // Only the panel shows memory; the pet never needs it.
+        if (panel && !panel.isDestroyed())
+          panel.webContents.send("otter:event", event);
+        return;
+      }
       lastJob = event.data;
       broadcast(event);
       if (event.data.status === "finished") ambientEvent("report");
@@ -486,6 +492,11 @@ ipcMain.handle("otter:call", async (event, method, params) => {
       "reports.get",
       "reports.generate",
       "jobs.list",
+      "memory.get",
+      "memory.save",
+      "memory.delete",
+      "memory.clear",
+      "memory.configure",
       "chat.sessions",
       "chat.new",
       "chat.history",
@@ -509,7 +520,9 @@ ipcMain.handle("otter:call", async (event, method, params) => {
     throw new Error("参数无效。");
   if (!backend || switching) throw new Error("后台尚未就绪。");
   if (
-    (method.startsWith("models.") || method.startsWith("chat.")) &&
+    (method.startsWith("models.") ||
+      method.startsWith("chat.") ||
+      method.startsWith("memory.")) &&
     event.sender !== panel.webContents
   )
     throw new Error("请在设置面板中配置模型。");

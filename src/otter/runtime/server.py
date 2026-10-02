@@ -75,6 +75,24 @@ class Runtime:
                     name for name, cfg in self.config.collectors.items() if cfg.get("enabled", True)
                 ],
             }
+        if method == "memory.get":
+            return self.chat.memory.snapshot()
+        if method in {"memory.save", "memory.delete", "memory.clear", "memory.configure"}:
+            with self.chat.lock:
+                if self.chat.turn and self.chat.turn["status"] == "streaming":
+                    raise LLMError("请先等待或停止当前回复，再修改记忆。")
+                if method == "memory.save":
+                    result = self.chat.memory.save(params)
+                elif method == "memory.delete":
+                    result = self.chat.memory.delete(params.get("id"))
+                elif method == "memory.clear":
+                    if params.get("confirm") is not True:
+                        raise LLMError("请确认清空记忆。")
+                    result = self.chat.memory.clear()
+                else:
+                    result = self.chat.memory.configure(params)
+                self.emit("memory.changed", {})
+                return result
         if method == "chat.sessions":
             return self.chat.store.sessions()
         if method == "chat.new":

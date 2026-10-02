@@ -1570,3 +1570,95 @@ main {
   flex-basis: 100%;
   margin: 0;
 }
+
+.memory-pane label:not(.check) {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 14px 0;
+  font-size: 12px;
+  color: #657460;
+}
+.memory-pane input:not([type="checkbox"]),
+.memory-pane textarea,
+.memory-pane select {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid #d4ddd5;
+  border-radius: 8px;
+  background: #fff;
+  color: inherit;
+  font: inherit;
+}
+.memory-pane .memory-search {
+  margin-top: 12px;
+}
+.memory-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 14px;
+  margin: 18px 0;
+}
+.memory-list article {
+  background: #fff;
+  border: 1px solid #d4ddd5;
+  border-radius: 12px;
+  padding: 18px;
+}
+.memory-list article.editing {
+  border-color: #6f8f5f;
+  box-shadow: 0 0 0 2px #e3ecdb;
+}
+.memory-list small {
+  font-size: 10px;
+  color: #82907e;
+}
+.memory-list h3 {
+  margin: 6px 0;
+  font-size: 14px;
+}
+.memory-list p {
+  font-size: 12px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.memory-refs {
+  font-size: 11px;
+  color: #657460;
+  max-width: 90%;
+  margin-bottom: 6px;
+}
+.memory-refs p {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 4px;
+}
+.memory-refs details {
+  padding: 8px;
+  background: #eef3e9;
+  border-radius: 7px;
+}
+.memory-refs ul {
+  margin: 6px 0 0;
+  padding-left: 18px;
+}
+.memory-refs li {
+  margin: 3px 0;
+}
+.memory-refs button {
+  margin-left: 8px;
+  padding: 2px 7px;
+  font-size: 10px;
+}
+.memory-toggle {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  color: #657460;
+}
+.memory-pane > p.muted {
+  font-size: 12px;
+  color: #7b877c;
+}

@@ -645,6 +645,102 @@ const { execFileSync } = require("node:child_process");
     await panel.getByText("已停止回复", { exact: true }).waitFor();
     assert(requests.length >= 3);
     assert(requests.every((r) => r.url === "/v1/chat/completions" && !r.auth));
+    // Memory: explicit save without a model call, recall, correction, undo.
+    const chatSay = async (text) => {
+      const count = await panel.locator(".chat-message.assistant").count();
+      await panel.getByRole("textbox", { name: "聊天输入" }).fill(text);
+      await panel.getByRole("button", { name: "发送", exact: true }).click();
+      await panel.waitForFunction(
+        (n) =>
+          document.querySelectorAll(".chat-message.assistant").length ===
+            n + 1 && !document.querySelector(".chat-cursor"),
+        count,
+      );
+    };
+    await panel.getByRole("button", { name: "新对话", exact: true }).click();
+    await panel
+      .getByRole("heading", { name: "我在这里，慢慢说。", exact: true })
+      .waitFor();
+    const beforeMemory = requests.length;
+    await chatSay("记住：我正在做桌面机器人，下一步接舵机");
+    await panel
+      .getByText("已存入记忆：我正在做桌面机器人", { exact: false })
+      .waitFor();
+    assert.equal(requests.length, beforeMemory);
+    await chatSay("我们继续");
+    assert(requests.at(-1).body.messages[0].content.includes("下一步接舵机"));
+    await panel.getByText("本次参考的记忆 · 1", { exact: true }).click();
+    await panel
+      .getByRole("button", { name: "不对？去修改", exact: true })
+      .click();
+    await panel
+      .getByRole("heading", { name: "修改这条记忆", exact: true })
+      .waitFor();
+    await panel
+      .getByRole("textbox", { name: "记忆内容", exact: true })
+      .fill("我正在做桌面机器人，舵机已接好，下一步接屏幕");
+    await panel.getByRole("button", { name: "保存修改", exact: true }).click();
+    await panel.getByText("修改已保存。", { exact: true }).waitFor();
+    await panel
+      .getByRole("textbox", { name: "你的称呼", exact: true })
+      .fill("小杨");
+    await panel
+      .getByRole("button", { name: "保存相处方式", exact: true })
+      .click();
+    await panel.getByText("相处方式已保存。", { exact: true }).waitFor();
+    await panel.screenshot({ path: path.join(output, "otter-memory.png") });
+    await panel
+      .getByRole("button", { name: "与水獭聊天", exact: false })
+      .click();
+    await panel
+      .getByText("已存入记忆：我正在做桌面机器人", { exact: false })
+      .waitFor();
+    await chatSay("我们继续");
+    const recalled = requests.at(-1).body.messages[0].content;
+    assert(recalled.includes("下一步接屏幕") && recalled.includes("小杨"));
+    assert(!recalled.includes("下一步接舵机"));
+    await chatSay("这件事不要记住");
+    await chatSay("忘掉刚才那条");
+    await panel
+      .getByText("已从记忆删除：我正在做桌面机器人", { exact: false })
+      .waitFor();
+    assert.equal(requests.length, beforeMemory + 2);
+    await panel
+      .getByRole("button", { name: "记忆与个性", exact: false })
+      .click();
+    await panel.getByText("还没有记忆。", { exact: false }).waitFor();
+    await panel
+      .getByRole("textbox", { name: "记忆标题", exact: true })
+      .fill("回答风格");
+    await panel
+      .getByRole("textbox", { name: "记忆内容", exact: true })
+      .fill("喜欢简洁的回答");
+    await panel.getByRole("button", { name: "保存记忆", exact: true }).click();
+    await panel.getByRole("article", { name: "记忆：回答风格" }).waitFor();
+    await panel
+      .getByRole("button", { name: "清空全部记忆", exact: true })
+      .click();
+    await panel
+      .getByRole("button", { name: "确认删除记忆", exact: true })
+      .click();
+    await panel
+      .getByText("长期记忆和个性设置已清空。", { exact: true })
+      .waitFor();
+    assert.equal(
+      await panel
+        .getByRole("textbox", { name: "你的称呼", exact: true })
+        .inputValue(),
+      "",
+    );
+    const petMemoryDenied = await pet.evaluate(async () => {
+      try {
+        await window.otter.call("memory.get");
+        return false;
+      } catch {
+        return true;
+      }
+    });
+    assert(petMemoryDenied);
     await panel.getByRole("button", { name: "偏好设置" }).click();
     await panel
       .getByRole("button", { name: "恢复原模型", exact: true })
@@ -874,7 +970,7 @@ const { execFileSync } = require("node:child_process");
     );
     assert.equal(errors.length, 0, errors.join("\n"));
     console.log(
-      "PASS: real Electron report generation, persistence after reconnect, quiet setting, OpenAI model test/save/reconnect/generation/reset, streaming multi-turn chat, pet entry, cancel, history and deletion, local pet actions, head tap, sleep/wake, native menu wiring, live app awareness toggle/clear, IPC allowlist.",
+      "PASS: real Electron report generation, persistence after reconnect, quiet setting, OpenAI model test/save/reconnect/generation/reset, streaming multi-turn chat, explicit memory save/recall/correction/undo/clear, pet entry, cancel, history and deletion, local pet actions, head tap, sleep/wake, native menu wiring, live app awareness toggle/clear, IPC allowlist.",
     );
   } finally {
     if (app) await app.close();

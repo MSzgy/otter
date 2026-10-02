@@ -19,3 +19,19 @@ test("backend exit rejects in-flight calls", async () => {
   await assert.rejects(child.call("health.get"), /停止/);
   await child.stop();
 });
+test("forwards known notifications and drops unknown ones", async () => {
+  const source = `for(const method of ['secret.leak','memory.changed','chat.changed'])process.stdout.write(JSON.stringify({jsonrpc:'2.0',method,params:{}})+'\\n');setInterval(()=>{},1000);`;
+  const child = new Backend(process.execPath, ["-e", source]);
+  const seen = [];
+  try {
+    await new Promise((resolve) =>
+      child.on("event", (event) => {
+        seen.push(event.type);
+        if (seen.length === 2) resolve();
+      }),
+    );
+    assert.deepEqual(seen, ["memory.changed", "chat.changed"]);
+  } finally {
+    await child.stop();
+  }
+});

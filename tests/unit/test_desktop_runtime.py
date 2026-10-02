@@ -7,6 +7,7 @@ from datetime import UTC, datetime
 import pytest
 
 from otter.core.config import Config
+from otter.core.llm import LLMError
 from otter.core.paths import _reset_cache_for_tests
 from otter.core.store import Report, Store
 from otter.runtime.server import MAX_LINE, RequestError, Runtime, serve
@@ -116,5 +117,30 @@ def test_existing_report_survives_runtime_start(config):
     runtime = Runtime(config, lambda *_: None)
     try:
         assert runtime.dispatch("reports.get", {"date": "2026-09-13"})["content_md"] == "# Existing"
+    finally:
+        runtime.close()
+
+
+def test_memory_rpc_is_workspace_local_and_guarded(config):
+    events = []
+    runtime = Runtime(config, lambda method, _payload: events.append(method))
+    try:
+        assert runtime.dispatch("memory.get", {})["entries"] == []
+        runtime.dispatch("memory.save", {"title": "项目", "content": "桌面机器人",
+                                         "category": "project"})
+        assert events.count("memory.changed") == 1
+        assert (config.data_path() / "memory.sqlite3").exists()
+        entry = runtime.dispatch("memory.get", {})["entries"][0]
+        runtime.dispatch("memory.configure", {"enabled": True, "nickname": "小杨",
+                                              "tone": "playful"})
+        with pytest.raises(LLMError, match="确认"):
+            runtime.dispatch("memory.clear", {})
+        runtime.chat.turn = {"id": "t", "session_id": "s", "status": "streaming"}
+        with pytest.raises(LLMError, match="停止当前回复"):
+            runtime.dispatch("memory.delete", {"id": entry["id"]})
+        runtime.chat.turn = None
+        assert runtime.dispatch("memory.delete", {"id": entry["id"]})["entries"] == []
+        cleared = runtime.dispatch("memory.clear", {"confirm": True})
+        assert cleared["settings"]["nickname"] == ""
     finally:
         runtime.close()

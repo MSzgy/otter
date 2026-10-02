@@ -3,7 +3,7 @@ import Markdown from "react-markdown";
 import { VoiceControls } from "./VoiceControls";
 import { parseReminder } from "./reminder-intent";
 import { Otter } from "./Otter";
-import type { Health, ChatTurn } from "./types";
+import type { Health, ChatTurn, MemoryRef } from "./types";
 type Session = { id: string; title: string };
 type Message = {
   id: string;
@@ -13,6 +13,7 @@ type Message = {
   error: string;
   session_id: string;
   context?: string;
+  memory_refs?: MemoryRef[];
 };
 type Attachment = {
   id: string;
@@ -24,14 +25,17 @@ const api = window.otter;
 export function ChatPane({
   health,
   onSettings,
+  onEditMemory,
 }: {
   health: Health | null;
   onSettings: () => void;
+  onEditMemory: (id: string) => void;
 }) {
   const [sessions, setSessions] = useState<Session[]>([]);
   const [session, setSession] = useState("");
   const [messages, setMessages] = useState<Message[]>([]);
   const [draft, setDraft] = useState("");
+  const [useMemory, setUseMemory] = useState(true);
   const [reminderProposal, setReminderProposal] =
     useState<ReturnType<typeof parseReminder>>(null);
   const [reminderReceipt, setReminderReceipt] = useState("");
@@ -123,6 +127,7 @@ export function ChatPane({
         status: value.status,
         error: value.error,
         session_id: value.session_id,
+        memory_refs: value.memory_refs,
       };
       return rows.some((r) => r.id === value.id)
         ? rows.map((r) => (r.id === value.id ? message : r))
@@ -241,8 +246,10 @@ export function ChatPane({
         session_id: selected,
         text,
         request_id: id,
+        use_memory: useMemory,
         context: attached?.text || "",
       });
+      setUseMemory(true);
       if (attached) {
         await api.action("context.clear", attached.id);
         setAttachment((current) =>
@@ -389,6 +396,9 @@ export function ChatPane({
                     朗读
                   </button>
                 )}
+              {!!m.memory_refs?.length && (
+                <MemoryRefs refs={m.memory_refs} onEdit={onEditMemory} />
+              )}
               {m.context && (
                 <details className="sent-context">
                   <summary>附带的上下文</summary>
@@ -523,6 +533,17 @@ export function ChatPane({
         >
           附带当前场景
         </button>
+        <label
+          className="memory-toggle"
+          title="说“记住：……”保存一条记忆；附件和网页内容不会自动成为记忆。"
+        >
+          <input
+            type="checkbox"
+            checked={useMemory}
+            onChange={(e) => setUseMemory(e.target.checked)}
+          />
+          本轮使用记忆
+        </label>
         <span>选中文字：⌘⇧E（可在设置中修改）</span>
       </div>
       <form className="chat-composer" onSubmit={send}>
@@ -563,8 +584,44 @@ export function ChatPane({
         </div>
       </form>
       <p className="chat-privacy">
-        记录保存在本机。发送时仅携带当前会话的近期内容，不自动读取工作记录。
+        记录保存在本机。发送时携带当前会话的近期内容和相关记忆，不自动读取工作记录。说“记住：……”保存记忆，“忘掉刚才那条”撤回。
       </p>
     </section>
+  );
+}
+
+function MemoryRefs({
+  refs,
+  onEdit,
+}: {
+  refs: MemoryRef[];
+  onEdit: (id: string) => void;
+}) {
+  const used = refs.filter((r) => r.kind === "used");
+  const changed = refs.filter((r) => r.kind !== "used");
+  return (
+    <div className="memory-refs">
+      {changed.map((r) => (
+        <p key={r.id + r.kind}>
+          {r.kind === "saved" ? "已存入记忆" : "已从记忆删除"}：{r.title}
+          {r.kind === "saved" && (
+            <button onClick={() => onEdit(r.id)}>查看或修改</button>
+          )}
+        </p>
+      ))}
+      {!!used.length && (
+        <details>
+          <summary>本次参考的记忆 · {used.length}</summary>
+          <ul>
+            {used.map((r) => (
+              <li key={r.id}>
+                {r.title}
+                <button onClick={() => onEdit(r.id)}>不对？去修改</button>
+              </li>
+            ))}
+          </ul>
+        </details>
+      )}
+    </div>
   );
 }
