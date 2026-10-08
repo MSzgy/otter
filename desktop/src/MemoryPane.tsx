@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import "./types";
+import { MemorySuggestions } from "./MemorySuggestions";
 type Entry = {
   id: string;
   title: string;
@@ -8,7 +9,13 @@ type Entry = {
   updated: number;
 };
 type Settings = { enabled: boolean; nickname: string; tone: string };
-type State = { entries: Entry[]; settings: Settings; limit: number };
+type AISettings = { suggestions: boolean; semantic: boolean };
+type State = {
+  entries: Entry[];
+  settings: Settings;
+  limit: number;
+  ai: AISettings;
+};
 const api = window.otter;
 const categories: Record<string, string> = {
   profile: "关于你",
@@ -35,6 +42,11 @@ export function MemoryPane({
     nickname: "",
     tone: "warm",
   });
+  const [ai, setAI] = useState<AISettings>({
+    suggestions: true,
+    semantic: true,
+  });
+  const aiEdited = useRef(false);
   const [draft, setDraft] = useState(blank);
   const [query, setQuery] = useState("");
   const [busy, setBusy] = useState(false);
@@ -48,6 +60,7 @@ export function MemoryPane({
     setState(value);
     // Chat can save a memory while this page is open; keep unsaved edits.
     if (!edited.current) setSettings(value.settings);
+    if (!aiEdited.current) setAI(value.ai);
     setError("");
     return value;
   }
@@ -90,6 +103,7 @@ export function MemoryPane({
     setNotice("");
     try {
       await api.call(method, params);
+      if (method === "memory.ai-configure") aiEdited.current = false;
       if (method === "memory.configure" || method === "memory.clear")
         edited.current = false;
       await reload();
@@ -118,7 +132,7 @@ export function MemoryPane({
           <p className="eyebrow">一点了解，长久陪伴</p>
           <h1>水獭记住了什么。</h1>
           <p className="muted">
-            只保存你明确要求记住的内容。网页、窗口附件和模型回复不会自动成为记忆。
+            你可以直接保存，也可以让水獭提出候选、确认后记住。网页、窗口附件和模型回复不会自动成为记忆。
           </p>
         </div>
       </div>
@@ -180,6 +194,45 @@ export function MemoryPane({
           </button>
         </div>
       </section>
+      <section className="settings-section">
+        <h2>增强记忆</h2>
+        <label className="check">
+          <input
+            type="checkbox"
+            aria-label="从聊天建议记忆"
+            checked={ai.suggestions}
+            onChange={(e) => {
+              aiEdited.current = true;
+              setAI({ ...ai, suggestions: e.target.checked });
+            }}
+          />
+          从普通聊天提出记忆建议
+        </label>
+        <label className="check">
+          <input
+            type="checkbox"
+            aria-label="按意思检索记忆"
+            checked={ai.semantic}
+            onChange={(e) => {
+              aiEdited.current = true;
+              setAI({ ...ai, semantic: e.target.checked });
+            }}
+          />
+          按意思查找相关记忆
+        </label>
+        <p className="muted">
+          使用当前配置的对话模型，会额外调用模型：建议分析仅发送你输入的消息；语义检索发送问题和已保存记忆。关闭长期记忆或本轮记忆时不调用增强功能。离线演示保留手动记忆和关键词检索。
+        </p>
+        <button
+          disabled={busy || !state}
+          onClick={() =>
+            action("memory.ai-configure", ai, "增强记忆设置已保存。")
+          }
+        >
+          保存增强设置
+        </button>
+      </section>
+      <MemorySuggestions />
       <section className="settings-section" ref={form}>
         <h2>{draft.id ? "修改这条记忆" : "添加一条记忆"}</h2>
         <label>
@@ -331,7 +384,7 @@ export function MemoryPane({
         ))}
       </div>
       <p className="muted">
-        记忆保存在当前工作空间的本机数据库，切换工作空间后各自独立。使用云端模型聊天时，称呼、风格和本轮选中的相关记忆会随消息发送给你配置的模型。删除记忆不会撤回已发送的内容或原有聊天记录。
+        记忆保存在当前工作空间的本机数据库，切换工作空间后各自独立。使用云端模型聊天时，称呼、风格和本轮相关记忆会随消息发送给你配置的模型；启用语义检索时，会额外发送问题和已保存记忆进行匹配。删除记忆不会撤回已发送的内容或原有聊天记录。
       </p>
     </section>
   );

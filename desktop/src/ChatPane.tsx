@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import Markdown from "react-markdown";
+import { MemorySuggestions } from "./MemorySuggestions";
 import { VoiceControls } from "./VoiceControls";
 import { parseReminder } from "./reminder-intent";
 import { Otter } from "./Otter";
@@ -338,6 +339,11 @@ export function ChatPane({
           <button onClick={() => setDeleting(false)}>保留</button>
         </div>
       )}
+      {turn?.memory_mode === "keyword_fallback" && (
+        <p className="muted">
+          语义检索这次暂不可用，已使用关键词检索继续聊天。
+        </p>
+      )}
       {error && (
         <div className="alert" role="alert">
           {error}
@@ -583,6 +589,7 @@ export function ChatPane({
           )}
         </div>
       </form>
+      {!!session && <MemorySuggestions key={session} sessionId={session} />}
       <p className="chat-privacy">
         记录保存在本机。发送时携带当前会话的近期内容和相关记忆，不自动读取工作记录。说“记住：……”保存记忆，“忘掉刚才那条”撤回。
       </p>

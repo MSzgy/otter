@@ -15,6 +15,7 @@ const { execFileSync } = require("node:child_process");
   const output = path.resolve(__dirname, "../../output/playwright");
   fs.mkdirSync(output, { recursive: true });
   const requests = [];
+  const memoryRequests = [];
   let openedLink = 0;
   const server = http.createServer((req, res) => {
     if (req.method === "GET" && req.url === "/action-target") {
@@ -53,6 +54,48 @@ const { execFileSync } = require("node:child_process");
     req.on("data", (chunk) => (text += chunk));
     req.on("end", () => {
       const body = JSON.parse(text);
+      const memoryPurpose = body.messages?.[0]?.content || "";
+      if (
+        memoryPurpose.startsWith("[Otter memory suggestion]") ||
+        memoryPurpose.startsWith("[Otter semantic memory lookup]")
+      ) {
+        const payload = JSON.parse(body.messages[1].content);
+        memoryRequests.push({ purpose: memoryPurpose, payload });
+        let content;
+        if (memoryPurpose.startsWith("[Otter memory suggestion]")) {
+          const fact = payload.user_text.includes("我家猫叫糯米")
+            ? {
+                title: "糯米",
+                content: "我家猫叫糯米，它三岁了。",
+                category: "fact",
+                evidence: "我家猫叫糯米",
+              }
+            : payload.user_text.includes("我喜欢提前规划旅行")
+              ? {
+                  title: "旅行偏好",
+                  content: "我喜欢提前规划旅行",
+                  category: "preference",
+                  evidence: "我喜欢提前规划旅行",
+                }
+              : null;
+          content = JSON.stringify({ candidates: fact ? [fact] : [] });
+        } else {
+          content =
+            payload.query === "本次语义故障测试"
+              ? "not JSON"
+              : JSON.stringify({
+                  ids: payload.memories
+                    .filter(
+                      (m) =>
+                        m.content.includes("糯米") || m.category === "project",
+                    )
+                    .map((m) => m.id),
+                });
+        }
+        res.setHeader("Content-Type", "application/json");
+        res.end(JSON.stringify({ choices: [{ message: { content } }] }));
+        return;
+      }
       requests.push({ url: req.url, body, auth: req.headers.authorization });
       res.setHeader("Content-Type", "application/json");
       if (body.model === "bad-model") {
@@ -111,6 +154,8 @@ const { execFileSync } = require("node:child_process");
       await new Promise((r) => setTimeout(r, 100));
     }
     assert(panel && pet, "Both windows should exist");
+    await panel.waitForFunction(() => !!window.otter);
+
     const readerPromise = app.waitForEvent("window");
     const readerHandle = await app.evaluateHandle(
       ({ BrowserWindow }, url) => {
@@ -142,6 +187,12 @@ const { execFileSync } = require("node:child_process");
     await panel
       .getByText("离线演示模式", { exact: true })
       .waitFor({ timeout: 30000 });
+    await panel.evaluate(() =>
+      window.otter.call("memory.ai-configure", {
+        suggestions: false,
+        semantic: false,
+      }),
+    );
     await panel.getByRole("button", { name: "应用感知", exact: false }).click();
     await panel
       .getByRole("heading", { name: "感知已关闭", exact: true })
@@ -645,6 +696,12 @@ const { execFileSync } = require("node:child_process");
     await panel.getByText("已停止回复", { exact: true }).waitFor();
     assert(requests.length >= 3);
     assert(requests.every((r) => r.url === "/v1/chat/completions" && !r.auth));
+    await panel.evaluate(() =>
+      window.otter.call("memory.ai-configure", {
+        suggestions: false,
+        semantic: false,
+      }),
+    );
     // Memory: explicit save without a model call, recall, correction, undo.
     const chatSay = async (text) => {
       const count = await panel.locator(".chat-message.assistant").count();
@@ -731,6 +788,108 @@ const { execFileSync } = require("node:child_process");
         .getByRole("textbox", { name: "你的称呼", exact: true })
         .inputValue(),
       "",
+    );
+    await panel
+      .getByRole("checkbox", { name: "从聊天建议记忆", exact: true })
+      .check();
+    await panel
+      .getByRole("checkbox", { name: "按意思检索记忆", exact: true })
+      .check();
+    await panel
+      .getByRole("button", { name: "保存增强设置", exact: true })
+      .click();
+    await panel.getByText("增强记忆设置已保存。", { exact: true }).waitFor();
+    await panel
+      .getByRole("button", { name: "与水獭聊天", exact: false })
+      .click();
+    await panel.getByRole("button", { name: "新对话", exact: true }).click();
+    await panel
+      .getByRole("heading", { name: "我在这里，慢慢说。", exact: true })
+      .waitFor();
+    await chatSay("我家猫叫糯米，它三岁了。");
+    const catCandidate = panel.getByRole("article", {
+      name: "待确认记忆：糯米",
+      exact: true,
+    });
+    await catCandidate.waitFor();
+    assert.equal(
+      (await panel.evaluate(() => window.otter.call("memory.get"))).entries
+        .length,
+      0,
+    );
+    await catCandidate
+      .getByRole("button", { name: "修改后确认", exact: true })
+      .click();
+    await catCandidate
+      .getByRole("textbox", { name: "建议内容", exact: true })
+      .fill("我家猫叫糯米，今年四岁。");
+    await catCandidate
+      .getByRole("button", { name: "确认记住", exact: true })
+      .click();
+    await panel
+      .getByText("已确认并保存为长期记忆。", { exact: true })
+      .waitFor();
+    await chatSay("毛孩子叫什么名字？");
+    assert(requests.at(-1).body.messages[0].content.includes("糯米"));
+    assert(requests.at(-1).body.messages[0].content.includes("今年四岁"));
+    assert(
+      memoryRequests.some(
+        (r) =>
+          r.purpose.startsWith("[Otter semantic") &&
+          r.payload.query === "毛孩子叫什么名字？",
+      ),
+    );
+    const lookups = memoryRequests.filter((r) =>
+      r.purpose.startsWith("[Otter semantic"),
+    ).length;
+    await panel
+      .getByRole("checkbox", { name: "本轮使用记忆", exact: true })
+      .uncheck();
+    await chatSay("毛孩子叫什么名字？");
+    assert.equal(
+      memoryRequests.filter((r) => r.purpose.startsWith("[Otter semantic"))
+        .length,
+      lookups,
+    );
+    assert(!requests.at(-1).body.messages[0].content.includes("今年四岁"));
+    await chatSay("本次语义故障测试");
+    await panel
+      .getByText("语义检索这次暂不可用，已使用关键词检索继续聊天。", {
+        exact: true,
+      })
+      .waitFor();
+    await chatSay("我喜欢提前规划旅行");
+    const travelCandidate = panel.getByRole("article", {
+      name: "待确认记忆：旅行偏好",
+      exact: true,
+    });
+    await travelCandidate.waitFor();
+    await travelCandidate.scrollIntoViewIfNeeded();
+    await panel.screenshot({
+      path: path.join(output, "otter-smart-memory.png"),
+    });
+    await travelCandidate
+      .getByRole("button", { name: "不记住", exact: true })
+      .click();
+    await panel
+      .getByText("这条建议已忽略，没有写入长期记忆。", { exact: true })
+      .waitFor();
+    assert.equal(
+      (await panel.evaluate(() => window.otter.call("memory.get"))).entries
+        .length,
+      1,
+    );
+    await chatSay("忘掉刚才那条");
+    assert.equal(
+      (await panel.evaluate(() => window.otter.call("memory.get"))).entries
+        .length,
+      0,
+    );
+    await panel.evaluate(() =>
+      window.otter.call("memory.ai-configure", {
+        suggestions: false,
+        semantic: false,
+      }),
     );
     const petMemoryDenied = await pet.evaluate(async () => {
       try {

@@ -210,7 +210,10 @@ async function connect() {
           });
         return;
       }
-      if (event.type === "memory.changed") {
+      if (
+        event.type === "memory.changed" ||
+        event.type === "memory.suggestion-status"
+      ) {
         // Only the panel shows memory; the pet never needs it.
         if (panel && !panel.isDestroyed())
           panel.webContents.send("otter:event", event);
@@ -493,6 +496,10 @@ ipcMain.handle("otter:call", async (event, method, params) => {
       "reports.generate",
       "jobs.list",
       "memory.get",
+      "memory.candidates",
+      "memory.ai-configure",
+      "memory.accept",
+      "memory.dismiss",
       "memory.save",
       "memory.delete",
       "memory.clear",

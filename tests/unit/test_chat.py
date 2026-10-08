@@ -36,6 +36,7 @@ def test_multiturn_persistence_and_delete(tmp_path):
         lambda _m, t: done.set() if t["status"] == "complete" else None,
         stream=stream,
     )
+    service.memory.configure_ai({"suggestions": False, "semantic": False})
     session = service.store.new()["id"]
     try:
         service.send(request(session), llm())
@@ -81,6 +82,7 @@ def test_cancel_closes_generator_and_drops_late_reply(tmp_path):
             done.set()
 
     service = ChatService(tmp_path / "chat.db", emit, stream=stream)
+    service.memory.configure_ai({"suggestions": False, "semantic": False})
     session = service.store.new()["id"]
     try:
         turn = service.send(request(session), llm())
@@ -113,6 +115,7 @@ def test_duplicate_request_and_validation(tmp_path):
         yield "text"
 
     service = ChatService(tmp_path / "chat.db", lambda *_: None, stream=stream)
+    service.memory.configure_ai({"suggestions": False, "semantic": False})
     session = service.store.new()["id"]
     try:
         req = request(session)
@@ -187,6 +190,7 @@ def test_explicit_context_is_persisted_and_sent_only_when_attached(tmp_path):
         stream=stream,
     )
     try:
+        service.memory.configure_ai({"suggestions": False, "semantic": False})
         session = service.store.new()["id"]
         service.send(
             {**request(session), "context": "来源应用：测试编辑器\n选中文字：hello"}, llm()
@@ -248,6 +252,7 @@ class Harness:
                 self.done.set()
 
         self.service = ChatService(tmp_path / "chat.db", emit, stream=stream)
+        self.service.memory.configure_ai({"suggestions": False, "semantic": False})
         self.session = self.service.store.new()["id"]
 
     def say(self, text, **extra):
@@ -331,6 +336,7 @@ def test_demo_reply_uses_nickname_and_memory(tmp_path):
         service.memory.save(
             {"title": "桌面机器人", "content": "下一步接舵机", "category": "project"}
         )
+        service.memory.configure_ai({"suggestions": False, "semantic": False})
         session = service.store.new()["id"]
         service.send(request(session, "我们继续"), LLMCfg(provider="mock"))
         assert done.wait(5)

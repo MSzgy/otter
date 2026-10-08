@@ -46,9 +46,12 @@ class Backend extends EventEmitter {
               : p.resolve(message.result);
           }
         } else if (
-          ["job.changed", "chat.changed", "memory.changed"].includes(
-            message.method,
-          )
+          [
+            "job.changed",
+            "chat.changed",
+            "memory.changed",
+            "memory.suggestion-status",
+          ].includes(message.method)
         )
           this.emit("event", { type: message.method, data: message.params });
       } catch {

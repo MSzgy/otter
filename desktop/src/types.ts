@@ -35,6 +35,7 @@ export type MemoryRef = {
   kind: "used" | "saved" | "removed";
 };
 export type ChatTurn = {
+  memory_mode?: "keyword" | "semantic" | "keyword_fallback";
   id: string;
   session_id: string;
   status: string;

@@ -1662,3 +1662,37 @@ main {
   font-size: 12px;
   color: #7b877c;
 }
+
+.memory-suggestions {
+  margin: 20px 0;
+  padding: 18px;
+  border: 1px solid #d3dfd4;
+  background: #eef4ed;
+  border-radius: 12px;
+}
+.memory-candidate {
+  margin: 12px 0;
+  background: white;
+  border-radius: 10px;
+  padding: 16px;
+}
+.memory-candidate p,
+.memory-candidate blockquote {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.memory-candidate label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 10px 0;
+}
+.memory-candidate input,
+.memory-candidate textarea,
+.memory-candidate select {
+  font: inherit;
+  width: 100%;
+  border: 1px solid #ccd8ce;
+  border-radius: 8px;
+  padding: 10px;
+}

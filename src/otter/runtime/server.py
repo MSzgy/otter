@@ -75,13 +75,29 @@ class Runtime:
                     name for name, cfg in self.config.collectors.items() if cfg.get("enabled", True)
                 ],
             }
+        if method == "memory.candidates":
+            return self.chat.memory.candidates(params.get("session_id"))
         if method == "memory.get":
             return self.chat.memory.snapshot()
-        if method in {"memory.save", "memory.delete", "memory.clear", "memory.configure"}:
+        if method in {
+            "memory.save",
+            "memory.delete",
+            "memory.clear",
+            "memory.configure",
+            "memory.ai-configure",
+            "memory.accept",
+            "memory.dismiss",
+        }:
             with self.chat.lock:
                 if self.chat.turn and self.chat.turn["status"] == "streaming":
                     raise LLMError("请先等待或停止当前回复，再修改记忆。")
-                if method == "memory.save":
+                if method == "memory.ai-configure":
+                    result = self.chat.memory.configure_ai(params)
+                elif method == "memory.accept":
+                    result = self.chat.accept_memory(params)
+                elif method == "memory.dismiss":
+                    result = self.chat.memory.dismiss(params.get("id"))
+                elif method == "memory.save":
                     result = self.chat.memory.save(params)
                 elif method == "memory.delete":
                     result = self.chat.memory.delete(params.get("id"))
@@ -91,6 +107,7 @@ class Runtime:
                     result = self.chat.memory.clear()
                 else:
                     result = self.chat.memory.configure(params)
+                self.chat.invalidate_memory_work()
                 self.emit("memory.changed", {})
                 return result
         if method == "chat.sessions":
@@ -116,6 +133,7 @@ class Runtime:
                 turn = self.chat.snapshot()
                 if self.active or (turn and turn["status"] == "streaming"):
                     raise RequestError("请等待当前回复或简报完成后修改模型。")
+                self.chat.invalidate_memory_work()
                 return self.models.save(params) if method == "models.save" else self.models.reset()
         if method == "voice.transcribe":
             return transcribe(self.config, self.audio_dir, params)
