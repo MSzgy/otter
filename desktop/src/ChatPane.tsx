@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from "react";
 import Markdown from "react-markdown";
 import { MemorySuggestions } from "./MemorySuggestions";
 import { VoiceControls } from "./VoiceControls";
-import { parseReminder } from "./reminder-intent";
 import { Otter } from "./Otter";
 import type { Health, ChatTurn, MemoryRef } from "./types";
 type Session = { id: string; title: string };
@@ -37,21 +36,101 @@ export function ChatPane({
   const [messages, setMessages] = useState<Message[]>([]);
   const [draft, setDraft] = useState("");
   const [useMemory, setUseMemory] = useState(true);
-  const [reminderProposal, setReminderProposal] =
-    useState<ReturnType<typeof parseReminder>>(null);
-  const [reminderReceipt, setReminderReceipt] = useState("");
-  const skipReminder = useRef(false);
-  async function confirmReminder() {
-    if (!reminderProposal) return;
-    setSending(true);
+  type TaskProposal = {
+    kind: "proposal";
+    id: string;
+    title: string;
+    detail: string;
+    action: string;
+    expiresAt: number;
+  };
+  type TaskResult = {
+    kind: "result";
+    message: string;
+    ok: boolean;
+    warning: string;
+  };
+  const [allowTasks, setAllowTasks] = useState(true);
+  const [tasksReady, setTasksReady] = useState(false);
+  const [planning, setPlanning] = useState(false);
+  const [taskProposal, setTaskProposal] = useState<TaskProposal | null>(null);
+  const [taskNotice, setTaskNotice] = useState("");
+  const [taskFailed, setTaskFailed] = useState(false);
+  const taskRequest = useRef<string | null>(null);
+  const skipTask = useRef(false);
+  useEffect(() => {
+    let alive = true;
+    void api
+      .action<{ enabled: boolean }>("tasks.settings")
+      .then((value) => {
+        if (alive) {
+          setAllowTasks(value.enabled);
+          setTasksReady(true);
+        }
+      })
+      .catch(() => {
+        if (alive) {
+          setAllowTasks(false);
+          setTasksReady(true);
+        }
+      });
+    return () => {
+      alive = false;
+    };
+  }, []);
+  async function configureTasks(enabled: boolean) {
+    const previous = allowTasks;
+    setAllowTasks(enabled);
+    setTasksReady(false);
     try {
-      await api.action("assistant.create", reminderProposal);
-      setReminderReceipt(
-        `已创建提醒：${reminderProposal.title} · ${new Date(reminderProposal.dueAt).toLocaleString()}`,
-      );
-      setReminderProposal(null);
-      setDraft("");
+      const result = await api.action<{ enabled: boolean }>("tasks.configure", {
+        enabled,
+      });
+      setAllowTasks(result.enabled);
     } catch (e) {
+      setAllowTasks(previous);
+      fail(e);
+    } finally {
+      setTasksReady(true);
+    }
+  }
+  function cancelTask() {
+    const requestId = taskRequest.current;
+    taskRequest.current = null;
+    if (requestId)
+      void api.action("tasks.cancel", { requestId }).catch(() => {});
+    setTaskProposal(null);
+    setPlanning(false);
+  }
+  useEffect(
+    () => () => {
+      if (taskRequest.current)
+        void api
+          .action("tasks.cancel", { requestId: taskRequest.current })
+          .catch(() => {});
+      taskRequest.current = null;
+    },
+    [],
+  );
+  async function showTaskResult(result: TaskResult, selected: string) {
+    setDraft("");
+    await choose(selected);
+    setTaskNotice(result.warning ? `${result.message}\n${result.warning}` : "");
+    await refreshSessions();
+  }
+  async function confirmTask() {
+    if (!taskProposal || sending) return;
+    setSending(true);
+    setError("");
+    try {
+      const result = await api.action<TaskResult>("tasks.confirm", {
+        id: taskProposal.id,
+        sessionId: session,
+      });
+      await showTaskResult(result, session);
+    } catch (e) {
+      cancelTask();
+      setTaskFailed(true);
       fail(e);
     } finally {
       setSending(false);
@@ -105,7 +184,7 @@ export function ChatPane({
   const textarea = useRef<HTMLTextAreaElement>(null);
   const eventRevision = useRef(0);
   const active = turn?.status === "streaming";
-  const busy = !!active || sending;
+  const busy = !!active || sending || planning;
   const supported = health && ["mock", "openai"].includes(health.provider);
   function fail(e: unknown) {
     setError(
@@ -136,6 +215,9 @@ export function ChatPane({
     });
   }
   async function choose(id: string) {
+    cancelTask();
+    setTaskNotice("");
+    setTaskFailed(false);
     const generation = ++request.current;
     sessionRef.current = id;
     setSession(id);
@@ -214,13 +296,40 @@ export function ChatPane({
   }, [messages.at(-1)?.content, session]);
   async function send(e: React.FormEvent) {
     e.preventDefault();
-    if (!draft.trim() || busy || !supported || !session) return;
-    const detected =
-      !skipReminder.current && !attachment ? parseReminder(draft) : null;
-    skipReminder.current = false;
-    if (detected) {
-      setReminderProposal(detected);
-      return;
+    if (!draft.trim() || busy || !supported || !session || !tasksReady) return;
+    const bypass = skipTask.current;
+    skipTask.current = false;
+    if (taskProposal && !bypass) return;
+    if (allowTasks && !attachment && !bypass) {
+      const requestId = crypto.randomUUID();
+      taskRequest.current = requestId;
+      setPlanning(true);
+      setError("");
+      setTaskNotice("");
+      setTaskFailed(false);
+      try {
+        const result = await api.action<
+          TaskProposal | TaskResult | { kind: "chat" | "cancelled" }
+        >("tasks.plan", { text: draft.trim(), sessionId: session, requestId });
+        if (taskRequest.current !== requestId) return;
+        if (result.kind === "proposal") {
+          setTaskProposal(result);
+          return;
+        }
+        if (result.kind === "result") {
+          await showTaskResult(result, session);
+          return;
+        }
+        if (result.kind === "cancelled") return;
+      } catch (e) {
+        if (taskRequest.current === requestId) {
+          setTaskFailed(true);
+          fail(e);
+        }
+        return;
+      } finally {
+        if (taskRequest.current === requestId) setPlanning(false);
+      }
     }
     const text = draft.trim(),
       id = crypto.randomUUID().replaceAll("-", ""),
@@ -449,38 +558,81 @@ export function ChatPane({
         )}
         <div ref={end} />
       </div>
-      {reminderReceipt && (
-        <div className="model-success" role="status">
-          {reminderReceipt}
+      {taskNotice && (
+        <div className="alert" role="status">
+          {taskNotice}
         </div>
       )}
-      {reminderProposal && (
-        <section className="context-preview" aria-label="提醒确认">
-          <strong>确认创建本机提醒</strong>
-          <p>
-            {reminderProposal.title} ·{" "}
-            {new Date(reminderProposal.dueAt).toLocaleString()}
-          </p>
+      {taskProposal && (
+        <section className="context-preview" aria-label="办事确认">
+          <strong>{taskProposal.title}</strong>
+          <p style={{ whiteSpace: "pre-wrap" }}>{taskProposal.detail}</p>
+          <small>确认后执行，卡片一分钟内有效。</small>
           <div className="button-row">
             <button
               className="primary"
               disabled={sending}
-              onClick={confirmReminder}
+              onClick={confirmTask}
             >
-              确认创建提醒
+              {sending
+                ? "执行中…"
+                : taskProposal.action === "reminder_create"
+                  ? "确认创建提醒"
+                  : "确认执行"}
             </button>
-            <button onClick={() => setReminderProposal(null)}>暂不创建</button>
             <button
+              disabled={sending}
               onClick={() => {
-                setReminderProposal(null);
-                skipReminder.current = true;
+                cancelTask();
+                textarea.current?.focus();
+              }}
+            >
+              修改要求
+            </button>
+            <button
+              disabled={sending}
+              onClick={() => {
+                cancelTask();
+                setDraft("");
+              }}
+            >
+              取消操作
+            </button>
+            <button
+              disabled={sending}
+              onClick={() => {
+                cancelTask();
+                skipTask.current = true;
                 textarea.current?.form?.requestSubmit();
               }}
             >
-              作为普通聊天发送
+              仅聊天发送
             </button>
           </div>
         </section>
+      )}
+      {taskFailed && (
+        <div className="button-row">
+          <button
+            disabled={busy}
+            onClick={() => {
+              setTaskFailed(false);
+              textarea.current?.form?.requestSubmit();
+            }}
+          >
+            重新理解
+          </button>
+          <button
+            disabled={busy}
+            onClick={() => {
+              setTaskFailed(false);
+              skipTask.current = true;
+              textarea.current?.form?.requestSubmit();
+            }}
+          >
+            仅聊天发送
+          </button>
+        </div>
       )}
       {contextError && (
         <div className="alert" role="alert">
@@ -522,7 +674,7 @@ export function ChatPane({
         </section>
       )}
       <VoiceControls
-        enabled={health?.provider === "openai" && !busy}
+        enabled={health?.provider === "openai" && !busy && !taskProposal}
         onText={(text) =>
           setDraft((current) =>
             (current ? current + "\n" : "").concat(text).slice(0, 6000),
@@ -550,6 +702,15 @@ export function ChatPane({
           />
           本轮使用记忆
         </label>
+        <label className="memory-toggle">
+          <input
+            type="checkbox"
+            checked={allowTasks}
+            disabled={busy || !!taskProposal || !tasksReady}
+            onChange={(e) => void configureTasks(e.target.checked)}
+          />
+          理解办事请求
+        </label>
         <span>选中文字：⌘⇧E（可在设置中修改）</span>
       </div>
       <form className="chat-composer" onSubmit={send}>
@@ -559,7 +720,7 @@ export function ChatPane({
           placeholder="和水獭说点什么…"
           maxLength={6000}
           value={draft}
-          disabled={!supported || loading}
+          disabled={!supported || loading || planning || !!taskProposal}
           onChange={(e) => setDraft(e.target.value)}
           onKeyDown={(e) => {
             if (
@@ -574,14 +735,25 @@ export function ChatPane({
         />
         <div>
           <span>Enter 发送 · Shift + Enter 换行</span>
-          {active ? (
+          {planning ? (
+            <button type="button" onClick={cancelTask}>
+              停止理解
+            </button>
+          ) : active ? (
             <button type="button" onClick={stop}>
               停止回复
             </button>
           ) : (
             <button
               className="primary"
-              disabled={!supported || loading || busy || !draft.trim()}
+              disabled={
+                !supported ||
+                loading ||
+                busy ||
+                !tasksReady ||
+                !!taskProposal ||
+                !draft.trim()
+              }
               type="submit"
             >
               {sending ? "发送中…" : "发送"}
@@ -591,7 +763,7 @@ export function ChatPane({
       </form>
       {!!session && <MemorySuggestions key={session} sessionId={session} />}
       <p className="chat-privacy">
-        记录保存在本机。发送时携带当前会话的近期内容和相关记忆，不自动读取工作记录。说“记住：……”保存记忆，“忘掉刚才那条”撤回。
+        开启办事理解时，输入、近期无附件聊天及部分提醒和待办会交给当前模型理解；操作先确认，查询直接返回。附带网页或窗口内容时按普通聊天处理。记录保存在本机。发送时携带当前会话的近期内容和相关记忆，不自动读取工作记录。说“记住：……”保存记忆，“忘掉刚才那条”撤回。
       </p>
     </section>
   );

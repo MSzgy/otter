@@ -108,6 +108,42 @@ class AssistantStore {
     this.publish();
     return this.snapshot();
   }
+  updateReminder(id, patch) {
+    const reminder = this.data.reminders.find((r) => r.id === id);
+    if (!reminder || !["pending", "due"].includes(reminder.status))
+      throw new Error("提醒已结束或不存在，请重新查询。");
+    const next = { ...reminder };
+    if (patch.title !== undefined) {
+      if (
+        typeof patch.title !== "string" ||
+        !patch.title.trim() ||
+        patch.title.trim().length > 200
+      )
+        throw new Error("提醒内容应为 1–200 字。");
+      next.title = patch.title.trim();
+    }
+    if (patch.dueAt !== undefined) {
+      if (
+        !Number.isFinite(patch.dueAt) ||
+        patch.dueAt <= this.now() ||
+        patch.dueAt > this.now() + 366 * 86400000
+      )
+        throw new Error("请选择一年以内的未来时间。");
+      next.dueAt = patch.dueAt;
+      next.status = "pending";
+      next.notifiedAt = null;
+    }
+    const old = { ...reminder };
+    Object.assign(reminder, next);
+    try {
+      this.persist();
+    } catch (e) {
+      Object.assign(reminder, old);
+      throw e;
+    }
+    this.publish();
+    return { ...reminder };
+  }
   clearFinished() {
     const old = this.data.reminders;
     this.data.reminders = old.filter((r) =>
@@ -158,6 +194,12 @@ class AssistantStore {
     }
     this.publish();
     return this.snapshot();
+  }
+  completeTodo(id) {
+    const item = this.data.todos.find((x) => x.id === id);
+    if (!item) throw new Error("待办不存在。");
+    if (!item.done) this.changeTodo(id, false);
+    return { ...item };
   }
   saveSession(params) {
     const values = {};

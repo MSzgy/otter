@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import argparse
+import asyncio
 import contextlib
 import fcntl
 import json
 import os
 import sys
 import threading
+import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta
@@ -18,7 +20,8 @@ from zoneinfo import ZoneInfo
 
 from otter.application.model_settings import ModelSettings
 from otter.application.reports import make_orchestrator, notify_report, open_store
-from otter.companion.chat import ChatService
+from otter.companion.chat import ChatService, openai_stream
+from otter.companion.tasks import TaskPlanner
 from otter.companion.voice import transcribe
 from otter.core.config import Config, load
 from otter.core.llm import LLMError
@@ -59,6 +62,7 @@ class Runtime:
         with open_store(config):
             pass
         self.chat = ChatService(config.data_path() / "chat.sqlite3", emit)
+        self.task_planner = TaskPlanner(openai_stream, self.chat.resolver)
 
     def dispatch(self, method: str, params: dict) -> Any:
         if method == "health.get":
@@ -118,6 +122,41 @@ class Runtime:
             return self.chat.store.history(params.get("session_id"))
         if method == "chat.state":
             return self.chat.snapshot()
+        if method == "tasks.plan":
+            rows = self.chat.store.history(params.get("session_id"))
+            excluded = {r["turn_id"] for r in rows if r.get("context")}
+            history = [
+                {"role": r["role"], "content": r["content"][:600]}
+                for r in rows
+                if r["turn_id"] not in excluded and r["status"] == "complete"
+            ][-6:]
+            state = params.get("state", {})
+            if not isinstance(state, dict) or len(json.dumps(state)) > 45000:
+                raise RequestError("办事上下文过大，请在生活助手里处理。")
+            with self.lock:
+                llm = self.config.llm.model_copy(deep=True)
+            return asyncio.run(
+                self.task_planner.plan(
+                    llm,
+                    params.get("text"),
+                    state,
+                    history,
+                    time.time() * 1000,
+                    self.config.core.timezone,
+                )
+            )
+        if method == "tasks.record":
+            # Internal main-process endpoint, deliberately absent from renderer RPC allowlist.
+            for key, limit in (("text", 6000), ("result", 30000), ("request_id", 80)):
+                if not isinstance(params.get(key), str) or not 1 <= len(params[key]) <= limit:
+                    raise RequestError("操作回执格式无效。")
+            with self.chat.lock:
+                if self.chat.turn and self.chat.turn["status"] == "streaming":
+                    raise RequestError("请先等待当前回复完成。")
+                self.chat.store.record_action(
+                    params.get("session_id"), params["request_id"], params["text"], params["result"]
+                )
+            return {"ok": True}
         if method == "chat.send":
             with self.lock:
                 return self.chat.send(params, self.config.llm)
@@ -293,9 +332,9 @@ def serve(
                 params = request.get("params", {})
                 if not isinstance(params, dict):
                     raise RequestError("params 必须为对象。")
-                if request["method"] in {"models.test", "voice.transcribe"}:
+                if request["method"] in {"models.test", "voice.transcribe", "tasks.plan"}:
                     if not test_slot.acquire(blocking=False):
-                        raise RequestError("连接测试正在进行，请稍后重试。")
+                        raise RequestError("模型请求正在进行，请稍后重试。")
                     tester.submit(test_model, request_id, request["method"], params)
                     continue
                 result = runtime.dispatch(request["method"], params)

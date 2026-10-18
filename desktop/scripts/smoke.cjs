@@ -16,6 +16,7 @@ const { execFileSync } = require("node:child_process");
   fs.mkdirSync(output, { recursive: true });
   const requests = [];
   const memoryRequests = [];
+  const taskRequests = [];
   let openedLink = 0;
   const server = http.createServer((req, res) => {
     if (req.method === "GET" && req.url === "/action-target") {
@@ -55,6 +56,86 @@ const { execFileSync } = require("node:child_process");
     req.on("end", () => {
       const body = JSON.parse(text);
       const memoryPurpose = body.messages?.[0]?.content || "";
+      if (memoryPurpose.startsWith("[Otter task planner]")) {
+        const payload = JSON.parse(body.messages[1].content);
+        taskRequests.push(payload);
+        const request = payload.text;
+        let plan = { kind: "none" };
+        const recent = payload.tasks.recent_target;
+        if (request === "明天上午十点提醒我检查机器人") {
+          const day = new Intl.DateTimeFormat("en-CA", {
+            timeZone: payload.timezone,
+            year: "numeric",
+            month: "2-digit",
+            day: "2-digit",
+          }).format(new Date(Date.parse(payload.now) + 86400000));
+          plan = {
+            kind: "reminder_create",
+            title: "检查机器人",
+            when: { at: `${day}T10:00:00+08:00` },
+          };
+        } else if (request === "把刚才那个提醒推迟半小时") {
+          plan = {
+            kind: "reminder_update",
+            id: recent.id,
+            when: { shift_seconds: 1800 },
+          };
+        } else if (request === "取消刚才那个提醒") {
+          plan = { kind: "reminder_cancel", id: recent.id };
+        } else if (request === "看看我有哪些提醒") {
+          plan = { kind: "reminder_list", status: "active" };
+        } else if (request === "记个待办：测试机器人动作") {
+          plan = { kind: "todo_add", title: "测试机器人动作" };
+        } else if (request === "刚才的待办完成了") {
+          plan = { kind: "todo_complete", id: recent.id };
+        } else if (request === "查看已完成待办") {
+          plan = { kind: "todo_list", status: "done" };
+        } else if (request === "帮我提醒一下") {
+          plan = { kind: "clarify", message: "请告诉我提醒的具体时间和内容。" };
+        } else if (request === "打开计算器") {
+          plan = { kind: "open_app", target: "com.apple.calculator" };
+        } else if (request.startsWith("打开这个网页 http://127.0.0.1:")) {
+          plan = {
+            kind: "open_url",
+            target: request.slice("打开这个网页 ".length),
+          };
+        } else if (request === "取消分析测试") {
+          setTimeout(() => {
+            if (!res.destroyed)
+              res.end(
+                JSON.stringify({
+                  choices: [
+                    {
+                      message: {
+                        content: JSON.stringify({
+                          kind: "todo_add",
+                          title: "不应出现",
+                        }),
+                      },
+                    },
+                  ],
+                }),
+              );
+          }, 600);
+          return;
+        }
+        res.setHeader("Content-Type", "application/json");
+        res.end(
+          JSON.stringify({
+            choices: [
+              {
+                message: {
+                  content:
+                    request === "办事格式故障测试"
+                      ? "not JSON"
+                      : JSON.stringify(plan),
+                },
+              },
+            ],
+          }),
+        );
+        return;
+      }
       if (
         memoryPurpose.startsWith("[Otter memory suggestion]") ||
         memoryPurpose.startsWith("[Otter semantic memory lookup]")
@@ -900,6 +981,201 @@ const { execFileSync } = require("node:child_process");
       }
     });
     assert(petMemoryDenied);
+    await panel
+      .getByRole("button", { name: "与水獭聊天", exact: false })
+      .click();
+    await panel.getByRole("button", { name: "新对话", exact: true }).click();
+    await panel
+      .getByRole("heading", { name: "我在这里，慢慢说。", exact: true })
+      .waitFor();
+    const taskInput = panel.getByRole("textbox", {
+      name: "聊天输入",
+      exact: true,
+    });
+    const taskSend = async (text) => {
+      await taskInput.fill(text);
+      await panel.getByRole("button", { name: "发送", exact: true }).click();
+    };
+    const taskState = () =>
+      panel.evaluate(() => window.otter.action("assistant.get"));
+    await taskSend("明天上午十点提醒我检查机器人");
+    await panel.getByRole("region", { name: "办事确认" }).waitFor();
+    assert(
+      !(await taskState()).reminders.some((r) => r.title === "检查机器人"),
+    );
+    await panel.screenshot({
+      path: path.join(output, "otter-task-confirmation.png"),
+    });
+    await panel
+      .getByRole("button", { name: "确认创建提醒", exact: true })
+      .click();
+    await panel.getByText(/已创建提醒：检查机器人/).waitFor();
+    const initialReminder = (await taskState()).reminders.find(
+      (r) => r.title === "检查机器人",
+    );
+    assert(initialReminder);
+    await taskSend("把刚才那个提醒推迟半小时");
+    await panel.getByRole("button", { name: "确认执行", exact: true }).click();
+    await panel.getByText(/已修改提醒：检查机器人/).waitFor();
+    assert.equal(
+      (await taskState()).reminders.find((r) => r.id === initialReminder.id)
+        .dueAt,
+      initialReminder.dueAt + 1800000,
+    );
+    await taskSend("看看我有哪些提醒");
+    await panel.getByText(/本机提醒：共/).waitFor();
+    await taskSend("取消刚才那个提醒");
+    await panel.getByRole("button", { name: "确认执行", exact: true }).click();
+    await panel.getByText("已取消提醒：检查机器人", { exact: true }).waitFor();
+    assert.equal(
+      (await taskState()).reminders.find((r) => r.id === initialReminder.id)
+        .status,
+      "cancelled",
+    );
+    await taskSend("记个待办：测试机器人动作");
+    await panel.getByRole("button", { name: "确认执行", exact: true }).click();
+    await panel
+      .getByText("已添加待办：测试机器人动作", { exact: true })
+      .waitFor();
+    await taskSend("刚才的待办完成了");
+    await panel.getByRole("button", { name: "确认执行", exact: true }).click();
+    await panel
+      .getByText("已完成待办：测试机器人动作", { exact: true })
+      .waitFor();
+    assert(
+      (await taskState()).todos.find((t) => t.title === "测试机器人动作").done,
+    );
+    await taskSend("查看已完成待办");
+    await panel.getByText(/本机待办：共/).waitFor();
+    await taskSend("帮我提醒一下");
+    await panel
+      .getByText("请告诉我提醒的具体时间和内容。", { exact: true })
+      .waitFor();
+    await taskSend("打开计算器");
+    await panel.getByRole("button", { name: "取消操作", exact: true }).click();
+    assert.equal(
+      await panel.getByRole("region", { name: "办事确认" }).count(),
+      0,
+    );
+    if (process.env.OTTER_TEST_TASK_ACTIONS === "1") {
+      const calculatorAlreadyRunning = (await nativeRead("apps")).apps.some(
+        (a) => a.bundleId === "com.apple.calculator",
+      );
+      console.log(
+        "Calculator running before task test:",
+        calculatorAlreadyRunning,
+      );
+      await taskSend("打开计算器");
+      await panel
+        .getByRole("button", { name: "确认执行", exact: true })
+        .click();
+      await panel.getByText(/已请求 macOS 打开应用/).waitFor();
+      assert(
+        (await nativeRead("apps")).apps.some(
+          (a) => a.bundleId === "com.apple.calculator",
+        ),
+      );
+      const countBeforeTaskLink = openedLink;
+      await taskSend("打开这个网页 " + apiUrl.replace("/v1", "/action-target"));
+      await panel
+        .getByRole("button", { name: "确认执行", exact: true })
+        .click();
+      await panel.getByText(/已交给默认浏览器打开链接/).waitFor();
+      for (let i = 0; i < 50 && openedLink === countBeforeTaskLink; i++)
+        await new Promise((r) => setTimeout(r, 100));
+      assert(
+        openedLink > countBeforeTaskLink,
+        "Task confirmation must reach the browser",
+      );
+      console.log(
+        "PASS: conversational app launch and loopback browser navigation",
+      );
+    }
+    await taskSend("办事格式故障测试");
+    await panel
+      .getByRole("button", { name: "重新理解", exact: true })
+      .waitFor();
+    assert.equal(await taskInput.inputValue(), "办事格式故障测试");
+    await panel
+      .getByRole("button", { name: "仅聊天发送", exact: true })
+      .click();
+    await panel
+      .getByRole("button", { name: "停止回复", exact: true })
+      .waitFor({ state: "detached" });
+    await taskSend("取消分析测试");
+    await panel.getByRole("button", { name: "停止理解", exact: true }).click();
+    await panel.waitForTimeout(900);
+    assert.equal(
+      await panel.getByRole("region", { name: "办事确认" }).count(),
+      0,
+    );
+    assert(!(await taskState()).todos.some((t) => t.title === "不应出现"));
+    const analyses = taskRequests.length;
+    await panel
+      .getByRole("checkbox", { name: "理解办事请求", exact: true })
+      .uncheck();
+    await taskSend("这是一句普通闲聊");
+    await panel
+      .getByRole("button", { name: "停止回复", exact: true })
+      .waitFor({ state: "detached" });
+    assert.equal(taskRequests.length, analyses);
+    await panel.getByRole("button", { name: "生活助手", exact: false }).click();
+    await panel
+      .getByRole("button", { name: "与水獭聊天", exact: false })
+      .click();
+    await panel.waitForFunction(
+      async () => !(await window.otter.action("tasks.settings")).enabled,
+    );
+    await panel.waitForFunction(() => {
+      const input = document.querySelectorAll("input[type=checkbox]");
+      return [...input].some(
+        (i) =>
+          i.parentElement.textContent.includes("理解办事请求") &&
+          !i.disabled &&
+          !i.checked,
+      );
+    });
+    assert.equal(
+      await panel
+        .getByRole("checkbox", { name: "理解办事请求", exact: true })
+        .isChecked(),
+      false,
+    );
+    assert.equal(
+      JSON.parse(fs.readFileSync(path.join(userData, "desktop.json"), "utf8"))
+        .tasks.enabled,
+      false,
+    );
+    assert(
+      await pet.evaluate(async () => {
+        try {
+          await window.otter.action("tasks.plan", {
+            text: "测试",
+            sessionId: "x",
+            requestId: "x",
+          });
+          return false;
+        } catch {
+          return true;
+        }
+      }),
+    );
+    assert(
+      await panel.evaluate(async () => {
+        try {
+          await window.otter.call("tasks.record", {});
+          return false;
+        } catch {
+          return true;
+        }
+      }),
+    );
+    console.log(
+      "PASS: conversational reminders, edits, queries, cancellation, todos, app preview, malformed model output, stopped analysis and IPC guards.",
+    );
+    await panel
+      .getByRole("checkbox", { name: "理解办事请求", exact: true })
+      .check();
     await panel.getByRole("button", { name: "偏好设置" }).click();
     await panel
       .getByRole("button", { name: "恢复原模型", exact: true })
@@ -1131,8 +1407,25 @@ const { execFileSync } = require("node:child_process");
     console.log(
       "PASS: real Electron report generation, persistence after reconnect, quiet setting, OpenAI model test/save/reconnect/generation/reset, streaming multi-turn chat, explicit memory save/recall/correction/undo/clear, pet entry, cancel, history and deletion, local pet actions, head tap, sleep/wake, native menu wiring, live app awareness toggle/clear, IPC allowlist.",
     );
+  } catch (error) {
+    console.error(error);
+    if (app) {
+      const failurePanel = app
+        .windows()
+        .find((w) => w.url().includes("view=panel"));
+      if (failurePanel)
+        console.error(
+          "Failure UI:",
+          await failurePanel
+            .locator("body")
+            .ariaSnapshot()
+            .catch(() => "unavailable"),
+        );
+    }
+    throw error;
   } finally {
     if (app) await app.close();
+    server.closeAllConnections();
     await new Promise((resolve) => server.close(resolve));
     fs.rmSync(userData, { recursive: true, force: true });
   }

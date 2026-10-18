@@ -45,7 +45,8 @@ let speechPlayer,
   voiceTranscribing = false,
   lastSpokenTurn = "";
 const { AssistantStore } = require("./assistant-store.cjs");
-let assistantStore;
+const { TaskAssistant } = require("./task-assistant.cjs");
+let assistantStore, taskAssistant;
 const { Ambient } = require("./ambient.cjs");
 let ambient = new Ambient(),
   lastAmbientApp = "";
@@ -142,6 +143,8 @@ function preferencesPublic() {
 }
 async function connect() {
   if (switching) return;
+  if (taskAssistant?.executing) throw new Error("请等待当前操作完成。");
+  taskAssistant?.invalidate();
   switching = true;
   try {
     if (backend) {
@@ -478,6 +481,7 @@ function refreshTray() {
 function ensureIdle() {
   if (
     switching ||
+    taskAssistant?.busy ||
     (chatState?.status === "streaming" && backend && !backend.closed) ||
     (lastJob &&
       ["queued", "running"].includes(lastJob.status) &&
@@ -527,6 +531,17 @@ ipcMain.handle("otter:call", async (event, method, params) => {
     throw new Error("参数无效。");
   if (!backend || switching) throw new Error("后台尚未就绪。");
   if (
+    [
+      "models.save",
+      "models.reset",
+      "chat.send",
+      "chat.new",
+      "chat.delete",
+    ].includes(method) &&
+    taskAssistant?.busy
+  )
+    throw new Error("请先等待或停止当前办事操作。");
+  if (
     (method.startsWith("models.") ||
       method.startsWith("chat.") ||
       method.startsWith("memory.")) &&
@@ -534,9 +549,11 @@ ipcMain.handle("otter:call", async (event, method, params) => {
   )
     throw new Error("请在设置面板中配置模型。");
   const result = await backend.call(method, params);
+  if (method === "chat.delete") taskAssistant?.forget(params.session_id);
   if (method === "chat.delete" && chatState?.session_id === params.session_id)
     chatState = null;
   if (["models.save", "models.reset"].includes(method)) {
+    taskAssistant?.invalidate();
     currentHealth = await backend.call("health.get");
     broadcast({
       type: "connection",
@@ -547,6 +564,42 @@ ipcMain.handle("otter:call", async (event, method, params) => {
 });
 ipcMain.handle("otter:action", async (event, name, value) => {
   guard(event);
+  if (name.startsWith("tasks.")) {
+    if (event.sender !== panel.webContents)
+      throw new Error("请在聊天面板办事。");
+    if (name === "tasks.settings")
+      return { enabled: preferences.tasks?.enabled !== false };
+    if (name === "tasks.configure") {
+      if (typeof value?.enabled !== "boolean")
+        throw new Error("办事设置无效。");
+      if (taskAssistant?.executing) throw new Error("请等待当前操作完成。");
+      const old = preferences.tasks;
+      preferences.tasks = { enabled: value.enabled };
+      try {
+        save();
+      } catch (e) {
+        preferences.tasks = old;
+        throw e;
+      }
+      taskAssistant?.invalidate();
+      return preferences.tasks;
+    }
+    if (!taskAssistant) throw new Error(assistantError);
+    if (name === "tasks.cancel") {
+      taskAssistant.cancel(value?.requestId);
+      return;
+    }
+    if (!backend || backend.closed || switching)
+      throw new Error("后台尚未就绪。");
+    if (chatState?.status === "streaming")
+      throw new Error("请等待当前回复结束。");
+    if (name === "tasks.plan") {
+      if (preferences.tasks?.enabled === false) return { kind: "chat" };
+      return taskAssistant.plan(value || {});
+    }
+    if (name === "tasks.confirm") return taskAssistant.confirm(value || {});
+    throw new Error("不支持的办事操作。");
+  }
   if (name === "snapshot")
     return {
       version: app.getVersion(),
@@ -1062,6 +1115,13 @@ else {
         },
       );
       assistantStore.start();
+      taskAssistant = new TaskAssistant({
+        store: assistantStore,
+        gate: actionGate,
+        timezone: () => currentHealth?.timezone || "Asia/Shanghai",
+        interpret: (params) => backend.call("tasks.plan", params),
+        record: (params) => backend.call("tasks.record", params),
+      });
       powerMonitor.on("resume", () => assistantStore.tick());
     } catch {
       assistantError =

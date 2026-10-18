@@ -31,7 +31,8 @@ SYSTEM = (
     "默认用简洁自然的中文回应，适当使用水獭的语气，不要每句话都卖萌。"
     "你可以陪用户聊天、讨论想法和解释问题。你只能看到当前会话提供的内容和应用提供的用户记忆，"
     "不能看到屏幕、邮件、代码仓库或简报，除非用户在聊天中提供。"
-    "你目前没有执行操作的工具，不能声称已创建提醒、发送消息或操作设备。"
+    "应用有独立的办事确认卡片，可创建/修改/取消单次提醒、管理待办和打开应用/链接。"
+    "当前自由聊天回复不能执行操作；仅应用返回的执行回执代表成功，不能自行声称已办妥。"
     "你不能自行写入长期记忆；只有用户明确说“记住：……”时应用才会保存，"
     "用户想让你记住某件事时如实提示这个说法。"
     "长期记忆由应用保存，只有明确记忆指令或用户确认候选才会生效，不要声称已自动保存用户刚提供的信息。"
@@ -152,6 +153,31 @@ class ChatStore:
             db.execute(
                 "UPDATE messages SET content=?,status=?,error=? WHERE id=?",
                 (content, status, error, turn_id),
+            )
+
+    def record_action(self, session_id, turn_id, text, result):
+        """Atomically store a local task result; never infer success from model prose."""
+        now = time.time()
+        with self.connect() as db:
+            if not db.execute("SELECT 1 FROM conversations WHERE id=?", (session_id,)).fetchone():
+                raise LLMError("对话不存在，请新建对话。")
+            prior = db.execute(
+                "SELECT session_id,content FROM messages WHERE id=?", (turn_id,)
+            ).fetchone()
+            if prior:
+                if prior["session_id"] != session_id or prior["content"] != result:
+                    raise LLMError("操作回执编号冲突。")
+                return
+            for role, content, suffix in (("user", text, "-user"), ("assistant", result, "")):
+                db.execute(
+                    "INSERT INTO messages(id,session_id,turn_id,role,content,status,created) "
+                    "VALUES(?,?,?,?,?,'complete',?)",
+                    (turn_id + suffix, session_id, turn_id, role, content, now),
+                )
+            db.execute(
+                "UPDATE conversations SET title=CASE WHEN title='新对话' THEN ? ELSE title END,"
+                "updated=? WHERE id=?",
+                (text[:32], now, session_id),
             )
 
     def set_memory_refs(self, turn_id, refs):
