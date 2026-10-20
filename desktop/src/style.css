@@ -1696,3 +1696,153 @@ main {
   border-radius: 8px;
   padding: 10px;
 }
+.projects-pane h2 {
+  margin: 24px 0 12px;
+}
+.project-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 12px;
+  margin-bottom: 22px;
+}
+.project-cards button {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  text-align: left;
+  padding: 18px;
+  min-height: 115px;
+}
+.project-cards button.selected {
+  border-color: #456e59;
+  background: #eaf1e6;
+}
+.project-cards span {
+  color: #637760;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.project-cards small {
+  margin-top: auto;
+  color: #778570;
+}
+.project-form,
+.project-capture,
+.project-snapshot,
+.project-overview {
+  border: 1px solid #d5dfcf;
+  border-radius: 14px;
+  padding: 20px;
+  margin: 18px 0;
+}
+.project-form label {
+  display: grid;
+  gap: 7px;
+  margin-bottom: 14px;
+}
+.project-form input,
+.project-form textarea,
+.project-capture textarea,
+.project-capture select {
+  width: 100%;
+}
+.project-link-edit {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 8px 0;
+}
+.project-link-edit input {
+  flex: 1 1 180px;
+}
+.project-capture {
+  background: #f0f4e9;
+}
+.project-sources {
+  max-height: 320px;
+  overflow-y: auto;
+  margin: 14px 0;
+}
+.project-sources article {
+  padding: 12px 0;
+  border-bottom: 1px solid #d5dfcf;
+}
+.project-sources label,
+.project-todo {
+  display: flex;
+  gap: 10px;
+  align-items: start;
+}
+.project-sources input,
+.project-todo input {
+  width: auto;
+  flex-shrink: 0;
+}
+.project-draft-item {
+  margin: 16px 0;
+}
+.project-draft-item textarea {
+  min-height: 90px;
+  margin: 8px 0;
+}
+.project-text {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  line-height: 1.65;
+}
+.project-fact {
+  padding: 12px 0;
+  border-bottom: 1px solid #e1e7dc;
+}
+.project-fact p {
+  margin: 0 0 8px;
+}
+.project-fact button {
+  margin-top: 8px;
+}
+.project-snapshot h3 {
+  font-size: 15px;
+  margin: 20px 0 5px;
+  color: #426450;
+}
+.project-resources > div {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  flex-wrap: wrap;
+  padding: 10px 0;
+}
+.project-resources span {
+  flex: 1;
+  overflow-wrap: anywhere;
+  color: #637760;
+}
+.project-todo {
+  padding: 8px 0;
+}
+.chat-project {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 12px 0;
+  border-bottom: 1px solid #d5dfcf;
+}
+.chat-project select {
+  max-width: 300px;
+}
+.projects-pane .section-title {
+  margin: 16px 0 12px;
+}
+.projects-pane .section-title h2 {
+  margin: 0;
+}
+.project-overview .section-title,
+.project-snapshot > .section-title {
+  margin-top: 0;
+}
+.project-cards button {
+  min-height: 98px;
+}

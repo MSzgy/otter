@@ -83,3 +83,48 @@ declare global {
     };
   }
 }
+export type ProjectSource = {
+  id: string;
+  label: string;
+  created: number;
+  content: string;
+  attachment: boolean;
+  truncated: boolean;
+  session_id: string;
+  message_id: string;
+  role: string;
+};
+export type ProjectItem = {
+  id: string;
+  kind: "completed" | "blocker" | "next";
+  content: string;
+  source_ids: string[];
+  evidence?: { source_id: string; quote: string }[];
+  edited?: boolean;
+};
+export type ProjectSnapshot = {
+  id: string;
+  created: number;
+  items: ProjectItem[];
+  sources: ProjectSource[];
+};
+export type ProjectInfo = {
+  id: string;
+  name: string;
+  goal: string;
+  archived: boolean;
+  revision: number;
+  created: number;
+  updated: number;
+};
+export type Project = ProjectInfo & {
+  links: { id: string; label: string; url: string }[];
+  snapshots: ProjectSnapshot[];
+};
+export type ProjectDraft = {
+  id: string;
+  project_id: string;
+  items: ProjectItem[];
+  sources: ProjectSource[];
+  created: number;
+};

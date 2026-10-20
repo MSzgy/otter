@@ -5,6 +5,7 @@ const os = require("node:os");
 const path = require("node:path");
 const assert = require("node:assert/strict");
 const http = require("node:http");
+const { projectModelReply, verifyProjects } = require("./project-smoke.cjs");
 const { extractPage } = require("../electron/page-reader.cjs");
 const { nativeRead } = require("../electron/awareness.cjs");
 const { execFileSync } = require("node:child_process");
@@ -17,6 +18,7 @@ const { execFileSync } = require("node:child_process");
   const requests = [];
   const memoryRequests = [];
   const taskRequests = [];
+  const projectRequests = [];
   let openedLink = 0;
   const server = http.createServer((req, res) => {
     if (req.method === "GET" && req.url === "/action-target") {
@@ -56,9 +58,30 @@ const { execFileSync } = require("node:child_process");
     req.on("end", () => {
       const body = JSON.parse(text);
       const memoryPurpose = body.messages?.[0]?.content || "";
+      if (memoryPurpose.startsWith("[Otter project snapshot]")) {
+        const payload = JSON.parse(body.messages[1].content);
+        projectRequests.push(payload);
+        const content = JSON.stringify(
+          projectModelReply("[Otter project snapshot]", payload),
+        );
+        res.setHeader("Content-Type", "application/json");
+        res.end(JSON.stringify({ choices: [{ message: { content } }] }));
+        return;
+      }
       if (memoryPurpose.startsWith("[Otter task planner]")) {
         const payload = JSON.parse(body.messages[1].content);
         taskRequests.push(payload);
+        const projectPlan = projectModelReply("task", payload);
+        if (projectPlan) {
+          res.setHeader("Content-Type", "application/json");
+          res.end(
+            JSON.stringify({
+              choices: [{ message: { content: JSON.stringify(projectPlan) } }],
+            }),
+          );
+          return;
+        }
+
         const request = payload.text;
         let plan = { kind: "none" };
         const recent = payload.tasks.recent_target;
@@ -981,6 +1004,14 @@ const { execFileSync } = require("node:child_process");
       }
     });
     assert(petMemoryDenied);
+    await verifyProjects({
+      panel,
+      pet,
+      apiUrl,
+      requests,
+      projectRequests,
+      output,
+    });
     await panel
       .getByRole("button", { name: "与水獭聊天", exact: false })
       .click();

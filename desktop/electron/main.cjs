@@ -215,7 +215,8 @@ async function connect() {
       }
       if (
         event.type === "memory.changed" ||
-        event.type === "memory.suggestion-status"
+        event.type === "memory.suggestion-status" ||
+        event.type === "projects.changed"
       ) {
         // Only the panel shows memory; the pet never needs it.
         if (panel && !panel.isDestroyed())
@@ -499,6 +500,18 @@ ipcMain.handle("otter:call", async (event, method, params) => {
       "reports.get",
       "reports.generate",
       "jobs.list",
+      "projects.list",
+      "projects.get",
+      "projects.save",
+      "projects.archive",
+      "projects.sources",
+      "projects.binding",
+      "projects.bind",
+      "projects.manual",
+      "projects.draft",
+      "projects.dismiss",
+      "projects.commit",
+      "projects.delete-snapshot",
       "memory.get",
       "memory.candidates",
       "memory.ai-configure",
@@ -544,7 +557,8 @@ ipcMain.handle("otter:call", async (event, method, params) => {
   if (
     (method.startsWith("models.") ||
       method.startsWith("chat.") ||
-      method.startsWith("memory.")) &&
+      method.startsWith("memory.") ||
+      method.startsWith("projects.")) &&
     event.sender !== panel.webContents
   )
     throw new Error("请在设置面板中配置模型。");
@@ -564,6 +578,42 @@ ipcMain.handle("otter:call", async (event, method, params) => {
 });
 ipcMain.handle("otter:action", async (event, name, value) => {
   guard(event);
+  if (name.startsWith("projects.")) {
+    if (event.sender !== panel.webContents)
+      throw new Error("请在主面板管理项目。");
+    if (!backend || switching) throw new Error("后台尚未就绪。");
+    if (name === "projects.continue") {
+      ensureIdle();
+      const project = await backend.call("projects.get", {
+        project_id: value?.projectId,
+      });
+      if (project.archived) throw new Error("请先恢复已归档项目。");
+      const session = await backend.call("chat.new");
+      const result = await backend.call("projects.resume", {
+        project_id: value?.projectId,
+        session_id: session.id,
+      });
+      await backend.call("tasks.record", {
+        session_id: session.id,
+        request_id: randomUUID(),
+        text: "继续项目",
+        result: result.message,
+      });
+      showChat();
+      return session;
+    }
+    if (name === "projects.todo") {
+      if (!assistantStore) throw new Error(assistantError);
+      const plan = await backend.call("projects.resolve", {
+        kind: "project_todo",
+        project_id: value?.projectId,
+        item_id: value?.itemId,
+      });
+      await backend.call("projects.check", plan.project_ref);
+      return assistantStore.addTodo(plan);
+    }
+    throw new Error("不支持的项目操作。");
+  }
   if (name.startsWith("tasks.")) {
     if (event.sender !== panel.webContents)
       throw new Error("请在聊天面板办事。");
@@ -1121,6 +1171,24 @@ else {
         timezone: () => currentHealth?.timezone || "Asia/Shanghai",
         interpret: (params) => backend.call("tasks.plan", params),
         record: (params) => backend.call("tasks.record", params),
+        checkProject: (params) => backend.call("projects.check", params),
+        scope: (session_id) => backend.call("projects.scope", { session_id }),
+        projectAction: async (plan, request) => {
+          if (plan.kind === "project_capture")
+            return {
+              kind: "capture",
+              projectId: plan.project_id,
+              sessionId: request.sessionId,
+            };
+          if (plan.kind === "project_resume") {
+            const result = await backend.call("projects.resume", {
+              project_id: plan.project_id,
+              session_id: request.sessionId,
+            });
+            return { kind: "result", message: result.message };
+          }
+          return backend.call("projects.resolve", plan);
+        },
       });
       powerMonitor.on("resume", () => assistantStore.tick());
     } catch {

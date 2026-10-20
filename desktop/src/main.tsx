@@ -5,6 +5,7 @@ import { Otter, type Mood } from "./Otter";
 import type { Health, Job, Report, Prefs, Snapshot } from "./types";
 import "./style.css";
 import { AmbientSettings } from "./AmbientSettings";
+import { ProjectsPane } from "./ProjectsPane";
 import { AssistantPane } from "./AssistantPane";
 import { QuickAccessCard } from "./QuickAccessCard";
 import { AwarenessPane } from "./AwarenessPane";
@@ -260,7 +261,9 @@ function Panel() {
     | "awareness"
     | "assistant"
     | "memory"
+    | "projects"
   >("reports");
+  const [projectFocus, setProjectFocus] = useState<string | null>(null);
   const [memoryFocus, setMemoryFocus] = useState<string | null>(null);
   const mainScroll = useRef<HTMLElement | null>(null);
   useEffect(() => {
@@ -386,6 +389,12 @@ function Panel() {
             <span>◌</span>与水獭聊天
           </button>
           <button
+            className={tab === "projects" ? "active" : ""}
+            onClick={() => setTab("projects")}
+          >
+            <span>▱</span>项目与进度
+          </button>
+          <button
             className={tab === "memory" ? "active" : ""}
             onClick={() => setTab("memory")}
           >
@@ -448,9 +457,11 @@ function Panel() {
                     ? "Otter / 应用感知"
                     : tab === "assistant"
                       ? "Otter / 生活助手"
-                      : tab === "memory"
-                        ? "Otter / 记忆与个性"
-                        : "工作空间 / 设置"}
+                      : tab === "projects"
+                        ? "Otter / 项目与进度"
+                        : tab === "memory"
+                          ? "Otter / 记忆与个性"
+                          : "工作空间 / 设置"}
           </span>
           <span>OTTER {version}</span>
         </header>
@@ -463,7 +474,13 @@ function Panel() {
               </button>
             </div>
           )}
-          {tab === "assistant" ? (
+          {tab === "projects" ? (
+            health ? (
+              <ProjectsPane key={prefs.config} focusId={projectFocus} />
+            ) : (
+              <p className="muted">正在连接项目数据…</p>
+            )
+          ) : tab === "assistant" ? (
             <AssistantPane />
           ) : tab === "awareness" ? (
             <AwarenessPane />
@@ -474,6 +491,10 @@ function Panel() {
               key={prefs.config}
               health={health}
               onSettings={() => setTab("settings")}
+              onProjects={(id) => {
+                setProjectFocus(id || null);
+                setTab("projects");
+              }}
               onEditMemory={(id) => {
                 setMemoryFocus(id);
                 setTab("memory");

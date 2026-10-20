@@ -204,3 +204,40 @@ test("target changes during model analysis require a new plan", async (t) => {
   assert.equal(h.tasks.pending, null);
   assert.equal(h.store.snapshot().reminders[0].dueAt, r.dueAt + 3600000);
 });
+test("project-derived actions verify project revision before opening or writing", async (t) => {
+  const h = setup(t);
+  h.tasks.projectAction = async () => ({
+    kind: "todo_add",
+    title: "项目下一步",
+    projectId: "p",
+    sourceKey: "snapshot:item",
+    project_ref: { project_id: "p", revision: 1 },
+  });
+  h.tasks.checkProject = async () => {
+    throw new Error("项目已更新");
+  };
+  h.set({ kind: "project_todo", project_id: "p" });
+  assert.equal((await h.confirm(await h.plan())).ok, false);
+  assert.equal(h.store.snapshot().todos.length, 0);
+  h.tasks.checkProject = async () => ({ ok: true });
+  await h.confirm(await h.plan());
+  await h.confirm(await h.plan());
+  assert.equal(h.store.snapshot().todos.length, 1);
+  assert.equal(h.store.snapshot().todos[0].projectId, "p");
+});
+test("project scope is applied before bounding the task list", (t) => {
+  const h = setup(t);
+  h.store.data.todos = [
+    ...Array.from({ length: 100 }, (_, i) => ({
+      id: String(i),
+      title: "其他项目任务",
+      done: false,
+      projectId: "other",
+    })),
+    { id: "target", title: "当前项目任务", done: false, projectId: "current" },
+  ];
+  assert.deepEqual(
+    h.tasks.state("session", "current").todos.map((t) => t.id),
+    ["target"],
+  );
+});

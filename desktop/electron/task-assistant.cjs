@@ -6,10 +6,23 @@ class TaskAssistant {
     gate,
     interpret,
     record,
+    projectAction = null,
+    checkProject = null,
+    scope = null,
     timezone = () => "Asia/Shanghai",
     now = Date.now,
   }) {
-    Object.assign(this, { store, gate, interpret, record, timezone, now });
+    Object.assign(this, {
+      store,
+      gate,
+      interpret,
+      record,
+      projectAction,
+      checkProject,
+      scope,
+      timezone,
+      now,
+    });
     this.generation = 0;
     this.pending = null;
     this.active = null;
@@ -55,8 +68,12 @@ class TaskAssistant {
       }).format(value) + `（${this.timezone()}）`
     );
   }
-  state(sessionId) {
-    const { reminders, todos } = this.store.snapshot();
+  state(sessionId, projectId) {
+    const { reminders, todos: allTodos } = this.store.snapshot();
+    const todos =
+      projectId === undefined
+        ? allTodos
+        : allTodos.filter((t) => (t.projectId || "") === projectId);
     const recent = this.recent.get(sessionId);
     const order = (rows, isActive) =>
       [...rows]
@@ -79,10 +96,11 @@ class TaskAssistant {
       ),
     );
     const todoRows = bounded(
-      order(todos, (t) => !t.done).map(({ id, title, done }) => ({
+      order(todos, (t) => !t.done).map(({ id, title, done, projectId }) => ({
         id,
         title,
         done,
+        ...(projectId ? { projectId } : {}),
       })),
     );
     return {
@@ -130,13 +148,23 @@ class TaskAssistant {
     };
     this.active = request;
     try {
-      const context = this.state(sessionId);
-      const plan = await this.interpret({
+      const projectId = this.scope ? await this.scope(sessionId) : undefined;
+      if (generation !== this.generation) return { kind: "cancelled" };
+      const context = this.state(sessionId, projectId);
+      let plan = await this.interpret({
         text: request.text,
         session_id: sessionId,
         state: context,
       });
       if (generation !== this.generation) return { kind: "cancelled" };
+      if (plan.kind.startsWith("project_")) {
+        if (!this.projectAction) throw new Error("项目功能尚未就绪。");
+        plan = await this.projectAction(plan, request);
+        if (generation !== this.generation) return { kind: "cancelled" };
+        if (plan.kind === "capture") return plan;
+        if (plan.kind === "result")
+          return await this.receipt(request, plan.message);
+      }
       if (plan.kind === "none") return { kind: "chat" };
       if (plan.kind === "clarify")
         return await this.receipt(request, `尚未执行操作。\n\n${plan.message}`);
@@ -144,6 +172,8 @@ class TaskAssistant {
         const snapshot = this.store.snapshot(),
           reminder = plan.kind === "reminder_list";
         let rows = reminder ? snapshot.reminders : snapshot.todos;
+        if (!reminder && plan.project_id !== undefined)
+          rows = rows.filter((r) => (r.projectId || "") === plan.project_id);
         rows = rows.filter(
           (r) =>
             plan.status === "all" ||
@@ -165,7 +195,7 @@ class TaskAssistant {
                 day: "2-digit",
               }).format(r.dueAt) === plan.date,
           );
-        const label = reminder ? "提醒" : "待办";
+        const label = reminder ? "提醒" : plan.project_id ? "项目待办" : "待办";
         const status = {
           pending: "等待提醒",
           due: "已到时间",
@@ -226,7 +256,9 @@ class TaskAssistant {
           break;
         case "todo_add":
           title = "确认添加待办";
-          detail = plan.title;
+          detail =
+            (plan.projectName ? `项目：${plan.projectName}\n` : "") +
+            plan.title;
           break;
         case "todo_complete":
           title = "确认完成待办";
@@ -283,6 +315,7 @@ class TaskAssistant {
       if (request.expiresAt < this.now())
         throw new Error("确认已过期，请重新发送要求。");
       const p = request.plan;
+      if (p.project_ref) await this.checkProject(p.project_ref);
       if (request.target) {
         const snapshot = this.store.snapshot();
         const current = (
@@ -311,8 +344,22 @@ class TaskAssistant {
           message = `已取消提醒：${item.title}`;
           break;
         case "todo_add":
-          item = this.store.addTodo({ title: p.title });
-          message = `已添加待办：${item.title}`;
+          const existed =
+            p.sourceKey &&
+            this.store
+              .snapshot()
+              .todos.some(
+                (t) =>
+                  t.projectId === p.projectId && t.sourceKey === p.sourceKey,
+              );
+          item = this.store.addTodo({
+            title: p.title,
+            projectId: p.projectId,
+            sourceKey: p.sourceKey,
+          });
+          message = existed
+            ? `${item.done ? "这条项目待办已经完成" : "已在本项目待办中"}：${item.title}`
+            : `已添加待办：${item.title}`;
           break;
         case "todo_complete":
           item = this.store.completeTodo(p.id);

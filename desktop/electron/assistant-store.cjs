@@ -162,6 +162,23 @@ class AssistantStore {
     const title = typeof params.title === "string" ? params.title.trim() : "";
     if (!title || title.length > 200)
       throw new Error("待办内容应为 1–200 字。");
+    if (
+      params.projectId !== undefined &&
+      (typeof params.projectId !== "string" || params.projectId.length > 80)
+    )
+      throw new Error("项目编号无效。");
+    if (
+      params.sourceKey !== undefined &&
+      (typeof params.sourceKey !== "string" || params.sourceKey.length > 160)
+    )
+      throw new Error("待办来源无效。");
+    if (params.projectId && params.sourceKey) {
+      const existing = this.data.todos.find(
+        (t) =>
+          t.projectId === params.projectId && t.sourceKey === params.sourceKey,
+      );
+      if (existing) return { ...existing };
+    }
     if (this.data.todos.length >= 500)
       throw new Error("待办记录已满，请先清理。");
     const item = {
@@ -169,6 +186,9 @@ class AssistantStore {
       title,
       done: false,
       createdAt: this.now(),
+      ...(params.projectId
+        ? { projectId: params.projectId, sourceKey: params.sourceKey || "" }
+        : {}),
     };
     this.data.todos.unshift(item);
     try {

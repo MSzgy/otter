@@ -42,7 +42,18 @@ VS Code 是 com.microsoft.VSCode。
 不知道应用标识则 clarify，不把文件路径或终端命令用作 target。安装情况会由本机检查。
 {"kind":"open_url","target":"当前输入中明确给出的完整 http/https URL"}
 网址不能自行推测、不能取自历史聊天、不能补造参数或凭据；用户只说网站名时请补充网址。
-"记住"和"忘掉"属于记忆，返回 none。
+项目操作使用 tasks.projects 中的项目编号。未指定名称时只使用 current_project。
+未选择项目则 clarify 请先选择。
+项目重名/不明确时问清楚，不把一个项目的内容用于另一个项目。列表截断时让用户在项目页选择。
+“继续做某项目”“上次做到哪里”“接下来先做什么”返回 {"kind":"project_resume","project_id":"已有编号"}。
+“先做到这里，保存进度”返回 {"kind":"project_capture","project_id":"已有编号"}。
+应用会让用户选择来源、整理并确认，不能宣称已保存。
+“把下一步加入待办”返回 {"kind":"project_todo","project_id":"已有编号"}。
+只支持最新快照的第一条下一步；指定其他条目请用户在项目页选择。
+“回到工作页面/打开项目资料”返回
+{"kind":"project_open","project_id":"已有编号","link_id":"该项目已有链接编号"}。
+多个链接时依据用户明确给出的资料名称匹配；没有明确选择就 clarify，不默认全部打开。
+“记住”和“忘掉”属于记忆，返回 none。
 """
 
 
@@ -60,11 +71,29 @@ def normalize(result, text, state, now, timezone):
         return {"kind": kind}
     if kind == "clarify":
         return {"kind": kind, "message": clean_text(result.get("message"), 500)}
+    if kind in {"project_resume", "project_capture", "project_todo", "project_open"}:
+        project = next(
+            (p for p in state.get("projects", []) if p["id"] == result.get("project_id")), None
+        )
+        if not project:
+            raise ValueError("Unknown project")
+        if state.get("current_project") != project["id"] and project["name"] not in text:
+            raise ValueError("Project must be selected or explicitly named")
+        plan = {"kind": kind, "project_id": project["id"]}
+        if kind == "project_open":
+            links = project.get("links", [])
+            link_id = result.get("link_id") or (links[0]["id"] if len(links) == 1 else None)
+            if not any(link["id"] == link_id for link in links):
+                raise ValueError("Unknown project link")
+            plan["link_id"] = link_id
+        return plan
     if kind in {"reminder_list", "todo_list"}:
         status = result.get("status", "active")
         if status not in {"active", "done", "all"}:
             raise ValueError("Invalid status")
         plan = {"kind": kind, "status": status}
+        if kind == "todo_list" and "current_project" in state:
+            plan["project_id"] = state.get("current_project") or ""
         if kind == "reminder_list" and result.get("date"):
             date = datetime.strptime(result["date"], "%Y-%m-%d").date().isoformat()
             if date != result["date"]:
@@ -87,6 +116,8 @@ def normalize(result, text, state, now, timezone):
     }:
         raise ValueError("Unknown action")
     plan = {"kind": kind}
+    if kind == "todo_add" and state.get("current_project"):
+        plan["projectId"] = state["current_project"]
     target = None
     if kind in {"reminder_update", "reminder_cancel", "todo_complete"}:
         group = "todos" if kind == "todo_complete" else "reminders"

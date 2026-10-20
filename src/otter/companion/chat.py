@@ -22,6 +22,7 @@ from otter.companion.memory import (
     title_for,
 )
 from otter.companion.memory_ai import MemoryAI
+from otter.companion.projects import ProjectStore
 from otter.core.keychain import DefaultSecretResolver
 from otter.core.llm import LLMError
 from otter.llm.openai_compatible import OpenAICompatibleProvider
@@ -335,6 +336,7 @@ class ChatService:
         self.resolver = resolver or DefaultSecretResolver()
         self.stream = stream or openai_stream
         self.memory_ai = memory_ai or MemoryAI(openai_stream, self.resolver)
+        self.projects = ProjectStore(Path(path).with_name("projects.sqlite3"))
         self.suggesting = 0
         self.analysis_epoch = 0
         self.lock = threading.RLock()
@@ -504,7 +506,7 @@ class ChatService:
                     if self._is_current(turn):
                         self.turn["memory_mode"] = mode
                 messages = self.store.context(turn["session_id"], turn["id"])
-                messages[0]["content"] += system_extra
+                messages[0]["content"] += system_extra + self.projects.prompt(turn["session_id"])
                 async for chunk in self.stream(llm.provider_config(), messages, self.resolver):
                     text += chunk
                     if len(text) > MAX_REPLY:

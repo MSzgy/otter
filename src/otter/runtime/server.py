@@ -21,6 +21,7 @@ from zoneinfo import ZoneInfo
 from otter.application.model_settings import ModelSettings
 from otter.application.reports import make_orchestrator, notify_report, open_store
 from otter.companion.chat import ChatService, openai_stream
+from otter.companion.project_ai import ProjectAI
 from otter.companion.tasks import TaskPlanner
 from otter.companion.voice import transcribe
 from otter.core.config import Config, load
@@ -63,6 +64,8 @@ class Runtime:
             pass
         self.chat = ChatService(config.data_path() / "chat.sqlite3", emit)
         self.task_planner = TaskPlanner(openai_stream, self.chat.resolver)
+        self.project_ai = ProjectAI(openai_stream, self.chat.resolver)
+        self.chat.projects.timezone = config.core.timezone
 
     def dispatch(self, method: str, params: dict) -> Any:
         if method == "health.get":
@@ -79,6 +82,8 @@ class Runtime:
                     name for name, cfg in self.config.collectors.items() if cfg.get("enabled", True)
                 ],
             }
+        if method.startswith("projects."):
+            return self._projects(method, params)
         if method == "memory.candidates":
             return self.chat.memory.candidates(params.get("session_id"))
         if method == "memory.get":
@@ -133,9 +138,15 @@ class Runtime:
             state = params.get("state", {})
             if not isinstance(state, dict) or len(json.dumps(state)) > 45000:
                 raise RequestError("办事上下文过大，请在生活助手里处理。")
+            state = {**state, **self.chat.projects.metadata(params.get("session_id"))}
+            state["todos"] = [
+                t
+                for t in state.get("todos", [])
+                if (t.get("projectId") or None) == state.get("current_project")
+            ]
             with self.lock:
                 llm = self.config.llm.model_copy(deep=True)
-            return asyncio.run(
+            result = asyncio.run(
                 self.task_planner.plan(
                     llm,
                     params.get("text"),
@@ -145,6 +156,16 @@ class Runtime:
                     self.config.core.timezone,
                 )
             )
+            if result.get("projectId"):
+                project = self.chat.projects.get(result["projectId"])
+                if project["archived"]:
+                    raise RequestError("项目已归档，请重新选择。")
+                result["project_ref"] = {
+                    "project_id": project["id"],
+                    "revision": project["revision"],
+                }
+                result["projectName"] = project["name"]
+            return result
         if method == "tasks.record":
             # Internal main-process endpoint, deliberately absent from renderer RPC allowlist.
             for key, limit in (("text", 6000), ("result", 30000), ("request_id", 80)):
@@ -163,7 +184,9 @@ class Runtime:
         if method == "chat.cancel":
             return self.chat.cancel(params.get("turn_id"))
         if method == "chat.delete":
-            return self.chat.delete(params.get("session_id"))
+            result = self.chat.delete(params.get("session_id"))
+            self.chat.projects.forget_session(params.get("session_id"))
+            return result
         if method == "models.get":
             with self.lock:
                 return self.models.public()
@@ -173,6 +196,7 @@ class Runtime:
                 if self.active or (turn and turn["status"] == "streaming"):
                     raise RequestError("请等待当前回复或简报完成后修改模型。")
                 self.chat.invalidate_memory_work()
+                self.chat.projects.invalidate()
                 return self.models.save(params) if method == "models.save" else self.models.reset()
         if method == "voice.transcribe":
             return transcribe(self.config, self.audio_dir, params)
@@ -209,6 +233,150 @@ class Runtime:
                 self.worker.submit(self._generate, job_id, date, collect)
                 return {"job_id": job_id}
         raise RequestError("不支持的操作。")
+
+    def _project_sources(self, session_id):
+        rows = self.chat.store.history(session_id)
+        sources = []
+        for row in rows[-30:]:
+            if row["status"] != "complete":
+                continue
+            for suffix, content, label in (
+                ("", row["content"], "你说的" if row["role"] == "user" else "水獭回复"),
+                (":context", row.get("context", ""), "你附带的资料"),
+            ):
+                if content:
+                    sources.append(
+                        {
+                            "id": row["id"] + suffix,
+                            "message_id": row["id"],
+                            "session_id": session_id,
+                            "role": row["role"],
+                            "label": label,
+                            "attachment": bool(suffix),
+                            "created": row["created"],
+                            "content": content[:2000],
+                            "truncated": len(content) > 2000,
+                        }
+                    )
+        return sources
+
+    def _projects(self, method, params):
+        store = self.chat.projects
+        project_id, session_id = params.get("project_id"), params.get("session_id")
+        if method == "projects.list":
+            return store.list()
+        if method == "projects.get":
+            return store.get(project_id)
+        if method == "projects.sources":
+            return self._project_sources(session_id)
+        if method == "projects.binding":
+            return store.binding(session_id)
+        if method == "projects.scope":
+            with store.connect() as db:
+                row = db.execute(
+                    "SELECT project_id FROM bindings JOIN projects ON projects.id=project_id "
+                    "WHERE session_id=? AND archived=0",
+                    (session_id,),
+                ).fetchone()
+            return row[0] if row else ""
+        if method == "projects.check":
+            project = store.get(project_id)
+            if project["archived"] or project["revision"] != params.get("revision"):
+                raise RequestError("项目已更新，请重新确认操作。")
+            return {"ok": True}
+        if method == "projects.resolve":
+            project = store.get(project_id)
+            if project["archived"]:
+                raise RequestError("请先恢复已归档项目。")
+            if params.get("kind") == "project_open":
+                link = next(
+                    (link for link in project["links"] if link["id"] == params.get("link_id")), None
+                )
+                if not link:
+                    raise RequestError("资料链接已变化，请重新选择。")
+                return {
+                    "kind": "open_url",
+                    "target": link["url"],
+                    "project_ref": {"project_id": project_id, "revision": project["revision"]},
+                }
+            if params.get("kind") == "project_todo":
+                snapshot = project["snapshots"][0] if project["snapshots"] else None
+                item = (
+                    next(
+                        (
+                            i
+                            for i in snapshot["items"]
+                            if i["kind"] == "next"
+                            and (not params.get("item_id") or i["id"] == params["item_id"])
+                        ),
+                        None,
+                    )
+                    if snapshot
+                    else None
+                )
+                if not item:
+                    raise RequestError("项目尚未保存下一步，请先记录进度。")
+                return {
+                    "kind": "todo_add",
+                    "title": item["content"][:200],
+                    "projectId": project_id,
+                    "projectName": project["name"],
+                    "sourceKey": snapshot["id"] + ":" + item["id"],
+                    "project_ref": {"project_id": project_id, "revision": project["revision"]},
+                }
+            raise RequestError("不支持的项目操作。")
+        with self.chat.lock:
+            if self.chat.turn and self.chat.turn["status"] == "streaming":
+                raise RequestError("请等待或停止当前回复后再更新项目。")
+            if method == "projects.bind":
+                self.chat.store.history(session_id)
+                return store.bind(session_id, project_id)
+            if method == "projects.resume":
+                self.chat.store.history(session_id)
+                store.bind(session_id, project_id)
+                return {"message": store.summary(project_id)}
+            if method == "projects.save":
+                result = store.save(params)
+            elif method == "projects.archive":
+                result = store.archive(project_id, params.get("archived"))
+            elif method == "projects.manual":
+                return store.draft(project_id, [], [])
+            elif method == "projects.dismiss":
+                store.dismiss(params.get("draft_id"))
+                return {"ok": True}
+            elif method == "projects.commit":
+                result = store.commit(params)
+            elif method == "projects.delete-snapshot":
+                if params.get("confirm") is not True:
+                    raise RequestError("请确认删除这份快照。")
+                result = store.delete_snapshot(project_id, params.get("snapshot_id"))
+            elif method == "projects.draft":
+                project = store.get(project_id)
+                if project["archived"]:
+                    raise RequestError("请先恢复项目。")
+                ids = params.get("source_ids")
+                if (
+                    not isinstance(ids, list)
+                    or not 1 <= len(ids) <= 20
+                    or not all(isinstance(i, str) for i in ids)
+                ):
+                    raise RequestError("请选择 1–20 条来源。")
+                available = self._project_sources(session_id)
+                sources = [s for s in available if s["id"] in ids]
+                if len(sources) != len(set(ids)) or sum(len(s["content"]) for s in sources) > 20000:
+                    raise RequestError("来源已变化或超过 20000 字，请减少选择后重试。")
+                epoch = store.epoch
+                llm = self.config.llm.model_copy(deep=True)
+            else:
+                raise RequestError("不支持的项目操作。")
+        if method == "projects.draft":
+            items = asyncio.run(self.project_ai.summarize(llm, project, sources))
+            with store.lock:
+                if epoch != store.epoch:
+                    raise RequestError("整理已取消或模型/来源已变化，请重新整理。")
+                return store.draft(project_id, items, sources, project["revision"], session_id)
+        self.emit("projects.changed", {"id": result["id"]})
+        return result
 
     def _update(self, job_id: str, **values) -> None:
         with self.lock:
@@ -293,7 +461,7 @@ def serve(
         try:
             result = runtime.dispatch(method, params)
             write({"jsonrpc": "2.0", "id": request_id, "result": result})
-        except LLMError as exc:
+        except (LLMError, RequestError) as exc:
             write(
                 {"jsonrpc": "2.0", "id": request_id, "error": {"code": -32602, "message": str(exc)}}
             )
@@ -332,7 +500,12 @@ def serve(
                 params = request.get("params", {})
                 if not isinstance(params, dict):
                     raise RequestError("params 必须为对象。")
-                if request["method"] in {"models.test", "voice.transcribe", "tasks.plan"}:
+                if request["method"] in {
+                    "models.test",
+                    "voice.transcribe",
+                    "tasks.plan",
+                    "projects.draft",
+                }:
                     if not test_slot.acquire(blocking=False):
                         raise RequestError("模型请求正在进行，请稍后重试。")
                     tester.submit(test_model, request_id, request["method"], params)

@@ -1,9 +1,16 @@
 import { useEffect, useRef, useState } from "react";
 import Markdown from "react-markdown";
+import { ProjectCapture } from "./ProjectCapture";
 import { MemorySuggestions } from "./MemorySuggestions";
 import { VoiceControls } from "./VoiceControls";
 import { Otter } from "./Otter";
-import type { Health, ChatTurn, MemoryRef } from "./types";
+import type {
+  Health,
+  ChatTurn,
+  MemoryRef,
+  Project,
+  ProjectInfo,
+} from "./types";
 type Session = { id: string; title: string };
 type Message = {
   id: string;
@@ -26,16 +33,54 @@ export function ChatPane({
   health,
   onSettings,
   onEditMemory,
+  onProjects,
 }: {
   health: Health | null;
   onSettings: () => void;
   onEditMemory: (id: string) => void;
+  onProjects: (id?: string) => void;
 }) {
   const [sessions, setSessions] = useState<Session[]>([]);
   const [session, setSession] = useState("");
   const [messages, setMessages] = useState<Message[]>([]);
   const [draft, setDraft] = useState("");
   const [useMemory, setUseMemory] = useState(true);
+  const [projects, setProjects] = useState<ProjectInfo[]>([]);
+  const [boundProject, setBoundProject] = useState<Project | null>(null);
+  const [captureProject, setCaptureProject] = useState<string | null>(null);
+  async function refreshProject(id: string) {
+    const [rows, bound] = await Promise.all([
+      api.call<ProjectInfo[]>("projects.list"),
+      api.call<Project | null>("projects.binding", { session_id: id }),
+    ]);
+    if (sessionRef.current === id) {
+      setProjects(rows);
+      setBoundProject(bound);
+    }
+  }
+  useEffect(() => {
+    if (!session || !health) return;
+    return api.subscribe((e) => {
+      if (e.type === "projects.changed")
+        void refreshProject(session).catch(fail);
+    });
+  }, [session, !!health]);
+  async function bindProject(id: string) {
+    setSending(true);
+    try {
+      setBoundProject(
+        await api.call<Project | null>("projects.bind", {
+          session_id: session,
+          project_id: id || null,
+        }),
+      );
+    } catch (e) {
+      fail(e);
+    } finally {
+      setSending(false);
+    }
+  }
+
   type TaskProposal = {
     kind: "proposal";
     id: string;
@@ -117,6 +162,7 @@ export function ChatPane({
     await choose(selected);
     setTaskNotice(result.warning ? `${result.message}\n${result.warning}` : "");
     await refreshSessions();
+    await refreshProject(selected);
   }
   async function confirmTask() {
     if (!taskProposal || sending) return;
@@ -184,7 +230,7 @@ export function ChatPane({
   const textarea = useRef<HTMLTextAreaElement>(null);
   const eventRevision = useRef(0);
   const active = turn?.status === "streaming";
-  const busy = !!active || sending || planning;
+  const busy = !!active || sending || planning || !!captureProject;
   const supported = health && ["mock", "openai"].includes(health.provider);
   function fail(e: unknown) {
     setError(
@@ -218,6 +264,7 @@ export function ChatPane({
     cancelTask();
     setTaskNotice("");
     setTaskFailed(false);
+    setBoundProject(null);
     const generation = ++request.current;
     sessionRef.current = id;
     setSession(id);
@@ -231,6 +278,7 @@ export function ChatPane({
         session_id: id,
       });
       if (generation === request.current) {
+        await refreshProject(id);
         setMessages((current) =>
           eventRevision.current === revision
             ? rows
@@ -309,9 +357,17 @@ export function ChatPane({
       setTaskFailed(false);
       try {
         const result = await api.action<
-          TaskProposal | TaskResult | { kind: "chat" | "cancelled" }
+          | TaskProposal
+          | TaskResult
+          | { kind: "capture"; projectId: string; sessionId: string }
+          | { kind: "chat" | "cancelled" }
         >("tasks.plan", { text: draft.trim(), sessionId: session, requestId });
         if (taskRequest.current !== requestId) return;
+        if (result.kind === "capture") {
+          setCaptureProject(result.projectId);
+          setDraft("");
+          return;
+        }
         if (result.kind === "proposal") {
           setTaskProposal(result);
           return;
@@ -420,6 +476,42 @@ export function ChatPane({
         <button disabled={!health || busy} onClick={newChat}>
           新对话
         </button>
+      </div>
+      <div className="chat-project">
+        <label>
+          当前项目{" "}
+          <select
+            aria-label="关联项目"
+            value={boundProject?.id || ""}
+            disabled={busy || loading}
+            onChange={(e) => void bindProject(e.target.value)}
+          >
+            <option value="">未关联项目</option>
+            {projects
+              .filter((p) => !p.archived)
+              .map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name}
+                </option>
+              ))}
+          </select>
+        </label>
+        <button disabled={busy} onClick={() => onProjects(boundProject?.id)}>
+          管理项目
+        </button>
+        {boundProject && (
+          <button
+            disabled={busy || loading}
+            onClick={() => setCaptureProject(boundProject.id)}
+          >
+            保存本段进度
+          </button>
+        )}
+        {boundProject && (
+          <small>
+            聊天会引用这个项目最近确认的进度；切换关联会保留当前聊天历史。
+          </small>
+        )}
       </div>
       <div className="chat-session-row">
         <select
@@ -558,6 +650,20 @@ export function ChatPane({
         )}
         <div ref={end} />
       </div>
+      {captureProject && (
+        <ProjectCapture
+          key={captureProject + session}
+          projectId={captureProject}
+          sessionId={session}
+          onClose={() => setCaptureProject(null)}
+          onSaved={() => {
+            const id = captureProject;
+            setCaptureProject(null);
+            void bindProject(id);
+            setTaskNotice("项目进度快照已保存，可以继续聊天或到项目页查看。");
+          }}
+        />
+      )}
       {taskNotice && (
         <div className="alert" role="status">
           {taskNotice}
@@ -763,7 +869,7 @@ export function ChatPane({
       </form>
       {!!session && <MemorySuggestions key={session} sessionId={session} />}
       <p className="chat-privacy">
-        开启办事理解时，输入、近期无附件聊天及部分提醒和待办会交给当前模型理解；操作先确认，查询直接返回。附带网页或窗口内容时按普通聊天处理。记录保存在本机。发送时携带当前会话的近期内容和相关记忆，不自动读取工作记录。说“记住：……”保存记忆，“忘掉刚才那条”撤回。
+        开启办事理解时，输入、近期无附件聊天、部分提醒和待办，以及项目和资料名称会交给当前模型理解；操作先确认，查询直接返回。附带网页或窗口内容时按普通聊天处理。记录保存在本机。发送时携带当前会话的近期内容和相关记忆，不自动读取工作记录。说“记住：……”保存记忆，“忘掉刚才那条”撤回。
       </p>
     </section>
   );

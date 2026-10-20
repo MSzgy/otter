@@ -50,6 +50,7 @@ class Backend extends EventEmitter {
             "job.changed",
             "chat.changed",
             "memory.changed",
+            "projects.changed",
             "memory.suggestion-status",
           ].includes(message.method)
         )
