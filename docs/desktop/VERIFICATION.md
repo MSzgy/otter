@@ -174,6 +174,8 @@ UI 增加结果自动滚动、聚焦和窗口数/字符数反馈；TypeScript/Vi
 
 真实 Electron 开发版完整 smoke 通过：以“接入 AI 工具”页生成的配置启动真实 MCP 进程，验证通道关闭时报错、开启后 socket 权限、批准卡片与侧栏计数、预览文本与实际收到内容一致、授权内自动发送与撤销、拒绝、交回进度经审核写入快照、访问记录、关闭后移除 socket，以及宠物窗口无法调用交接接口。原有完整桌面回归同时通过。
 
-未完成：真实 Claude Code 接入。本机 `claude` CLI 登录已失效（401），未能用真实客户端走完一次；协议兼容性目前由真实 MCP 进程测试覆盖。安装包尚未重新打包。
+未完成：真实 Claude Code 接入。本机 `claude` CLI 登录已失效（401），未能用真实客户端走完一次；协议兼容性目前由真实 MCP 进程测试覆盖。
+
+2026-10-21 安装：因 Documents 内文件反复被 iCloud 移出，改在 /tmp 的干净目录构建：从 GitHub 克隆 4081c0b，再复制提交 ca2bca3 的 22 个文件，树哈希与提交一致（7f2ff63）后安装依赖并打包。应用内 `otter-runtime mcp` 握手与工具列表正常；以安装包运行完整 smoke 通过，交接流程经由应用内 MCP 程序完成。严格签名验证通过，已替换 /Users/zouguoyang/Applications/Otter.app，旧版 0.11.0 备份于 ~/Library/Caches/otter-desktop-backup/Otter-0.11.0.zip，用户数据未改动；启动后应用与后台进程正常运行。安装压缩包保存于 desktop/release/Otter-arm64.zip。
 
 环境记录：仓库位于 iCloud 管理的 Documents，磁盘剩余约 13 GB 时 `.venv`、`node_modules`、源码乃至 `.git` 文件被移出本地，读取可能返回空内容而不报错，导致后台冷启动 104 秒与 smoke 超时（此前“偶发”的重连超时也可能源于此）。逐个取回本地后后台启动约 2 秒、smoke 稳定通过。
