@@ -128,3 +128,50 @@ export type ProjectDraft = {
   sources: ProjectSource[];
   created: number;
 };
+export type HandoffRequest = {
+  id: string;
+  kind: "context";
+  client: { name: string; version: string };
+  reason: string;
+  hint: string;
+  projectId: string;
+  projects: { id: string; name: string }[];
+  createdAt: number;
+  expiresAt: number;
+};
+export type HandoffState = {
+  enabled: boolean;
+  listening: boolean;
+  error: string;
+  pending: HandoffRequest[];
+  grants: {
+    id: string;
+    client: string;
+    projectId: string;
+    projectName: string;
+    expiresAt: number;
+  }[];
+  log: {
+    id: string;
+    at: number;
+    client: string;
+    kind: "context" | "propose";
+    project?: string;
+    result: string;
+    chars: number;
+  }[];
+  setup: {
+    packaged: boolean;
+    snippets: { claude: string; codex: string; cursor: string };
+  };
+};
+export type HandoffProposal = {
+  id: string;
+  client: string;
+  project_hint: string;
+  project_id: string | null;
+  project_name: string | null;
+  items: { kind: ProjectItem["kind"]; content: string }[];
+  note: string;
+  created: number;
+};

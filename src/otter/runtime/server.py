@@ -279,6 +279,14 @@ class Runtime:
                     (session_id,),
                 ).fetchone()
             return row[0] if row else ""
+        # Handoff inbox changes are announced by the desktop broker, not as project edits.
+        if method == "projects.handoff-list":
+            return store.handoff_list()
+        if method == "projects.handoff-add":
+            return store.handoff_add(params)
+        if method == "projects.handoff-dismiss":
+            store.handoff_dismiss(params.get("handoff_id"))
+            return {"ok": True}
         if method == "projects.check":
             project = store.get(project_id)
             if project["archived"] or project["revision"] != params.get("revision"):
@@ -341,6 +349,8 @@ class Runtime:
                 result = store.archive(project_id, params.get("archived"))
             elif method == "projects.manual":
                 return store.draft(project_id, [], [])
+            elif method == "projects.handoff-open":
+                return store.handoff_open(params.get("handoff_id"), project_id)
             elif method == "projects.dismiss":
                 store.dismiss(params.get("draft_id"))
                 return {"ok": True}

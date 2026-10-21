@@ -12,6 +12,7 @@ import { AwarenessPane } from "./AwarenessPane";
 import { PetInteractions, usePetState } from "./PetInteractions";
 import { ChatPane } from "./ChatPane";
 import { MemoryPane } from "./MemoryPane";
+import { HandoffPane } from "./HandoffPane";
 import { ModelSettings } from "./ModelSettings";
 const api = window.otter;
 function message(error: unknown) {
@@ -262,7 +263,9 @@ function Panel() {
     | "assistant"
     | "memory"
     | "projects"
+    | "handoff"
   >("reports");
+  const [handoffPending, setHandoffPending] = useState(0);
   const [projectFocus, setProjectFocus] = useState<string | null>(null);
   const [memoryFocus, setMemoryFocus] = useState<string | null>(null);
   const mainScroll = useRef<HTMLElement | null>(null);
@@ -274,7 +277,7 @@ function Panel() {
     const unsub = api.subscribe((event) => {
       if (
         event.type === "navigation" &&
-        ["chat", "pet", "assistant"].includes(event.data.view)
+        ["chat", "pet", "assistant", "handoff"].includes(event.data.view)
       ) {
         navigated = true;
         setTab(event.data.view);
@@ -283,11 +286,22 @@ function Panel() {
     void api.action<Snapshot>("snapshot").then((s) => {
       if (
         !navigated &&
-        (s.view === "chat" || s.view === "pet" || s.view === "assistant")
+        ["chat", "pet", "assistant", "handoff"].includes(s.view || "")
       )
-        setTab(s.view);
+        setTab(s.view as typeof tab);
     });
     return unsub;
+  }, []);
+  useEffect(() => {
+    const off = api.subscribe((event) => {
+      if (event.type === "handoff.changed")
+        setHandoffPending(event.data.pending.length);
+    });
+    void api
+      .action<{ pending: unknown[] }>("handoff.get")
+      .then((s) => setHandoffPending(s.pending.length))
+      .catch(() => {});
+    return off;
   }, []);
   const [reports, setReports] = useState<Report[]>([]);
   const [selected, setSelected] = useState<Report | null>(null);
@@ -395,6 +409,20 @@ function Panel() {
             <span>▱</span>项目与进度
           </button>
           <button
+            className={tab === "handoff" ? "active" : ""}
+            onClick={() => setTab("handoff")}
+          >
+            <span>⇄</span>AI 交接
+            {!!handoffPending && (
+              <em
+                className="nav-badge"
+                aria-label={`${handoffPending} 个待批准`}
+              >
+                {handoffPending}
+              </em>
+            )}
+          </button>
+          <button
             className={tab === "memory" ? "active" : ""}
             onClick={() => setTab("memory")}
           >
@@ -459,9 +487,11 @@ function Panel() {
                       ? "Otter / 生活助手"
                       : tab === "projects"
                         ? "Otter / 项目与进度"
-                        : tab === "memory"
-                          ? "Otter / 记忆与个性"
-                          : "工作空间 / 设置"}
+                        : tab === "handoff"
+                          ? "Otter / AI 交接"
+                          : tab === "memory"
+                            ? "Otter / 记忆与个性"
+                            : "工作空间 / 设置"}
           </span>
           <span>OTTER {version}</span>
         </header>
@@ -477,6 +507,12 @@ function Panel() {
           {tab === "projects" ? (
             health ? (
               <ProjectsPane key={prefs.config} focusId={projectFocus} />
+            ) : (
+              <p className="muted">正在连接项目数据…</p>
+            )
+          ) : tab === "handoff" ? (
+            health ? (
+              <HandoffPane key={prefs.config} />
             ) : (
               <p className="muted">正在连接项目数据…</p>
             )

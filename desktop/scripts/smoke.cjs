@@ -6,6 +6,7 @@ const path = require("node:path");
 const assert = require("node:assert/strict");
 const http = require("node:http");
 const { projectModelReply, verifyProjects } = require("./project-smoke.cjs");
+const { verifyHandoff } = require("./handoff-smoke.cjs");
 const { extractPage } = require("../electron/page-reader.cjs");
 const { nativeRead } = require("../electron/awareness.cjs");
 const { execFileSync } = require("node:child_process");
@@ -1012,6 +1013,7 @@ const { execFileSync } = require("node:child_process");
       projectRequests,
       output,
     });
+    await verifyHandoff({ panel, pet, userData, output });
     await panel
       .getByRole("button", { name: "与水獭聊天", exact: false })
       .click();

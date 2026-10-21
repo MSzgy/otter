@@ -5,12 +5,14 @@ export function ProjectCapture({
   projectId,
   sessionId,
   manual = false,
+  handoffId,
   onSaved,
   onClose,
 }: {
   projectId: string;
   sessionId?: string;
   manual?: boolean;
+  handoffId?: string;
   onSaved: () => void;
   onClose: () => void;
 }) {
@@ -50,7 +52,17 @@ export function ProjectCapture({
   }
   useEffect(() => {
     alive.current = true;
-    if (manual) {
+    if (handoffId) {
+      setBusy(true);
+      void api
+        .call<ProjectDraft>("projects.handoff-open", {
+          handoff_id: handoffId,
+          project_id: projectId,
+        })
+        .then(adopt)
+        .catch(fail)
+        .finally(() => setBusy(false));
+    } else if (manual) {
       setBusy(true);
       void api
         .call<ProjectDraft>("projects.manual", { project_id: projectId })
@@ -152,7 +164,9 @@ export function ProjectCapture({
           {error}
         </div>
       )}
-      {!draft ? (
+      {!draft && handoffId ? (
+        <p className="muted">{busy ? "正在打开交接内容…" : ""}</p>
+      ) : !draft ? (
         <>
           <p className="muted">
             仅将勾选的内容发送给当前模型。最近 30 条消息中，每条最多取 2000
@@ -234,7 +248,9 @@ export function ProjectCapture({
       ) : (
         <>
           <p className="muted">
-            检查事实是否准确，特别是“已完成”和“下一步”。确认前不会用于项目续接；草稿十分钟内有效。
+            {handoffId
+              ? "这些条目是 AI 工具的自述，Otter 没有核对。请逐条检查后再保存；草稿十分钟内有效，过期可从“AI 交接”重新打开。"
+              : "检查事实是否准确，特别是“已完成”和“下一步”。确认前不会用于项目续接；草稿十分钟内有效。"}
           </p>
           {items.map((item, index) => (
             <article className="project-draft-item" key={item.id}>

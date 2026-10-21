@@ -16,6 +16,9 @@ from zoneinfo import ZoneInfo
 from otter.core.llm import LLMError
 
 KINDS = {"completed": "已完成", "blocker": "当前卡点", "next": "下一步"}
+HANDOFF_KEYS = {"completed": "completed", "blocker": "blockers", "next": "next"}
+HANDOFF_TTL = 7 * 86400
+MAX_HANDOFFS = 20
 
 
 def text(value, limit, allow_empty=False):
@@ -50,6 +53,9 @@ class ProjectStore:
                 CREATE TABLE IF NOT EXISTS bindings (
                     session_id TEXT PRIMARY KEY, project_id TEXT NOT NULL REFERENCES projects(id));
                 CREATE INDEX IF NOT EXISTS snapshots_project ON snapshots(project_id,created);
+                CREATE TABLE IF NOT EXISTS handoffs (
+                    id TEXT PRIMARY KEY, client TEXT NOT NULL, project_hint TEXT NOT NULL,
+                    items TEXT NOT NULL, note TEXT NOT NULL, created REAL NOT NULL);
             """)
         os.chmod(path, 0o600)
 
@@ -232,7 +238,7 @@ class ProjectStore:
             "projects_truncated": len(projects) < len(rows),
         }
 
-    def draft(self, project_id, items, sources, revision=None, session_id=None):
+    def draft(self, project_id, items, sources, revision=None, session_id=None, handoff_id=None):
         with self.lock:
             project = self.get(project_id)
             if project["archived"] or (revision is not None and revision != project["revision"]):
@@ -249,6 +255,7 @@ class ProjectStore:
                 "sources": sources,
                 "created": now,
                 "session_id": session_id,
+                "handoff_id": handoff_id,
             }
             self.drafts[draft["id"]] = draft
             return json.loads(json.dumps(draft))
@@ -317,8 +324,93 @@ class ProjectStore:
                     "UPDATE projects SET revision=revision+1,updated=? WHERE id=?",
                     (now, draft["project_id"]),
                 )
+                if draft.get("handoff_id"):
+                    db.execute("DELETE FROM handoffs WHERE id=?", (draft["handoff_id"],))
             self.drafts.pop(draft["id"], None)
             return self.get(draft["project_id"])
+
+    def handoff_add(self, params):
+        """Queue progress handed in by another AI tool; it is saved only after review."""
+        client = text(params.get("client") or "未知 AI 工具", 80)
+        hint = text(params.get("project") or "", 80, True)
+        note = text(params.get("note") or "", 2000, True)
+        items = []
+        for kind, key in HANDOFF_KEYS.items():
+            values = params.get(key) or []
+            if not isinstance(values, list):
+                raise LLMError("进度条目格式无效。")
+            for value in values:
+                items.append({"kind": kind, "content": text(value, 200 if kind == "next" else 600)})
+        if not 1 <= len(items) <= 15:
+            raise LLMError("请提交 1–15 条进度（已完成、卡点或下一步）。")
+        handoff_id, now = str(uuid.uuid4()), time.time()
+        with self.lock, self.connect() as db:
+            db.execute("DELETE FROM handoffs WHERE created<?", (now - HANDOFF_TTL,))
+            if db.execute("SELECT count(*) FROM handoffs").fetchone()[0] >= MAX_HANDOFFS:
+                raise LLMError(f"Otter 里已有 {MAX_HANDOFFS} 份待检查的交接，请用户先处理。")
+            db.execute(
+                "INSERT INTO handoffs VALUES(?,?,?,?,?,?)",
+                (handoff_id, client, hint, json.dumps(items, ensure_ascii=False), note, now),
+            )
+            match = self._match(db, hint)
+        return {"id": handoff_id, "project": match["name"] if match else None}
+
+    @staticmethod
+    def _match(db, hint):
+        if not hint:
+            return None
+        row = db.execute(
+            "SELECT id,name FROM projects WHERE archived=0 AND lower(name)=lower(?)", (hint,)
+        ).fetchone()
+        return dict(row) if row else None
+
+    def handoff_list(self):
+        with self.lock, self.connect() as db:
+            db.execute("DELETE FROM handoffs WHERE created<?", (time.time() - HANDOFF_TTL,))
+            rows = db.execute("SELECT * FROM handoffs ORDER BY created DESC").fetchall()
+            result = []
+            for row in rows:
+                match = self._match(db, row["project_hint"])
+                result.append(
+                    {
+                        **dict(row),
+                        "items": json.loads(row["items"]),
+                        "project_id": match["id"] if match else None,
+                        "project_name": match["name"] if match else None,
+                    }
+                )
+        return result
+
+    def handoff_open(self, handoff_id, project_id):
+        with self.lock:
+            with self.connect() as db:
+                row = db.execute("SELECT * FROM handoffs WHERE id=?", (handoff_id,)).fetchone()
+            if not row or time.time() - row["created"] >= HANDOFF_TTL:
+                raise LLMError("这份交接已处理或已过期，请刷新。")
+            items = json.loads(row["items"])
+            lines = []
+            for kind, label in KINDS.items():
+                lines += [label + "："] + ["- " + i["content"] for i in items if i["kind"] == kind]
+            if row["note"]:
+                lines += ["附注：", row["note"]]
+            source = {
+                "id": "handoff:" + row["id"],
+                "message_id": "",
+                "session_id": None,
+                "role": "agent",
+                "label": row["client"] + " 交来的进度（自述，未核对）",
+                "attachment": False,
+                "created": row["created"],
+                "content": "\n".join(lines),
+                "truncated": False,
+            }
+            # Agent claims are not the user's words, so they never count as quoted evidence.
+            drafted = [{**i, "source_ids": [source["id"]], "evidence": []} for i in items]
+            return self.draft(project_id, drafted, [source], handoff_id=row["id"])
+
+    def handoff_dismiss(self, handoff_id):
+        with self.lock, self.connect() as db:
+            db.execute("DELETE FROM handoffs WHERE id=?", (handoff_id,))
 
     def delete_snapshot(self, project_id, snapshot_id):
         with self.lock, self.connect() as db:

@@ -11,6 +11,7 @@ const {
   Notification,
   globalShortcut,
   powerMonitor,
+  clipboard,
 } = require("electron");
 const fs = require("node:fs");
 const { createHash, randomUUID } = require("node:crypto");
@@ -48,6 +49,8 @@ const { AssistantStore } = require("./assistant-store.cjs");
 const { TaskAssistant } = require("./task-assistant.cjs");
 let assistantStore, taskAssistant;
 const { Ambient } = require("./ambient.cjs");
+const { HandoffBroker, setupSnippets } = require("./handoff.cjs");
+const os = require("node:os");
 let ambient = new Ambient(),
   lastAmbientApp = "";
 let assistantError = "生活助手尚未就绪。";
@@ -84,7 +87,8 @@ let currentHealth = null,
   offlineMessage = "",
   drag = null;
 let chatState = null,
-  activeView = "reports";
+  activeView = "reports",
+  handoff;
 const root = path.resolve(__dirname, "../..");
 const page = path.resolve(__dirname, "../dist/index.html");
 const prefsPath = () => path.join(app.getPath("userData"), "desktop.json");
@@ -154,6 +158,9 @@ async function connect() {
     }
     contextDraft.clear();
     contextError = "";
+    handoff?.reset(
+      "Otter 切换了工作空间，请重试。(Otter switched workspaces.)",
+    );
     if (panel && !panel.isDestroyed())
       panel.webContents.send("otter:event", {
         type: "context.draft",
@@ -314,6 +321,47 @@ function showChat() {
       type: "navigation",
       data: { view: "chat" },
     });
+}
+function showHandoff() {
+  activeView = "handoff";
+  showPanel();
+  if (panel && !panel.isDestroyed())
+    panel.webContents.send("otter:event", {
+      type: "navigation",
+      data: { view: "handoff" },
+    });
+}
+function handoffSetup() {
+  const command = app.isPackaged
+    ? path.join(process.resourcesPath, "backend/otter-runtime/otter-runtime")
+    : process.env.OTTER_PYTHON || path.join(root, ".venv/bin/python");
+  const args = app.isPackaged ? ["mcp"] : ["-m", "otter.handoff.mcp_server"];
+  const env = app.isPackaged ? {} : { PYTHONPATH: path.join(root, "src") };
+  const fallback = path.join(
+    os.homedir(),
+    "Library/Application Support/otter-desktop/handoff.sock",
+  );
+  if (handoff.socketPath !== fallback)
+    env.OTTER_HANDOFF_SOCKET = handoff.socketPath;
+  return {
+    packaged: app.isPackaged,
+    snippets: setupSnippets({ command, args, env }),
+  };
+}
+function handoffState() {
+  return {
+    ...handoff.snapshot(),
+    enabled: preferences.handoff?.enabled === true,
+    setup: handoffSetup(),
+  };
+}
+function handoffNotify(title, body) {
+  if (Notification.isSupported()) {
+    const note = new Notification({ title, body });
+    note.on("click", showHandoff);
+    note.show();
+  }
+  broadcast({ type: "pet.notice", data: { message: body } });
 }
 function draftToChat(text, label) {
   contextError = "";
@@ -512,6 +560,9 @@ ipcMain.handle("otter:call", async (event, method, params) => {
       "projects.dismiss",
       "projects.commit",
       "projects.delete-snapshot",
+      "projects.handoff-list",
+      "projects.handoff-open",
+      "projects.handoff-dismiss",
       "memory.get",
       "memory.candidates",
       "memory.ai-configure",
@@ -907,6 +958,36 @@ ipcMain.handle("otter:action", async (event, name, value) => {
       );
     throw new Error("不支持的感知操作。");
   }
+  if (name.startsWith("handoff.")) {
+    if (event.sender !== panel.webContents)
+      throw new Error("请在主面板处理 AI 交接。");
+    if (!handoff) throw new Error("AI 交接尚未就绪。");
+    if (name === "handoff.get") return handoffState();
+    if (name === "handoff.configure") {
+      if (typeof value?.enabled !== "boolean") throw new Error("设置无效。");
+      preferences.handoff = { enabled: value.enabled };
+      save();
+      await (value.enabled ? handoff.start() : handoff.stop());
+      return handoffState();
+    }
+    if (name === "handoff.preview")
+      return handoff.preview(value?.requestId, value?.projectId);
+    if (name === "handoff.decide") {
+      await handoff.decide(value?.requestId, value || {});
+      return handoffState();
+    }
+    if (name === "handoff.copy") {
+      const text = handoffSetup().snippets[value];
+      if (typeof text !== "string") throw new Error("没有这个接入方式。");
+      clipboard.writeText(text);
+      return { ok: true };
+    }
+    if (name === "handoff.revoke") {
+      handoff.revoke(value);
+      return handoffState();
+    }
+    throw new Error("不支持的交接操作。");
+  }
   if (name === "open-panel") return showPanel();
   if (name === "open-chat") return showChat();
   if (name === "pet.interact" && typeof value === "string")
@@ -1198,6 +1279,43 @@ else {
     speechPlayer = new SpeechPlayer({
       emit: (state) => broadcast({ type: "voice.activity", data: state }),
     });
+    handoff = new HandoffBroker({
+      socketPath: path.join(app.getPath("userData"), "handoff.sock"),
+      logPath: path.join(app.getPath("userData"), "handoff.json"),
+      call: (method, params) =>
+        !backend || switching
+          ? Promise.reject(new Error("Otter 后台未连接，请稍后重试。"))
+          : backend.call(method, params),
+      todos: (projectId) =>
+        (assistantStore?.snapshot().todos || []).filter(
+          (t) => t.projectId === projectId,
+        ),
+      timezone: () => currentHealth?.timezone,
+    });
+    handoff.on("changed", () => {
+      if (panel && !panel.isDestroyed())
+        panel.webContents.send("otter:event", {
+          type: "handoff.changed",
+          data: handoffState(),
+        });
+    });
+    handoff.on("inbox", () => {
+      if (panel && !panel.isDestroyed())
+        panel.webContents.send("otter:event", { type: "handoff.inbox" });
+    });
+    handoff.on("request", (r) =>
+      handoffNotify(
+        "Otter · AI 交接请求",
+        `${r.client.name} 想读取${r.project ? `「${r.project}」的` : ""}项目进度，请在“AI 交接”里决定。`,
+      ),
+    );
+    handoff.on("proposal", (p) =>
+      handoffNotify(
+        "Otter · 收到交接进度",
+        `${p.client.name} 交来一份${p.project ? `「${p.project}」的` : ""}进度，等你检查。`,
+      ),
+    );
+    if (preferences.handoff?.enabled) void handoff.start();
     const audioTemp = path.join(app.getPath("userData"), "audio-temp");
     if (fs.existsSync(audioTemp))
       for (const name of fs.readdirSync(audioTemp)) {
@@ -1215,6 +1333,7 @@ else {
     clearTimeout(petEffectTimer);
     awareness?.close();
     appContentReader?.clear();
+    void handoff?.stop();
     assistantStore?.close();
     speechPlayer?.stop();
     globalShortcut.unregisterAll();
