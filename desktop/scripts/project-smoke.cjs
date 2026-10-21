@@ -57,6 +57,28 @@ async function verifyProjects({
     await input().fill(text);
     await panel.getByRole("button", { name: "发送", exact: true }).click();
   };
+  // Assert on the request that carried this message, not whatever arrived last:
+  // a local "continue project" reply can bump the message count first.
+  const chatRequest = async (text) => {
+    for (let i = 0; i < 400; i++) {
+      const found = requests.findLast(
+        (r) => r.body.stream && r.body.messages.at(-1)?.content.includes(text),
+      );
+      if (found) return found;
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+    throw new Error(`没有收到包含「${text}」的聊天请求`);
+  };
+  // Once the request has arrived, the reply is streaming or done; wait it out
+  // so later project edits are not refused as "reply in progress".
+  const reply = async (text) => {
+    const request = await chatRequest(text);
+    await panel
+      .getByRole("button", { name: "停止回复", exact: true })
+      .waitFor({ state: "detached" });
+    await panel.waitForFunction(() => !document.querySelector(".chat-cursor"));
+    return request;
+  };
   const chat = () =>
     panel.getByRole("button", { name: "与水獭聊天", exact: false }).click();
   const projects = () =>
@@ -136,7 +158,9 @@ async function verifyProjects({
   await panel
     .getByRole("button", { name: "停止回复", exact: true })
     .waitFor({ state: "detached" });
-  assert(requests.at(-1).body.messages[0].content.includes("验证供电"));
+  assert(
+    (await reply(sourceText)).body.messages[0].content.includes("验证供电"),
+  );
   await send("今天先做到这里，保存项目进度");
   const capture = panel.getByRole("region", { name: "保存项目进度" });
   await capture.waitFor();
@@ -229,8 +253,9 @@ async function verifyProjects({
   await panel
     .getByRole("button", { name: "停止回复", exact: true })
     .waitFor({ state: "detached" });
-  assert(requests.at(-1).body.messages[0].content.includes("另一项目专属进度"));
-  assert(!requests.at(-1).body.messages[0].content.includes("测试稳压电源"));
+  const organized = (await reply("帮我梳理一下")).body.messages[0].content;
+  assert(organized.includes("另一项目专属进度"));
+  assert(!organized.includes("测试稳压电源"));
   await projects();
   await panel
     .getByRole("button", { name: "选择项目 另一个项目测试", exact: true })
