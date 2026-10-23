@@ -1,0 +1,8 @@
+node_modules/
+output/
+.playwright-cli/
+.tools/
+backups/
+.DS_Store
+*.log
+firmware/*/build/

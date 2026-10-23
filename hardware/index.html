@@ -1,0 +1,186 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#f5f7f4">
+    <title>Otter · 硬件预演台</title>
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ctext y='50' font-size='50'%3E🦦%3C/text%3E%3C/svg%3E">
+    <link rel="stylesheet" href="/style.css">
+    <script type="module" src="/app.mjs"></script>
+  </head>
+  <body>
+    <header class="topbar">
+      <a class="brand" href="/" aria-label="Otter 硬件预演台首页">
+        <span class="brand-mark" aria-hidden="true">🦦</span>
+        <span>otter<span class="brand-slash">/</span><span class="brand-section">硬件预演台</span></span>
+      </a>
+      <div class="top-actions">
+        <span class="local-label"><span class="tiny-dot"></span>本机运行 · 模拟模式</span>
+        <button class="text-button" id="open-guide">跟着学 <span aria-hidden="true">↗</span></button>
+      </div>
+    </header>
+
+    <main>
+      <div class="page-heading">
+        <div><div class="eyebrow">OTTER HARDWARE LAB <span>01</span></div>
+          <h1>给水獭一个小小的身体。</h1>
+          <p>先在屏幕里练习表情、摸头和动作。等硬件到货，再把它们接到现实里。</p>
+        </div>
+        <button class="button secondary compact" id="reset-lab">重新开始</button>
+      </div>
+
+      <div class="workspace">
+        <section class="preview-panel" aria-labelledby="preview-title">
+          <div class="panel-heading">
+            <h2 id="preview-title">身体预览</h2>
+            <span class="connection-pill" id="connection-pill"><span class="status-dot"></span><span id="connection-label">模拟设备已连接</span></span>
+          </div>
+          <div class="stage">
+            <div class="stage-meta"><span id="screen-size">320 × 240 · 横屏预览</span><span>2.8″ 屏幕方案</span></div>
+            <div class="device-space">
+              <div class="device">
+                <button id="head-touch" class="touch-target" aria-label="摸摸水獭的头，长按一秒切换休息">
+                  <span class="touch-ring" aria-hidden="true"></span>
+                  <span id="touch-hint">摸摸这里</span>
+                  <span class="touch-arrow" aria-hidden="true">↓</span>
+                </button>
+                <div class="head-pivot" id="head-pivot">
+                  <div class="ear ear-left"></div><div class="ear ear-right"></div>
+                  <div class="head-shell" id="head-shell">
+                    <div class="screen-bezel">
+                      <canvas id="face" width="320" height="240" aria-label="水獭正在陪伴你"></canvas>
+                    </div>
+                    <span class="shell-wordmark" aria-hidden="true">otter</span>
+                    <span class="shell-dot" id="shell-dot" aria-hidden="true"></span>
+                  </div>
+                </div>
+                <div class="neck"></div>
+                <div class="device-base"><span></span></div>
+                <div class="device-shadow"></div>
+              </div>
+            </div>
+            <div class="mood-caption">
+              <span class="mood-dot"></span><strong id="mood-label">陪伴中</strong>
+              <span id="action-label">等你摸摸头</span>
+            </div>
+            <div class="pose-readout">
+              <div><span>左右转头</span><div class="pose-track"><i id="pan-indicator"></i></div><output id="pan-value">0°</output></div>
+              <div><span>上下点头</span><div class="pose-track"><i id="tilt-indicator"></i></div><output id="tilt-value">0°</output></div>
+            </div>
+          </div>
+          <div class="preview-footer">
+            <span>外形与角度为示意，实物到货后再标定。</span>
+            <button id="orientation" class="text-button">切换为竖屏</button>
+          </div>
+        </section>
+
+        <section class="controls-panel" aria-labelledby="controls-title">
+          <div class="panel-heading"><h2 id="controls-title">和它互动</h2><span class="section-number">01 — 03</span></div>
+          <div class="control-section touch-section">
+            <div class="section-label"><span>01</span><h3>从摸摸头开始</h3></div>
+            <div class="touch-actions">
+              <button class="button primary" id="touch-button"><span aria-hidden="true">✋</span> 摸摸头</button>
+              <button class="button secondary" id="long-press-button">长按 · 休息 / 唤醒</button>
+            </div>
+            <p class="helper">也可以按住预览中头顶的位置一秒。短按眯眼，长按切换休息。</p>
+          </div>
+          <div class="control-section">
+            <div class="section-label"><span>02</span><h3>换一个表情</h3></div>
+            <div class="mood-buttons" role="group" aria-label="选择表情">
+              <button data-mood="idle" aria-pressed="true"><span aria-hidden="true">● ●</span>陪伴</button>
+              <button data-mood="happy" aria-pressed="false"><span aria-hidden="true">⌒ ⌒</span>开心</button>
+              <button data-mood="listening" aria-pressed="false"><span aria-hidden="true">◕ ◕</span>认真听</button>
+              <button data-mood="thinking" aria-pressed="false"><span aria-hidden="true">· · ·</span>想一想</button>
+              <button data-mood="speaking" aria-pressed="false"><span aria-hidden="true">◡ ◡</span>说话</button>
+              <button data-mood="sleeping" aria-pressed="false"><span aria-hidden="true">— —</span>休息</button>
+            </div>
+          </div>
+          <div class="control-section movement-section">
+            <div class="section-label"><span>03</span><h3>让身体回应</h3></div>
+            <div class="motion-buttons" role="group" aria-label="头部动作">
+              <button class="button secondary" data-action="look_left">← 左看</button>
+              <button class="button secondary" data-action="nod">↕ 点头</button>
+              <button class="button secondary" data-action="look_right">右看 →</button>
+              <button class="button secondary" data-action="center">回正</button>
+            </div>
+            <div class="demo-buttons">
+              <button class="button demo-button" id="conversation-demo"><span aria-hidden="true">▷</span> 演示一次对话</button>
+              <button class="text-button stop-button" id="stop-motion">停止动作</button>
+            </div>
+            <p class="helper">对话为预设动画，不使用模型或麦克风。</p>
+          </div>
+          <p id="notice" class="notice" role="status" aria-live="polite">准备好了，摸摸我的头吧。</p>
+        </section>
+      </div>
+
+      <section class="lesson-strip" aria-labelledby="lesson-title">
+        <div class="lesson-intro"><span class="eyebrow">边做边学 · 第一课</span><h2 id="lesson-title">摸头之后，发生了什么？</h2>
+          <p>试着摸一次头，观察这四步依次发生。</p></div>
+        <ol class="lesson-flow">
+          <li id="step-touch"><span>1</span><strong>设备先眯眼</strong><small>本地立即回应</small></li>
+          <li id="step-sent"><span>2</span><strong>告诉 Mac</strong><small>上报触摸事件</small></li>
+          <li id="step-moved"><span>3</span><strong>收到点头指令</strong><small>按预设动作执行</small></li>
+          <li id="step-returned"><span>4</span><strong>恢复之前状态</strong><small>动作和表情结束</small></li>
+        </ol>
+      </section>
+
+      <div class="lower-grid">
+        <section class="tuning-panel" aria-labelledby="tuning-title">
+          <div class="panel-heading"><h2 id="tuning-title">调整互动手感</h2><span class="muted">改一改，马上试</span></div>
+          <div class="slider-row">
+            <label for="touch-duration">开心停留多久 <output id="touch-duration-value">2.8 秒</output></label>
+            <input id="touch-duration" type="range" min="1000" max="5000" step="100" value="2800">
+            <div class="range-captions"><span>短暂回应</span><span>多开心一会儿</span></div>
+          </div>
+          <div class="slider-row">
+            <label for="nod-duration">点头的节奏 <output id="nod-duration-value">1.4 秒</output></label>
+            <input id="nod-duration" type="range" min="600" max="2500" step="100" value="1400">
+            <div class="range-captions"><span>轻快</span><span>舒缓</span></div>
+          </div>
+          <div class="slider-row last">
+            <label for="strength">动作幅度 <output id="strength-value">65%</output></label>
+            <input id="strength" type="range" min="10" max="100" step="5" value="65">
+            <div class="range-captions"><span>轻轻动一下</span><span>更明显</span></div>
+          </div>
+        </section>
+        <section class="connection-panel" aria-labelledby="connection-title">
+          <div class="panel-heading"><h2 id="connection-title">连接演练</h2><button id="toggle-connection" class="text-button">断开模拟连接</button></div>
+          <label class="switch-row" for="screen-only"><span><strong>只有屏幕</strong><small>还没装舵机时，动作改用表情回应。</small></span><input id="screen-only" type="checkbox" role="switch"></label>
+          <div class="slider-row compact-slider">
+            <label for="latency">模拟传输延迟 <output id="latency-value">80 毫秒</output></label>
+            <input id="latency" type="range" min="0" max="2000" step="10" value="80">
+          </div>
+          <div class="fault-buttons">
+            <button class="button secondary" data-fault="duplicate">重复发一次</button>
+            <button class="button secondary" data-fault="expired">让动作过期</button>
+            <button class="button secondary" data-fault="reconnect">断线后重连</button>
+          </div>
+          <p class="helper">模拟消息传输与设备响应，没有连接真实硬件。</p>
+        </section>
+      </div>
+
+      <details class="trace-panel" id="trace-panel">
+        <summary><span>通信记录 <span class="trace-count" id="trace-count">1</span></span><span class="trace-summary" id="trace-summary">展开看 Mac 与模拟设备怎样配合</span></summary>
+        <div class="trace-toolbar"><p>只记录本次预演的操作。导出内容不包含聊天或项目数据。</p><button id="export-trace" class="button secondary compact">导出演练记录</button></div>
+        <ol id="trace-list" class="trace-list" aria-label="通信记录"></ol>
+      </details>
+      <footer class="page-footer"><span>OTTER / FROM PIXELS TO A LITTLE COMPANION</span><a href="/README.md" target="_blank" rel="noopener">运行说明与项目边界 ↗</a></footer>
+    </main>
+
+    <dialog id="guide-dialog" aria-labelledby="guide-title">
+      <div class="dialog-top"><span class="eyebrow">跟着学</span><button id="close-guide" class="text-button" aria-label="关闭教学">关闭 ×</button></div>
+      <h2 id="guide-title">第一课：让摸头有回应</h2>
+      <p class="guide-lead">今天先理解“输入 → 本地反馈 → 通信 → 动作”，暂时不用接线。</p>
+      <ol class="guide-steps">
+        <li><strong>摸一次头</strong><p>看眼睛先眯起来，再看头部点动。触摸反馈由设备本地完成，不必等 Mac 或模型。</p></li>
+        <li><strong>把“开心停留多久”改成 4 秒</strong><p>等上次互动结束再摸头。表情停留时间和点头时间是两个独立参数。</p></li>
+        <li><strong>连续点两次摸头</strong><p>第二次被冷却规则拦下，避免动作堆积。它仍会完成第一次回应。</p></li>
+        <li><strong>断开模拟连接，再摸头</strong><p>本地眯眼仍然有效；通知 Mac 和接收点头指令这两步暂停。</p></li>
+        <li><strong>重新连接，试一次“让动作过期”</strong><p>展开通信记录。旧动作不应该在很久以后突然执行。</p></li>
+      </ol>
+      <div class="guide-code"><strong>对应代码，从这里读起</strong><a href="/src/body.mjs" target="_blank" rel="noopener">src/body.mjs · input() 处理触摸 ↗</a><a href="/src/lab.mjs" target="_blank" rel="noopener">src/lab.mjs · input() 安排后续动作 ↗</a><a href="/docs/LESSON-01.md" target="_blank" rel="noopener">完整第一课与练习答案 ↗</a><a href="/docs/PROTOCOL.md" target="_blank" rel="noopener">通信协议草案与真实接入边界 ↗</a></div>
+      <p class="guide-footnote">屏幕绘制和运动都是软件模拟；真实屏幕、供电、舵机与触摸片需要到货后单独验证。</p>
+    </dialog>
+  </body>
+</html>
