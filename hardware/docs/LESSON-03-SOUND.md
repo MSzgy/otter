@@ -8,6 +8,7 @@
 - Mac 发送 `SOUND beep` 或 `SOUND chirp`，板子回应 `OK SOUND …` 并播放。
 - 声音由程序现场计算正弦波生成，不读 SD 卡、不联网、不需要音频文件。
 - 一次只播一段；正在播放时再请求，回应 `ERR sound busy`。
+- 点一下屏幕，除了开心表情，还会“啾”一声（`chirp`）。这是板子自己的反应，不经过 Mac。
 - 固件版本升为 `otter-face-0.2.0`，`INFO` 增加 `audio_available` 字段。
 
 ## 声音是怎么出来的
@@ -75,7 +76,10 @@ ESP32-S3 有两个核心。Arduino 的 `loop()` 跑在核心 1，每 50 毫秒�
 
 1. **换个音高**：在 sound.cpp 里把 `beepNotes` 的 `880` 改成 `440`，重新编译、烧录、复位，听听低了八度的声音。
 2. **加一段新声音**：仿照 `chirpNotes` 写一个 `sleepyNotes`，比如频率从 600 Hz 慢慢降到 300 Hz，加进 `clips` 列表。还要在 face-control.py 的 `COMMANDS` 里加一个短名字。
-3. **摸一下就叫一声**：在 otter_face.ino 检测到触摸的地方调用 `sound::play("chirp")`。想一想：为什么这里不需要等 Mac 下指令？
+3. **摸一下就叫一声（已完成，固件里已经带上了）**：otter_face.ino 在检测到“刚碰到屏幕”的分支里调用了 `sound::play("chirp")`，只加了这一行。
+   - 为什么不需要等 Mac 下指令？发现触摸和做出反应都在板子自己的 `loop()` 里完成，不经过 USB 线；`EVENT screen_touch` 只是顺便告诉 Mac。拔掉 Mac、只用充电头供电，点屏幕照样会叫。
+   - 快速连点时，上一声还没播完，表情照样变开心，但这一下不出声：`sound::play` 返回 `Busy`，这里有意不处理，声音就不会排成一长串。
+   - 想一边听一边看事件，可以运行 `.tools/python/bin/python scripts/face-control.py idle --listen 15`，再点屏幕。
 
 ## 一手资料
 

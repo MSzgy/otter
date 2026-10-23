@@ -152,6 +152,7 @@ void loop() {
         touches++;
         baseMood = Mood::Idle;
         happyUntil = now + happyDurationMs;
+        sound::play("chirp");  // Local reflex; if a clip is still playing, this tap stays quiet.
         Serial.printf("EVENT screen_touch %lu\n", (unsigned long)touches);
       }
       wasTouched = contact != 0;
