@@ -1,11 +1,13 @@
-// Lesson 2: the physical screen can blink, react to a screen tap, and accept
-// bounded USB commands. No motors, Wi-Fi, credentials, or battery control.
+// Lessons 2-3: the physical screen can blink, react to a screen tap, play short
+// built-in sounds, and accept bounded USB commands. No motors, Wi-Fi,
+// credentials, or battery control.
 #include <Arduino.h>
 #include <Wire.h>
 #include <esp_heap_caps.h>
 #include <cstring>
 #include "display.h"
 #include "face.h"
+#include "sound.h"
 
 constexpr uint32_t happyDurationMs = 2800;
 constexpr uint32_t framePeriodMs = 50;  // 20 frames per second.
@@ -13,7 +15,7 @@ uint16_t *framebuffer = nullptr;
 Mood baseMood = Mood::Idle;
 uint32_t happyUntil = 0, blinkUntil = 0, lastFrame = 0, lastTouchPoll = 0;
 uint32_t touches = 0;
-bool touchAvailable = false, wasTouched = false;
+bool touchAvailable = false, wasTouched = false, audioAvailable = false;
 char commandBuffer[96];
 size_t commandLength = 0;
 bool discardCommand = false;
@@ -60,11 +62,12 @@ int readTouch() {
 
 void reportInfo() {
   Serial.printf(
-    "{\"firmware\":\"otter-face-0.1.0\",\"board\":\"ESP32-S3-Touch-LCD-2.8-V2\","
+    "{\"firmware\":\"otter-face-0.2.0\",\"board\":\"ESP32-S3-Touch-LCD-2.8-V2\","
     "\"width\":240,\"height\":320,\"flash_bytes\":%lu,\"psram_bytes\":%lu,"
-    "\"touch_available\":%s,\"touches\":%lu,\"mood\":\"%s\"}\n",
+    "\"touch_available\":%s,\"audio_available\":%s,\"touches\":%lu,\"mood\":\"%s\"}\n",
     (unsigned long)ESP.getFlashChipSize(), (unsigned long)ESP.getPsramSize(),
-    touchAvailable ? "true" : "false", (unsigned long)touches, moodName(currentMood(millis())));
+    touchAvailable ? "true" : "false", audioAvailable ? "true" : "false",
+    (unsigned long)touches, moodName(currentMood(millis())));
 }
 void handleCommand(const char *command) {
   if (strcmp(command, "PING") == 0) {
@@ -86,8 +89,16 @@ void handleCommand(const char *command) {
     else { Serial.println("ERR unsupported face"); return; }
     happyUntil = 0;
     Serial.printf("OK FACE %s\n", name);
+  } else if (strncmp(command, "SOUND ", 6) == 0) {
+    const char *name = command + 6;
+    switch (sound::play(name)) {
+      case sound::Result::Queued: Serial.printf("OK SOUND %s\n", name); break;
+      case sound::Result::Busy: Serial.println("ERR sound busy"); break;
+      case sound::Result::Unavailable: Serial.println("ERR sound unavailable"); break;
+      default: Serial.println("ERR unsupported sound");
+    }
   } else if (strcmp(command, "HELP") == 0) {
-    Serial.println("PING | INFO | BLINK | FACE idle/happy/sleeping/thinking/speaking");
+    Serial.println("PING | INFO | BLINK | FACE idle/happy/sleeping/thinking/speaking | SOUND beep/chirp");
   } else if (command[0]) {
     Serial.println("ERR unknown command");
   }
@@ -126,6 +137,7 @@ void setup() {
   drawFace(framebuffer, Mood::Idle, millis(), false);
   screen::present(framebuffer);
   initTouch();
+  audioAvailable = sound::begin();
   Serial.println("OTTER FACE READY");
 }
 

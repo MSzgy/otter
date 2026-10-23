@@ -44,7 +44,11 @@ OTTER_LAB_PORT=4179 npm start
 | `docs/LESSON-01.md` | 第一课和动手练习 |
 | `docs/PROTOCOL.md` | 协议草案、迁移注意事项 |
 | `docs/HARDWARE-ARRIVAL.md` | 到货后的验收顺序与资料 |
+| `docs/LESSON-02-SCREEN.md` | 第二课：真实屏幕上的表情与触摸 |
+| `docs/LESSON-03-SOUND.md` | 第三课：用板载喇叭发声 |
 | `firmware/serial_probe/serial_probe.ino` | Arduino 串口自检入门固件 |
+| `firmware/otter_face/` | 真实板卡固件：表情、屏幕触摸、内置声音和 USB 指令 |
+| `scripts/face-control.py` | 从 Mac 向真实板卡发送白名单指令 |
 
 ## 验证
 

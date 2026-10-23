@@ -8,6 +8,7 @@ import time
 import serial
 from serial.tools import list_ports
 
+FIRMWARE = "otter-face-0.2.0"
 COMMANDS = {
     "info": "INFO",
     "ping": "PING",
@@ -17,6 +18,8 @@ COMMANDS = {
     "sleep": "FACE sleeping",
     "thinking": "FACE thinking",
     "speaking": "FACE speaking",
+    "beep": "SOUND beep",
+    "chirp": "SOUND chirp",
 }
 
 
@@ -53,15 +56,18 @@ def main():
         connection.write(b"INFO\n")
         response = read_until(connection, lambda line: line.startswith('{"firmware":'))
         info = json.loads(response)
-        if info.get("firmware") != "otter-face-0.1.0":
-            raise RuntimeError("设备固件版本不匹配；没有发送表情指令。")
+        if info.get("firmware") != FIRMWARE:
+            raise RuntimeError(f"设备固件不是 {FIRMWARE}；没有发送指令。")
         if args.action == "info":
             print(json.dumps(info, ensure_ascii=False, indent=2), flush=True)
         else:
             command = COMMANDS[args.action]
             connection.write((command + "\n").encode())
             expected = "PONG" if args.action == "ping" else "OK " + command
-            print(read_until(connection, lambda line: line == expected), flush=True)
+            reply = read_until(connection, lambda line: line == expected or line.startswith("ERR "))
+            if reply.startswith("ERR "):
+                raise RuntimeError("设备拒绝了指令：" + reply)
+            print(reply, flush=True)
         if args.listen:
             print(f"正在监听 {args.listen} 秒，可以点一下屏幕。", flush=True)
             deadline = time.monotonic() + args.listen
