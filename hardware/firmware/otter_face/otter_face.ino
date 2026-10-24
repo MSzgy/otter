@@ -1,12 +1,14 @@
-// Lessons 2-3: the physical screen can blink, react to a screen tap, play short
-// built-in sounds, and accept bounded USB commands. No motors, Wi-Fi,
-// credentials, or battery control.
+// Lessons 2-5: the physical screen can blink, react to a screen tap, play short
+// built-in sounds, read the bus servos without moving them, and accept bounded
+// USB commands. No motor motion, Wi-Fi, credentials, or battery control.
 #include <Arduino.h>
 #include <Wire.h>
 #include <esp_heap_caps.h>
+#include <cstdlib>
 #include <cstring>
 #include "display.h"
 #include "face.h"
+#include "servo.h"
 #include "sound.h"
 
 constexpr uint32_t happyDurationMs = 2800;
@@ -62,7 +64,7 @@ int readTouch() {
 
 void reportInfo() {
   Serial.printf(
-    "{\"firmware\":\"otter-face-0.2.0\",\"board\":\"ESP32-S3-Touch-LCD-2.8-V2\","
+    "{\"firmware\":\"otter-face-0.3.0\",\"board\":\"ESP32-S3-Touch-LCD-2.8-V2\","
     "\"width\":240,\"height\":320,\"flash_bytes\":%lu,\"psram_bytes\":%lu,"
     "\"touch_available\":%s,\"audio_available\":%s,\"touches\":%lu,\"mood\":\"%s\"}\n",
     (unsigned long)ESP.getFlashChipSize(), (unsigned long)ESP.getPsramSize(),
@@ -97,8 +99,46 @@ void handleCommand(const char *command) {
       case sound::Result::Unavailable: Serial.println("ERR sound unavailable"); break;
       default: Serial.println("ERR unsupported sound");
     }
+  } else if (strcmp(command, "SERVO SCAN") == 0) {
+    // Blocks for about a second; the face pauses while it runs.
+    uint8_t ids[16];
+    const size_t count = servo::scan(ids, sizeof(ids));
+    Serial.print("{\"servos\":[");
+    for (size_t i = 0; i < count; i++) Serial.printf(i ? ",%u" : "%u", ids[i]);
+    Serial.println("]}");
+  } else if (strcmp(command, "SERVO PINS") == 0) {
+    int levels[4];
+    servo::probePins(levels);
+    Serial.printf("PINS gpio43 down=%d up=%d gpio44 down=%d up=%d\n", levels[0], levels[1],
+                  levels[2], levels[3]);
+  } else if (strncmp(command, "SERVO RAW ", 10) == 0) {
+    char *end = nullptr;
+    const long id = strtol(command + 10, &end, 10);
+    if (end == command + 10 || *end || id < 0 || id > 253) {
+      Serial.println("ERR invalid servo id");
+    } else {
+      uint8_t received[32];
+      const size_t n = servo::rawPing(uint8_t(id), received, sizeof(received));
+      Serial.printf("RAW %ld got %u bytes:", id, unsigned(n));
+      for (size_t i = 0; i < n; i++) Serial.printf(" %02x", received[i]);
+      Serial.println();
+    }
+  } else if (strncmp(command, "SERVO STATUS ", 13) == 0) {
+    char *end = nullptr;
+    const long id = strtol(command + 13, &end, 10);
+    servo::Status status;
+    if (end == command + 13 || *end || id < 0 || id > 253) {
+      Serial.println("ERR invalid servo id");
+    } else if (!servo::readStatus(uint8_t(id), status)) {
+      Serial.printf("ERR servo %ld no reply\n", id);
+    } else {
+      Serial.printf("{\"servo\":%ld,\"pos\":%u,\"load\":%u,\"volts\":%.1f,\"temp\":%u,\"torque\":%s}\n",
+                    id, status.position, status.load, status.volts, status.temperature,
+                    status.torque ? "true" : "false");
+    }
   } else if (strcmp(command, "HELP") == 0) {
-    Serial.println("PING | INFO | BLINK | FACE idle/happy/sleeping/thinking/speaking | SOUND beep/chirp");
+    Serial.println("PING | INFO | BLINK | FACE idle/happy/sleeping/thinking/speaking | SOUND beep/chirp"
+                   " | SERVO SCAN | SERVO STATUS <id> | SERVO RAW <id> | SERVO PINS");
   } else if (command[0]) {
     Serial.println("ERR unknown command");
   }
@@ -138,6 +178,7 @@ void setup() {
   screen::present(framebuffer);
   initTouch();
   audioAvailable = sound::begin();
+  servo::begin();
   Serial.println("OTTER FACE READY");
 }
 

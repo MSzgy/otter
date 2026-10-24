@@ -8,8 +8,9 @@ import time
 import serial
 from serial.tools import list_ports
 
-FIRMWARE = "otter-face-0.2.0"
+FIRMWARE = "otter-face-0.3.0"
 COMMANDS = {
+    "servos": "SERVO SCAN",  # then SERVO STATUS for each servo found; read-only
     "info": "INFO",
     "ping": "PING",
     "blink": "BLINK",
@@ -30,6 +31,16 @@ def read_until(connection, predicate, timeout=6):
         if line and predicate(line):
             return line
     raise RuntimeError("设备没有返回预期响应。请确认已烧录 otter_face，且没有其他程序占用串口。")
+
+
+def show_servos(connection):
+    connection.write(b"SERVO SCAN\n")
+    found = json.loads(read_until(connection, lambda line: line.startswith('{"servos":')))
+    print("找到舵机：", found["servos"] or "无", flush=True)
+    for servo_id in found["servos"]:
+        connection.write(f"SERVO STATUS {servo_id}\n".encode())
+        reply = read_until(connection, lambda line: line.startswith(('{"servo":', "ERR ")))
+        print(reply, flush=True)
 
 
 def main():
@@ -60,6 +71,8 @@ def main():
             raise RuntimeError(f"设备固件不是 {FIRMWARE}；没有发送指令。")
         if args.action == "info":
             print(json.dumps(info, ensure_ascii=False, indent=2), flush=True)
+        elif args.action == "servos":
+            show_servos(connection)
         else:
             command = COMMANDS[args.action]
             connection.write((command + "\n").encode())

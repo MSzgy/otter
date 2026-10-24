@@ -47,8 +47,9 @@ OTTER_LAB_PORT=4179 npm start
 | `docs/LESSON-02-SCREEN.md` | 第二课：真实屏幕上的表情与触摸 |
 | `docs/LESSON-03-SOUND.md` | 第三课：用板载喇叭发声 |
 | `docs/LESSON-04-SERVO.md` | 第四课：供电、总线协议、编号与第一次转动 |
+| `docs/LESSON-05-ESP32-SERVO.md` | 第五课：ESP32 通过 UART 读取舵机（只读） |
 | `firmware/serial_probe/serial_probe.ino` | Arduino 串口自检入门固件 |
-| `firmware/otter_face/` | 真实板卡固件：表情、屏幕触摸、内置声音和 USB 指令 |
+| `firmware/otter_face/` | 真实板卡固件：表情、屏幕触摸、内置声音、只读舵机总线和 USB 指令 |
 | `scripts/face-control.py` | 从 Mac 向真实板卡发送白名单指令 |
 | `scripts/servo-bus.py` | 通过舵机控制板（跳线 B）扫描、读取、慢速转动舵机和修改编号 |
 
