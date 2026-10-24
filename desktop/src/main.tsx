@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import Markdown from "react-markdown";
-import { Otter, type Mood } from "./Otter";
+import { Otter, onHead, type Mood } from "./Otter";
 import type { Health, Job, Report, Prefs, Snapshot } from "./types";
 import "./style.css";
 import { AmbientSettings } from "./AmbientSettings";
@@ -100,7 +100,6 @@ function Pet() {
   const { health, job, prefs, chatBusy, speaking } = useRuntime();
   const { pet: petLocal, notice, interact } = usePetState();
   const [held, setHeld] = useState(false);
-  const gaze = useRef({ x: 0, y: 0 });
   const head = useRef(false);
   const start = useRef<{ x: number; y: number } | null>(null);
   const moved = useRef(false);
@@ -150,16 +149,6 @@ function Pet() {
             const y = Math.floor(
               ((e.clientY - rect.top) * canvas.height) / rect.height,
             );
-            gaze.current = {
-              x: Math.max(
-                -1,
-                Math.min(1, ((e.clientX - rect.left) / rect.width - 0.5) * 2),
-              ),
-              y: Math.max(
-                -1,
-                Math.min(1, ((e.clientY - rect.top) / rect.height - 0.5) * 2),
-              ),
-            };
             const inside =
               x >= 0 && y >= 0 && x < canvas.width && y < canvas.height;
             setHit(
@@ -171,10 +160,7 @@ function Pet() {
         }
       }}
       onPointerLeave={() => {
-        if (!start.current) {
-          setHit(false);
-          gaze.current = { x: 0, y: 0 };
-        }
+        if (!start.current) setHit(false);
       }}
     >
       <button
@@ -200,7 +186,7 @@ function Pet() {
           const rect = e.currentTarget
             .querySelector("canvas")
             ?.getBoundingClientRect();
-          head.current = !!rect && (e.clientY - rect.top) / rect.height < 0.47;
+          head.current = !!rect && onHead((e.clientY - rect.top) / rect.height);
           moved.current = false;
           e.currentTarget.setPointerCapture(e.pointerId);
           void api.action("drag-start").catch(() => {});
@@ -222,7 +208,7 @@ function Pet() {
           void api.action("drag-end").catch(() => {});
         }}
       >
-        <Otter mood={mood} size={200} gaze={gaze} />
+        <Otter mood={mood} size={200} />
       </button>
       <div className="pet-caption">
         {held

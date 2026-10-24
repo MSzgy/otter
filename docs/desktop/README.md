@@ -292,7 +292,7 @@ npm run test:e2e
 - `src/otter/application/reports.py`：CLI/桌面共享的组装与通知服务。
 - `src/otter/runtime/`：逐行 JSON-RPC、报告 worker、任务状态、参数校验。
 - `desktop/electron/`：窗口、子进程生命周期、受限 preload IPC。
-- `desktop/src/Otter.tsx`：可替换的 Canvas 水獭，隐藏时停止动画，尊重减少动态效果。
+- `desktop/src/Otter.tsx`：可替换的 Canvas 水獭，隐藏时停止动画，尊重减少动态效果（只显示首帧）。形象与 ESP32 实体水獭相同：D 像素风，13 种 Mood 各一个透明背景 GIF（`desktop/src/assets/otter/`），帧和时长与板子一致，用 `ImageDecoder` 逐帧画到 canvas，透明像素仍用于点击穿透。素材改动后用 `uv run --with pillow python desktop/scripts/build_pet_gifs.py` 从 `hardware/assets/pixel_game` 重新生成。
 - `desktop/src/main.tsx`：真实报告面板与配置入口。
 
 stdin/stdout 是受限控制协议，插件打印全部转至 stderr，stderr 不转发界面。渲染层禁用 Node、启用 context isolation 与 sandbox；报告 Markdown 不执行 HTML，不加载外部图片，链接仅允许 HTTP(S) 并交给系统浏览器。
