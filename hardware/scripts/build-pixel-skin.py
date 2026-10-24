@@ -23,6 +23,7 @@ import zlib
 from pathlib import Path
 
 MAGIC, VERSION, MAX_FRAMES, NAME_BYTES = b"OTSK", 1, 4, 24
+VOICE_OFFSET = 0x200000  # the voice pack starts 2 MiB into the partition (build-voice-pack.py)
 ENTRY = struct.Struct(f"<{NAME_BYTES}sB3x{MAX_FRAMES}H{MAX_FRAMES}I{MAX_FRAMES}I")
 HEADER = struct.Struct("<4sHHHHI")
 
@@ -56,6 +57,8 @@ def main():
                        *sizes, *[0] * pad)
         )
     blob = HEADER.pack(MAGIC, VERSION, len(entries), width, height, 0) + b"".join(entries) + data
+    if len(blob) > VOICE_OFFSET:
+        sys.exit(f"{len(blob)} bytes would overwrite the voice pack at {VOICE_OFFSET:#x}")
     Path(sys.argv[2]).write_bytes(blob)
     frames_total = sum(len(e["animation"]["frames"]) for e in expressions)
     print(f"{len(entries)} expressions, {frames_total} frames verified, {len(blob)} bytes")

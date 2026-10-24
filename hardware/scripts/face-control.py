@@ -8,9 +8,11 @@ import time
 import serial
 from serial.tools import list_ports
 
-FIRMWARE = "otter-face-0.5.0"
+FIRMWARE = "otter-face-0.6.0"
 COMMANDS = {
     "face": "FACE",  # any expression the board lists; see `faces`
+    "say": "SAY",  # the voice line for an expression; replaces whatever is playing
+    "hush": "SAY STOP",
     "faces": "FACE LIST",
     "servos": "SERVO SCAN",  # then SERVO STATUS for each servo found; read-only
     "move": "SERVO MOVE",  # id position, within the firmware's software range
@@ -28,7 +30,7 @@ COMMANDS = {
     "beep": "SOUND beep",
     "chirp": "SOUND chirp",
 }
-ARGUMENTS = {"move": 2, "center": 1, "release": 1, "face": 1}
+ARGUMENTS = {"move": 2, "center": 1, "release": 1, "face": 1, "say": 1}
 NUMERIC = {"move", "center", "release"}
 
 

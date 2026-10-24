@@ -46,6 +46,7 @@ function fakeSerial({
   ports,
   info = PIXEL_INFO,
   faces = PIXEL_FACES,
+  voices = [],
   available = true,
   replies = true,
 } = {}) {
@@ -69,6 +70,8 @@ function fakeSerial({
             queueMicrotask(() => handlers.onLine(JSON.stringify(info)));
           if (line === "FACE LIST")
             queueMicrotask(() => handlers.onLine(JSON.stringify({ faces })));
+          if (line === "SAY LIST")
+            queueMicrotask(() => handlers.onLine(JSON.stringify({ voices })));
         },
         close() {
           device.closed = true;
@@ -81,16 +84,17 @@ function fakeSerial({
 
 async function connected(options) {
   const timers = clock();
+  const time = { now: 1000 };
   const { serial, device } = fakeSerial(options);
   const bridge = new BodyBridge({
     serial,
     schedule: timers.schedule,
     cancel: timers.cancel,
-    now: () => 1000,
+    now: () => time.now,
   });
   bridge.configure({ enabled: true });
   await timers.runNext();
-  return { bridge, device, timers };
+  return { bridge, device, timers, time };
 }
 
 test("expression priority follows the desktop pet and splits busy into thinking/working", () => {
@@ -347,4 +351,151 @@ test("turning it off closes the port and cancels retries; status listeners canno
   device.written.length = 0;
   bridge.observe({ type: "chat.activity", data: { status: "streaming" } });
   assert.deepEqual(device.written, []);
+});
+
+// --- Voice lines (firmware 0.6.0+) ---
+const VOICED = {
+  info: { firmware: "otter-face-0.6.0", skin: "pixel_game", voices: 21 },
+  voices: [...PIXEL_FACES, "listening"],
+};
+const streaming = { type: "chat.activity", data: { status: "streaming" } };
+const settled = { type: "chat.activity", data: { status: "idle" } };
+
+test("voice lines play once on entering a state, then cool down for 5 s", async () => {
+  const { bridge, device, time } = await connected(VOICED);
+  assert.deepEqual(device.written, [
+    "INFO",
+    "FACE LIST",
+    "SAY LIST",
+    "FACE idle",
+  ]);
+  assert.equal(bridge.snapshot().device.voices, 12);
+  device.written.length = 0;
+  bridge.observe(streaming);
+  bridge.observe(streaming);
+  bridge.observe(settled);
+  time.now += 2000;
+  bridge.observe(streaming);
+  assert.deepEqual(device.written, [
+    "FACE thinking",
+    "SAY thinking",
+    "FACE idle",
+    "FACE thinking",
+  ]);
+  device.written.length = 0;
+  bridge.observe(settled);
+  time.now += 5000;
+  bridge.observe(streaming);
+  assert.deepEqual(device.written, [
+    "FACE idle",
+    "FACE thinking",
+    "SAY thinking",
+  ]);
+});
+
+test("no line when merely catching up after connecting or reconnecting", async () => {
+  const { bridge, device, timers } = await connected(VOICED);
+  bridge.observe(streaming);
+  device.handlers.onClose();
+  bridge.observe({ type: "voice.activity", data: { speaking: true } });
+  bridge.observe({ type: "voice.activity", data: { speaking: false } });
+  device.written.length = 0;
+  await timers.runNext();
+  assert.deepEqual(device.written, [
+    "INFO",
+    "FACE LIST",
+    "SAY LIST",
+    "FACE thinking",
+  ]);
+});
+
+test("manual-only lines stay silent; Mac speech stops the board's voice", async () => {
+  const { bridge, device } = await connected(VOICED);
+  bridge.observe(streaming);
+  device.written.length = 0;
+  bridge.observe(settled); // idle is manual only
+  bridge.observe({
+    type: "assistant.changed",
+    data: { reminders: [], focus: { id: "f" } },
+  });
+  bridge.observe({ type: "voice.activity", data: { speaking: true } });
+  assert.deepEqual(device.written, [
+    "FACE idle",
+    "FACE focus",
+    "FACE speaking",
+    "SAY STOP",
+  ]);
+});
+
+test("quiet mode is silent, and during focus only the reminder speaks", async () => {
+  const { bridge, device } = await connected(VOICED);
+  device.written.length = 0;
+  bridge.observe({ type: "preferences", data: { quiet: true } });
+  bridge.observe(streaming);
+  bridge.observe(settled);
+  assert(!device.written.some((l) => l.startsWith("SAY")), "quiet mode");
+  bridge.observe({ type: "preferences", data: { quiet: false } });
+  bridge.observe({
+    type: "assistant.changed",
+    data: { reminders: [], focus: { id: "f" } },
+  });
+  bridge.observe({ type: "connection", data: { status: "online" } });
+  bridge.observe({ type: "job.changed", data: { status: "running" } });
+  device.written.length = 0;
+  bridge.observe({
+    type: "assistant.changed",
+    data: { reminders: [{ id: "r", status: "due" }], focus: { id: "f" } },
+  });
+  bridge.observe({ type: "job.changed", data: { status: "finished" } });
+  assert.deepEqual(device.written, ["SAY reminder", "FACE reminder"]);
+});
+
+test("a due reminder says its line instead of the chirp", async () => {
+  const { bridge, device } = await connected(VOICED);
+  device.written.length = 0;
+  bridge.observe({
+    type: "assistant.changed",
+    data: { reminders: [{ id: "r", status: "due" }] },
+  });
+  assert.deepEqual(device.written, ["SAY reminder", "FACE reminder"]);
+});
+
+test("a tap's own 嘿嘿 is not repeated; a desktop pat later still speaks", async () => {
+  const { bridge, device, time } = await connected(VOICED);
+  const pat = (at) => ({
+    type: "pet.changed",
+    data: { asleep: false, effect: { mood: "happy", expiresAt: at + 2800 } },
+  });
+  const over = { type: "pet.changed", data: { asleep: false, effect: null } };
+  device.written.length = 0;
+  device.handlers.onLine("EVENT screen_touch 1");
+  bridge.observe(pat(time.now));
+  bridge.observe(over);
+  time.now += 6000;
+  bridge.observe(pat(time.now));
+  assert.deepEqual(device.written, [
+    "FACE happy",
+    "FACE idle",
+    "FACE happy",
+    "SAY happy",
+  ]);
+});
+
+test("the bridge's voice rules match the voice pack's manifest", () => {
+  const path = require("node:path");
+  const { VOICE_NEVER_AUTO, VOICE_COOLDOWN_MS } = require("./body.cjs");
+  const { clips } = require(
+    path.join(
+      __dirname,
+      "../../hardware/assets/pixel_game/voice/manifest.json",
+    ),
+  );
+  for (const clip of clips) {
+    assert.equal(clip.cooldown_ms, VOICE_COOLDOWN_MS, clip.id);
+    assert.equal(
+      VOICE_NEVER_AUTO.includes(clip.id),
+      clip.policy !== "on_enter_once",
+      `${clip.id} is ${clip.policy}`,
+    );
+  }
 });

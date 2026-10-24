@@ -77,14 +77,21 @@ int readTouch() {
 
 void reportInfo() {
   Serial.printf(
-    "{\"firmware\":\"otter-face-0.5.0\",\"board\":\"ESP32-S3-Touch-LCD-2.8-V2\","
+    "{\"firmware\":\"otter-face-0.6.0\",\"board\":\"ESP32-S3-Touch-LCD-2.8-V2\","
     "\"width\":240,\"height\":320,\"flash_bytes\":%lu,\"psram_bytes\":%lu,"
     "\"touch_available\":%s,\"audio_available\":%s,\"skin\":\"%s\",\"faces\":%u,"
-    "\"decode_ms\":%lu,\"touches\":%lu,\"mood\":\"%s\"}\n",
+    "\"voices\":%u,\"decode_ms\":%lu,\"touches\":%lu,\"mood\":\"%s\"}\n",
     (unsigned long)ESP.getFlashChipSize(), (unsigned long)ESP.getPsramSize(),
     touchAvailable ? "true" : "false", audioAvailable ? "true" : "false",
     skinOn ? "pixel_game" : "drawn", skinOn ? unsigned(skin::count()) : 5u,
-    (unsigned long)skin::lastDecodeMs(), (unsigned long)touches, currentFaceName(millis()));
+    unsigned(sound::voiceCount()), (unsigned long)skin::lastDecodeMs(), (unsigned long)touches,
+    currentFaceName(millis()));
+}
+void listVoices() {
+  Serial.print("{\"voices\":[");
+  for (size_t i = 0; i < sound::voiceCount(); i++)
+    Serial.printf(i ? ",\"%s\"" : "\"%s\"", sound::voiceName(i));
+  Serial.println("]}");
 }
 void listFaces() {
   Serial.print("{\"faces\":[");
@@ -133,6 +140,19 @@ void handleCommand(const char *command) {
     baseMood = mood;  // the drawn fallback shows idle for pixel-only expressions
     happyUntil = 0;
     Serial.printf("OK FACE %s\n", name);
+  } else if (strcmp(command, "SAY LIST") == 0) {
+    listVoices();
+  } else if (strcmp(command, "SAY STOP") == 0) {
+    sound::stop();
+    Serial.println("OK SAY STOP");
+  } else if (strncmp(command, "SAY ", 4) == 0) {
+    // The host decides when to speak; a new line always replaces the old one.
+    const char *name = command + 4;
+    switch (sound::say(name)) {
+      case sound::Result::Queued: Serial.printf("OK SAY %s\n", name); break;
+      case sound::Result::Unavailable: Serial.println("ERR voice unavailable"); break;
+      default: Serial.println("ERR unsupported voice");
+    }
   } else if (strncmp(command, "SOUND ", 6) == 0) {
     const char *name = command + 6;
     switch (sound::play(name)) {
@@ -211,6 +231,7 @@ void handleCommand(const char *command) {
     }
   } else if (strcmp(command, "HELP") == 0) {
     Serial.println("PING | INFO | BLINK | FACE <expression> | FACE LIST | SOUND beep/chirp"
+                   " | SAY <expression> | SAY STOP | SAY LIST"
                    " | SERVO SCAN | SERVO STATUS <id> | SERVO MOVE <id> <pos> | SERVO CENTER <id>"
                    " | SERVO RELEASE <id> | SERVO STOP | SERVO RAW <id> | SERVO PINS");
   } else if (command[0]) {
@@ -274,7 +295,10 @@ void loop() {
         baseMood = Mood::Idle;
         baseExpression = idleExpression;
         happyUntil = now + happyDurationMs;
-        sound::play("chirp");  // Local reflex; if a clip is still playing, this tap stays quiet.
+        // Local reflex: say 嘿嘿, or chirp without a voice pack. While anything is
+        // playing this tap stays quiet, so fast taps do not restart the line.
+        const sound::Result said = sound::say("happy", false);
+        if (said == sound::Result::Unavailable || said == sound::Result::Unknown) sound::play("chirp");
         Serial.printf("EVENT screen_touch %lu\n", (unsigned long)touches);
       }
       wasTouched = contact != 0;

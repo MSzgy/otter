@@ -2,8 +2,8 @@
 // Hardware is optional. Nothing here may throw into the app or slow it down: the
 // bridge is off by default, every device operation is fire-and-forget, and a
 // missing serial library, missing board or dropped cable only changes status().
-// Only expression names and one chirp ever go to the device; never chat text,
-// reminder titles or memories.
+// Only expression names, voice line names and a chirp ever go to the device;
+// never chat text, reminder titles or memories.
 const { EventEmitter } = require("node:events");
 
 const DEVICE_VID = "303a"; // Espressif USB Serial/JTAG on the ESP32-S3
@@ -12,6 +12,13 @@ const RETRY_MS = [2000, 5000, 10000];
 const REPLY_MS = 3000;
 // The firmware without the pixel pack only knows these.
 const DRAWN_FACES = ["idle", "happy", "sleeping", "thinking", "speaking"];
+// Voice line rules from the pack (hardware/assets/pixel_game/voice/manifest.json;
+// a test keeps them in sync). A line plays once when its state is entered. These
+// never play by themselves: idle, focus and speaking are manual only, and
+// listening must come before the microphone opens, which this bridge does not see.
+const VOICE_NEVER_AUTO = ["idle", "focus", "speaking", "listening"];
+const VOICE_COOLDOWN_MS = 5000;
+const TAP_SAID_MS = 3000; // the board says 嘿嘿 itself when its screen is tapped
 
 // Desktop state -> one expression name, highest priority first. Follows the
 // desktop pet's own order (speaking > pet effect > asleep > busy > idle) and
@@ -48,6 +55,9 @@ class BodyBridge extends EventEmitter {
     this.device = null; // { path, firmware, skin }
     this.port = null;
     this.faces = new Set();
+    this.voices = new Set(); // voice lines the device can play
+    this.lastSaid = new Map(); // expression -> when its line last played
+    this.lastTapAt = -Infinity;
     this.sent = null; // last expression sent to the device
     this.attempt = 0;
     this.timer = null;
@@ -126,7 +136,8 @@ class BodyBridge extends EventEmitter {
         s.focus = !!d.focus;
         const fresh = due.some((r) => !this.seenDue.has(r.id));
         this.seenDue = new Set(due.map((r) => r.id));
-        if (fresh && !s.quiet) this.send("SOUND chirp");
+        if (fresh && !s.quiet && !this.say("reminder"))
+          this.send("SOUND chirp");
       } else if (event.type === "preferences") {
         s.quiet = !!d.quiet;
       } else {
@@ -143,8 +154,30 @@ class BodyBridge extends EventEmitter {
     let face = resolveExpression(this.state, this.now());
     if (!this.faces.has(face)) face = "idle";
     if (face === this.sent) return;
+    // The first face after (re)connecting only catches up; it is not an entry.
+    const entered = this.sent !== null;
     this.sent = face;
     this.send(`FACE ${face}`);
+    if (!entered || !this.voices.size) return;
+    if (face === "speaking")
+      this.send("SAY STOP"); // the Mac reads aloud; don't talk over it
+    else this.say(face);
+  }
+
+  // Plays an expression's voice line if the pack's rules allow it now.
+  say(face) {
+    const s = this.state,
+      now = this.now();
+    if (this.status !== "connected" || !this.voices.has(face) || s.quiet)
+      return false;
+    if (VOICE_NEVER_AUTO.includes(face)) return false;
+    if (s.focus && face !== "reminder") return false;
+    if (face === "happy" && now - this.lastTapAt < TAP_SAID_MS) return false;
+    if (now - (this.lastSaid.get(face) ?? -Infinity) < VOICE_COOLDOWN_MS)
+      return false;
+    this.lastSaid.set(face, now);
+    this.send(`SAY ${face}`);
+    return true;
   }
 
   send(line) {
@@ -225,7 +258,21 @@ class BodyBridge extends EventEmitter {
       ).faces;
     }
     this.faces = new Set(faces);
-    this.device = { path, firmware: info.firmware, skin: info.skin || "drawn" };
+    let voices = [];
+    if (info.voices > 0) {
+      // Firmware 0.6.0+ reports its voice pack in INFO and lists it with SAY LIST.
+      port.write("SAY LIST");
+      voices = JSON.parse(
+        await this.expect((l) => l.startsWith('{"voices":')),
+      ).voices;
+    }
+    this.voices = new Set(voices);
+    this.device = {
+      path,
+      firmware: info.firmware,
+      skin: info.skin || "drawn",
+      voices: voices.length,
+    };
     this.attempt = 0;
     this.sent = null;
     this.setStatus("connected", `已连接 ${info.firmware}`);
@@ -251,6 +298,7 @@ class BodyBridge extends EventEmitter {
     }
     if (this.status !== "connected") return;
     if (/^EVENT screen_touch \d+$/.test(line)) {
+      this.lastTapAt = this.now();
       try {
         this.emit("tap");
       } catch (error) {
@@ -277,4 +325,10 @@ class BodyBridge extends EventEmitter {
   }
 }
 
-module.exports = { BodyBridge, resolveExpression, DEVICE_VID };
+module.exports = {
+  BodyBridge,
+  resolveExpression,
+  DEVICE_VID,
+  VOICE_NEVER_AUTO,
+  VOICE_COOLDOWN_MS,
+};

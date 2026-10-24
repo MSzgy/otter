@@ -9,6 +9,7 @@
 | `expressions.json` | 可编辑的表情定义，区分已有 Mood 和新增状态 |
 | `animations/gif/` | 21 个 240×320 循环 GIF，给浏览器 / 桌面 App 预览用 |
 | `device-animation/otter/pixel_game/<表情>/NN.565.gz` | 84 帧 gzip 压缩的 RGB565（高字节在前）全屏帧，设备用的就是这些 |
+| `voice/` | 21 条表情短语音（16 kHz 单声道 16 位 PCM）、台词与播放规则清单；2026-10-25 从 `~/Developer/otter-assets/pixel-companion-voice-v4/audio` 复制并核对 SHA-256 |
 
 原始 atlas、PNG 关键帧、网页原型和制作脚本仍在原素材包里，这里只放重建设备数据和预览所需的部分。
 
@@ -19,3 +20,8 @@
     .tools/arduino-data/packages/esp32/tools/esptool_py/5.3.0-cn/esptool --chip esp32s3 -p /dev/cu.usbmodem3101 --after watchdog-reset write-flash 0x610000 output/pixel_skin/pixel_game.bin
 
 打包脚本会用 SHA-256 检查每一帧。用这份素材生成的 `pixel_game.bin` 为 1,811,220 字节，SHA-256 以 `1d6da8bd52cb6824` 开头。
+
+语音包写在动画包之后 2 MiB 处（见第八课）：
+
+    python3 scripts/build-voice-pack.py assets/pixel_game/voice output/pixel_skin/voices.bin
+    .tools/arduino-data/packages/esp32/tools/esptool_py/5.3.0-cn/esptool --chip esp32s3 -p /dev/cu.usbmodem3101 --after watchdog-reset write-flash 0x810000 output/pixel_skin/voices.bin
