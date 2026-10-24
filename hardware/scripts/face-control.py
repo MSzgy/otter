@@ -8,8 +8,10 @@ import time
 import serial
 from serial.tools import list_ports
 
-FIRMWARE = "otter-face-0.4.0"
+FIRMWARE = "otter-face-0.5.0"
 COMMANDS = {
+    "face": "FACE",  # any expression the board lists; see `faces`
+    "faces": "FACE LIST",
     "servos": "SERVO SCAN",  # then SERVO STATUS for each servo found; read-only
     "move": "SERVO MOVE",  # id position, within the firmware's software range
     "center": "SERVO CENTER",  # id
@@ -26,7 +28,8 @@ COMMANDS = {
     "beep": "SOUND beep",
     "chirp": "SOUND chirp",
 }
-ARGUMENTS = {"move": 2, "center": 1, "release": 1}
+ARGUMENTS = {"move": 2, "center": 1, "release": 1, "face": 1}
+NUMERIC = {"move", "center", "release"}
 
 
 def read_until(connection, predicate, timeout=6):
@@ -61,7 +64,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("action", choices=COMMANDS, nargs="?", default="info")
     parser.add_argument(
-        "values", nargs="*", type=int, help="move 需要 编号 位置；center、release 需要 编号"
+        "values", nargs="*", help="move 需要 编号 位置；center、release 需要 编号；face 需要 表情名"
     )
     parser.add_argument(
         "--port", help="例如 /dev/cu.usbmodem3101；省略时只接受唯一的 Espressif USB 设备"
@@ -71,7 +74,9 @@ def main():
     if not 0 <= args.listen <= 30:
         parser.error("--listen 必须在 0～30 秒之间")
     if len(args.values) != ARGUMENTS.get(args.action, 0):
-        parser.error(f"{args.action} 需要 {ARGUMENTS.get(args.action, 0)} 个数字参数")
+        parser.error(f"{args.action} 需要 {ARGUMENTS.get(args.action, 0)} 个参数")
+    if args.action in NUMERIC and not all(value.isdigit() for value in args.values):
+        parser.error(f"{args.action} 的参数必须是数字")
     ports = [port.device for port in list_ports.comports() if port.vid == 0x303A]
     port = args.port
     if not port:
@@ -92,8 +97,12 @@ def main():
             print(json.dumps(info, ensure_ascii=False, indent=2), flush=True)
         elif args.action == "servos":
             show_servos(connection)
+        elif args.action == "faces":
+            connection.write(b"FACE LIST\n")
+            faces = json.loads(read_until(connection, lambda line: line.startswith('{"faces":')))
+            print(f"{len(faces['faces'])} 种表情：", " ".join(faces["faces"]), flush=True)
         else:
-            command = " ".join([COMMANDS[args.action], *map(str, args.values)])
+            command = " ".join([COMMANDS[args.action], *args.values])
             connection.write((command + "\n").encode())
             expected = "PONG" if args.action == "ping" else "OK " + command
             reply = read_until(connection, lambda line: line == expected or line.startswith("ERR "))

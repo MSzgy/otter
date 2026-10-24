@@ -49,10 +49,13 @@ OTTER_LAB_PORT=4179 npm start
 | `docs/LESSON-04-SERVO.md` | 第四课：供电、总线协议、编号与第一次转动 |
 | `docs/LESSON-05-ESP32-SERVO.md` | 第五课：ESP32 通过 UART 读取舵机（只读） |
 | `docs/LESSON-06-ESP32-MOTION.md` | 第六课：ESP32 慢速转动舵机与安全规则 |
+| `docs/LESSON-07-PIXEL-SKIN.md` | 第七课：像素水獭 21 种动画上屏，以及屏幕颜色修正 |
+| `assets/pixel_game/` | D 像素水獭素材：21 个 GIF、84 帧设备数据和清单 |
 | `firmware/serial_probe/serial_probe.ino` | Arduino 串口自检入门固件 |
-| `firmware/otter_face/` | 真实板卡固件：表情、屏幕触摸、内置声音、舵机读取与慢速转动和 USB 指令 |
+| `firmware/otter_face/` | 真实板卡固件：像素水獭动画（缺素材时退回代码画的脸）、屏幕触摸、内置声音、舵机读取与慢速转动和 USB 指令 |
 | `scripts/face-control.py` | 从 Mac 向真实板卡发送白名单指令 |
 | `scripts/servo-bus.py` | 通过舵机控制板（跳线 B）扫描、读取、慢速转动舵机和修改编号 |
+| `scripts/build-pixel-skin.py` | 把像素素材打包成写入 ESP32 数据分区的文件 |
 
 ## 验证
 

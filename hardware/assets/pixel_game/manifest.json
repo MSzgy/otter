@@ -1,0 +1,2273 @@
+{
+  "schema_version": 1,
+  "style_id": "pixel_game",
+  "style_numeric_id": 3,
+  "default_expression": "idle",
+  "groups": [
+    {
+      "id": "pet",
+      "name": "宠物互动"
+    },
+    {
+      "id": "conversation",
+      "name": "聊天与语音"
+    },
+    {
+      "id": "assistant",
+      "name": "助手任务"
+    },
+    {
+      "id": "connection",
+      "name": "连接状态"
+    }
+  ],
+  "expressions": [
+    {
+      "id": "idle",
+      "name": "陪伴中",
+      "group": "pet",
+      "existing_mood": true,
+      "atlas": "base",
+      "column": 0,
+      "caption": "我在这里，慢慢来。",
+      "trigger": "没有临时互动、工作或语音状态时。",
+      "source": "desktop/src/main.tsx · Pet() mood 回退；desktop/src/Otter.tsx · Mood",
+      "assets": {
+        "png": "assets/idle.png",
+        "rgb565": "device/otter/pixel_game/idle.565",
+        "flash_path": "/otter/pixel_game/idle.565",
+        "bytes": 153600,
+        "sha256": "95b23333ce5b47477c3de221689afc419cbefb1b0f21e788cd04b03733d0154f",
+        "png_sha256": "af201b9afabd328223470309aa2ab3fe62dcadff471624655eada275ec29a1ee"
+      },
+      "thumbnail": {
+        "png": "thumbnails/idle.png",
+        "rgb565": "device/otter/pixel_game/idle.thumb.565",
+        "flash_path": "/otter/pixel_game/idle.thumb.565",
+        "width": 96,
+        "height": 64,
+        "bytes": 12288,
+        "sha256": "75092e302910751aa6b77d5cda6f1695a9796a63543545d796ef8b5e32dbd494",
+        "png_sha256": "c05847f6b7a2eb34897cc31c05832f1127c2de3ad7ff0a2957a1369afcb9e992"
+      },
+      "animation": {
+        "gif": "animations/gif/idle.gif",
+        "thumbnail_gif": "animations/thumbnails/idle.gif",
+        "poster": "animations/frames/idle/00.png",
+        "frame_count": 4,
+        "delay_ms": [
+          1500,
+          100,
+          120,
+          100
+        ],
+        "duration_ms": 1820,
+        "loop": 0,
+        "width": 240,
+        "height": 320,
+        "motion": "轻轻眨眼",
+        "bytes": 78078,
+        "sha256": "ef84125902c3a949856fbaac87b6112d42d327147e28ca88f590ef037f1961fc",
+        "thumbnail_sha256": "6ad27e5cc293fcd7e410ceb3f01af84512d3a89f43ec65e697a9c0b6e1ad32ac",
+        "device_gzip_bytes": 91137,
+        "source": "sources/animation/idle.png",
+        "source_sha256": "679fe0b39343c4ff611474b4847859b61c55811d5e860c396ae787bccda4fab9",
+        "registration": {
+          "scale": 0.46875,
+          "body_center_x": 120,
+          "baseline_y": 260,
+          "method": "nearest-neighbour geometry, brown torso baseline and horizontal axis",
+          "background": "border-connected blue matte normalized to #123f4b"
+        },
+        "frames": [
+          {
+            "index": 0,
+            "png": "animations/frames/idle/00.png",
+            "png_sha256": "4dee1bce595f18836f2b87a5c100546d0a290bd59eb43df0e76bddfd45ca3a0a",
+            "rgb565_gzip": "device-animation/otter/pixel_game/idle/00.565.gz",
+            "gzip_bytes": 23274,
+            "gzip_sha256": "af4b197ffb7b42978537bea3574812bc65cde21cdb0b348bd25e80574a76d2aa",
+            "raw_bytes": 153600,
+            "raw_sha256": "76e758e32396fcbbf0e3d84884216a86409c9488ad1b45c1f8d51cd4618b6315",
+            "delay_ms": 1500
+          },
+          {
+            "index": 1,
+            "png": "animations/frames/idle/01.png",
+            "png_sha256": "198de11882a6924ca6bdde89d89bd451f8cf534093d9293e9af6f244fd5beb6b",
+            "rgb565_gzip": "device-animation/otter/pixel_game/idle/01.565.gz",
+            "gzip_bytes": 22997,
+            "gzip_sha256": "92b4354c3c8a3287c5ad1253a53bdbb19146f764a663a76dabb7e3414aa62a67",
+            "raw_bytes": 153600,
+            "raw_sha256": "98898b004cbe486256e385bd77b69ae58e3b7c66f2f18a58b7c83329c1399591",
+            "delay_ms": 100
+          },
+          {
+            "index": 2,
+            "png": "animations/frames/idle/02.png",
+            "png_sha256": "1870127a5558af9e511ccc092a5c19721eb581596fa7c7335998ea6a77d65e58",
+            "rgb565_gzip": "device-animation/otter/pixel_game/idle/02.565.gz",
+            "gzip_bytes": 21998,
+            "gzip_sha256": "34653727b452150cc1201fb7cf4033df211c5a901a151c38126c1391e9b7db4f",
+            "raw_bytes": 153600,
+            "raw_sha256": "e54a0eac480370613b0e257722a1cf6f6993edb4bb75f63d75d4c8251c5c3304",
+            "delay_ms": 120
+          },
+          {
+            "index": 3,
+            "png": "animations/frames/idle/03.png",
+            "png_sha256": "1ec9d33c5b4e9068353240eedf06b244686942213a06c688094ec95ac8c80198",
+            "rgb565_gzip": "device-animation/otter/pixel_game/idle/03.565.gz",
+            "gzip_bytes": 22868,
+            "gzip_sha256": "845c3b5b66ae6e6cbdf068666e29d2e99224f76d3d3dccf5e9f0e7d8bf03df7d",
+            "raw_bytes": 153600,
+            "raw_sha256": "b12db6d3c94f95303bf19706dc6179f256cb7ed858179569ed944f9b172bac71",
+            "delay_ms": 100
+          }
+        ],
+        "poster_thumbnail": "animations/thumbnails/idle.png"
+      }
+    },
+    {
+      "id": "happy",
+      "name": "摸头开心",
+      "group": "pet",
+      "existing_mood": true,
+      "atlas": "base",
+      "column": 1,
+      "caption": "嘿嘿，再摸一下。",
+      "trigger": "pet 互动，开心约 2800ms。",
+      "source": "desktop/electron/pet-state.cjs · ACTIONS.pet",
+      "assets": {
+        "png": "assets/happy.png",
+        "rgb565": "device/otter/pixel_game/happy.565",
+        "flash_path": "/otter/pixel_game/happy.565",
+        "bytes": 153600,
+        "sha256": "4609ff9f474d04dd0d4d573aedd7eed3830f5733ea571158e7af310157489f78",
+        "png_sha256": "c59820384a3091cd21a116cba157a368085ab9d7f32fdb3b9a25a9649f0ecb25"
+      },
+      "thumbnail": {
+        "png": "thumbnails/happy.png",
+        "rgb565": "device/otter/pixel_game/happy.thumb.565",
+        "flash_path": "/otter/pixel_game/happy.thumb.565",
+        "width": 96,
+        "height": 64,
+        "bytes": 12288,
+        "sha256": "fdd8fb4f6596e653807fde9d8d21522fe8b4ad0b0f0db587ec4c34e25cd7a501",
+        "png_sha256": "85ca47c7ea1235649ec7a2f8c1882ccc3a49cabb0dfebc7f98ef9b5c8cdeb099"
+      },
+      "animation": {
+        "gif": "animations/gif/happy.gif",
+        "thumbnail_gif": "animations/thumbnails/happy.gif",
+        "poster": "animations/frames/happy/00.png",
+        "frame_count": 4,
+        "delay_ms": [
+          450,
+          180,
+          260,
+          180
+        ],
+        "duration_ms": 1070,
+        "loop": 0,
+        "width": 240,
+        "height": 320,
+        "motion": "笑着举起小爪",
+        "bytes": 73518,
+        "sha256": "3aabd4e8c988b441a994f689925305a858ed6826a8efdfeb3228ec184b7edb6c",
+        "thumbnail_sha256": "6e9a24e6c72c56a2eb60cfdfe52ad5a003aa2032e344b5cbf2ade59768ef4aeb",
+        "device_gzip_bytes": 87158,
+        "source": "sources/animation/happy.png",
+        "source_sha256": "90beab637b494a9b6382d8612d0eacee9048d1e3b914f0d04e3bb0758ceab660",
+        "registration": {
+          "scale": 0.46875,
+          "body_center_x": 120,
+          "baseline_y": 260,
+          "method": "nearest-neighbour geometry, brown torso baseline and horizontal axis",
+          "background": "border-connected blue matte normalized to #123f4b"
+        },
+        "frames": [
+          {
+            "index": 0,
+            "png": "animations/frames/happy/00.png",
+            "png_sha256": "e414aa1427101cf2f2070e0d305fa87c70a26cb6814ca485fe4d05a06348c519",
+            "rgb565_gzip": "device-animation/otter/pixel_game/happy/00.565.gz",
+            "gzip_bytes": 21448,
+            "gzip_sha256": "32dce68f86c3c3b2c36b7e370e8c1972bd8316ea7ca8e91e0caa3d346eb1a618",
+            "raw_bytes": 153600,
+            "raw_sha256": "5f5825f640419979589f8db401a4f1bcd7d4da2720ee494262a74ed173014168",
+            "delay_ms": 450
+          },
+          {
+            "index": 1,
+            "png": "animations/frames/happy/01.png",
+            "png_sha256": "befa97d681b5c447e9bac7b033a287f5c2c8938572a85a5e90ce252647301808",
+            "rgb565_gzip": "device-animation/otter/pixel_game/happy/01.565.gz",
+            "gzip_bytes": 22118,
+            "gzip_sha256": "f3a64cf863ed420c464bb75feead10ba46c75f21543c798884f8777060473052",
+            "raw_bytes": 153600,
+            "raw_sha256": "60c47187f36de542f9189b9acf83f5055013673c1fab5e28a611b023126f330d",
+            "delay_ms": 180
+          },
+          {
+            "index": 2,
+            "png": "animations/frames/happy/02.png",
+            "png_sha256": "63024096a437e55ac8bf029eb130e961c26c52a6e25b6887e5a827a2bea80a70",
+            "rgb565_gzip": "device-animation/otter/pixel_game/happy/02.565.gz",
+            "gzip_bytes": 22133,
+            "gzip_sha256": "d1da15082fa88572f32f7baa9966cd24310297e3391b35679984186e9286f3cb",
+            "raw_bytes": 153600,
+            "raw_sha256": "8e2a27eec7a9725093bad5c1bdd231226dd662df3ca84d27ecb2ca92634bbe51",
+            "delay_ms": 260
+          },
+          {
+            "index": 3,
+            "png": "animations/frames/happy/03.png",
+            "png_sha256": "34cc81fa8c06e1e6493b7ab21f8edd412a548637951ca4068b8d7c658b96b987",
+            "rgb565_gzip": "device-animation/otter/pixel_game/happy/03.565.gz",
+            "gzip_bytes": 21459,
+            "gzip_sha256": "9a6b9c9ceceb047cbd71920064f4af5093a26f5dbe1cec22f358a9f760dc7714",
+            "raw_bytes": 153600,
+            "raw_sha256": "78ede6af4710f1eb0da034f0c689fc2fc1f666220f2982282fbd3f223d87a853",
+            "delay_ms": 180
+          }
+        ],
+        "poster_thumbnail": "animations/thumbnails/happy.png"
+      }
+    },
+    {
+      "id": "sleeping",
+      "name": "睡着了",
+      "group": "pet",
+      "existing_mood": true,
+      "atlas": "base",
+      "column": 2,
+      "caption": "嘘，抱着小石头歇一会。",
+      "trigger": "sleep 互动或 pet.asleep；保持到 wake。",
+      "source": "desktop/electron/pet-state.cjs · ACTIONS.sleep / snapshot",
+      "assets": {
+        "png": "assets/sleeping.png",
+        "rgb565": "device/otter/pixel_game/sleeping.565",
+        "flash_path": "/otter/pixel_game/sleeping.565",
+        "bytes": 153600,
+        "sha256": "f4567be07e9addeaee96c1db1eeb1136a48434cc719e38982aa1a1ef72a1c3be",
+        "png_sha256": "404e418357cb2e8d9630c5dfe7053ebadf3ab175562479bdd93568a6b1e1e360"
+      },
+      "thumbnail": {
+        "png": "thumbnails/sleeping.png",
+        "rgb565": "device/otter/pixel_game/sleeping.thumb.565",
+        "flash_path": "/otter/pixel_game/sleeping.thumb.565",
+        "width": 96,
+        "height": 64,
+        "bytes": 12288,
+        "sha256": "933aa616177b669b4a231f0ea6e1c4a04a72aecb141c269aac16d71cf87d22f3",
+        "png_sha256": "ea4d58f456fac528db7dfd997510fca9629c9e1112d96ba8f1bb610bf34ce9da"
+      },
+      "animation": {
+        "gif": "animations/gif/sleeping.gif",
+        "thumbnail_gif": "animations/thumbnails/sleeping.gif",
+        "poster": "animations/frames/sleeping/00.png",
+        "frame_count": 4,
+        "delay_ms": [
+          900,
+          700,
+          900,
+          700
+        ],
+        "duration_ms": 3200,
+        "loop": 0,
+        "width": 240,
+        "height": 320,
+        "motion": "闭眼慢慢呼吸",
+        "bytes": 68990,
+        "sha256": "9ebb18b312605dc02a3522dc6180b2fc7be163f6ae22d9edc9a963fe34ed2bb8",
+        "thumbnail_sha256": "0622de6914604fb785e84622bed537aedf5a39ce4175018ce50530d3585db5cd",
+        "device_gzip_bytes": 82050,
+        "source": "sources/animation/sleeping.png",
+        "source_sha256": "024c6af44f4720cce4d7658093cae4f89866d525f6fd2e728a5afad809daaf8d",
+        "registration": {
+          "scale": 0.46875,
+          "body_center_x": 120,
+          "baseline_y": 260,
+          "method": "nearest-neighbour geometry, brown torso baseline and horizontal axis",
+          "background": "border-connected blue matte normalized to #123f4b"
+        },
+        "frames": [
+          {
+            "index": 0,
+            "png": "animations/frames/sleeping/00.png",
+            "png_sha256": "10acc60adfb7dced09537dac120c0b069bf95c2e13308ddc2e074cbc341b9e08",
+            "rgb565_gzip": "device-animation/otter/pixel_game/sleeping/00.565.gz",
+            "gzip_bytes": 20107,
+            "gzip_sha256": "bc4fdb045ba3b365f995a61549224bab10340c64ed6debe390aa7da774904b9f",
+            "raw_bytes": 153600,
+            "raw_sha256": "dc2e69ff1d07b1d39136b2baa7bbf2c2208d1f2ce0aa54d16ea8d84fb7fd79bb",
+            "delay_ms": 900
+          },
+          {
+            "index": 1,
+            "png": "animations/frames/sleeping/01.png",
+            "png_sha256": "4e6ce88dc2497bd9895ee0c38313b1a934e41e7314d95330db1f4f3a96f56a75",
+            "rgb565_gzip": "device-animation/otter/pixel_game/sleeping/01.565.gz",
+            "gzip_bytes": 20541,
+            "gzip_sha256": "8ace63c8e60ec25d8c9474f02d176d8180866f5c93fb3ff019bfa2a5a9b1623e",
+            "raw_bytes": 153600,
+            "raw_sha256": "1e5a1086bb4500b3ba4bcacf80b98c769b8e3a10a6e4aa2d384d4ff5f4d02c61",
+            "delay_ms": 700
+          },
+          {
+            "index": 2,
+            "png": "animations/frames/sleeping/02.png",
+            "png_sha256": "2fe539248db355637a0a43d97cf1c9024d6b1b3dcb48c868ea063e684a66c3cf",
+            "rgb565_gzip": "device-animation/otter/pixel_game/sleeping/02.565.gz",
+            "gzip_bytes": 20519,
+            "gzip_sha256": "8cc03219687dd218231457da60cdd6b2574505d94487f8b75ea1e294eaf34336",
+            "raw_bytes": 153600,
+            "raw_sha256": "51a9dcbc442e41e3524be569dba3e165ee4e3ec58ded2bc8dcce6d1d63230034",
+            "delay_ms": 900
+          },
+          {
+            "index": 3,
+            "png": "animations/frames/sleeping/03.png",
+            "png_sha256": "7a70cb8d4ea640d7f839225a57cfce5b3a23b45867b8111ad998f4f19ea1e6d7",
+            "rgb565_gzip": "device-animation/otter/pixel_game/sleeping/03.565.gz",
+            "gzip_bytes": 20883,
+            "gzip_sha256": "2d8214a2b1a95ae509e53bb69639fb7c1bde53b3327e350f97662f1deb6cb4e2",
+            "raw_bytes": 153600,
+            "raw_sha256": "daf47635146ea572350687208a86c966b4d5cb44509344d7c336fbfab6720dea",
+            "delay_ms": 700
+          }
+        ],
+        "poster_thumbnail": "animations/thumbnails/sleeping.png"
+      }
+    },
+    {
+      "id": "listening",
+      "name": "认真听你说",
+      "group": "conversation",
+      "existing_mood": false,
+      "atlas": "voice",
+      "column": 0,
+      "caption": "嗯，我在听。",
+      "trigger": "录音已实际开始，VoiceControls.phase === recording；申请权限时不能显示。",
+      "source": "desktop/src/VoiceControls.tsx · phase=recording；新增视觉状态",
+      "assets": {
+        "png": "assets/listening.png",
+        "rgb565": "device/otter/pixel_game/listening.565",
+        "flash_path": "/otter/pixel_game/listening.565",
+        "bytes": 153600,
+        "sha256": "f5c90610186427566c5b673dd7ba5d9248900296f99d05e8eb8842f6382c9059",
+        "png_sha256": "bb8e1aea407ef6f5ffd3efb8010013fc39feef9e2aa3acc001c2b5585991b8e0"
+      },
+      "thumbnail": {
+        "png": "thumbnails/listening.png",
+        "rgb565": "device/otter/pixel_game/listening.thumb.565",
+        "flash_path": "/otter/pixel_game/listening.thumb.565",
+        "width": 96,
+        "height": 64,
+        "bytes": 12288,
+        "sha256": "9d2e5e09dc7c72126885acffd9d986d0a30c313573c7626923450221246615a4",
+        "png_sha256": "d44646256020dc02c0f5bfcf4b31065e658a2a06098b1bfb2f30632c52218d22"
+      },
+      "animation": {
+        "gif": "animations/gif/listening.gif",
+        "thumbnail_gif": "animations/thumbnails/listening.gif",
+        "poster": "animations/frames/listening/00.png",
+        "frame_count": 4,
+        "delay_ms": [
+          650,
+          220,
+          150,
+          220
+        ],
+        "duration_ms": 1240,
+        "loop": 0,
+        "width": 240,
+        "height": 320,
+        "motion": "侧耳听，轻轻抬爪",
+        "bytes": 80692,
+        "sha256": "fd58b23c4e319de58a6497875d02b5596b231cf9acb5cb034203e4e385280592",
+        "thumbnail_sha256": "26d1d1fe4240a1cf747f29bd32f237a736936f270321b795d092e280f30c3414",
+        "device_gzip_bytes": 97365,
+        "source": "sources/animation/listening.png",
+        "source_sha256": "a5840f8c66c6aef8b4fb970a0aafa45190d2b74e682899ff4c53734a2115c327",
+        "registration": {
+          "scale": 0.46875,
+          "body_center_x": 120,
+          "baseline_y": 260,
+          "method": "nearest-neighbour geometry, brown torso baseline and horizontal axis",
+          "background": "border-connected blue matte normalized to #123f4b"
+        },
+        "frames": [
+          {
+            "index": 0,
+            "png": "animations/frames/listening/00.png",
+            "png_sha256": "8950c344932abd2b4b3ebc766bc3cacbbec1f516726ec56362f34ddefaf70a8d",
+            "rgb565_gzip": "device-animation/otter/pixel_game/listening/00.565.gz",
+            "gzip_bytes": 24647,
+            "gzip_sha256": "f0b099426c596f44f36bc9bced7cd6265b727987ec4cc66fb82dda6eaad40b38",
+            "raw_bytes": 153600,
+            "raw_sha256": "b81fcab960cf6b29bbcbfc5e75e7eb51f8f3b4b64512307d52b7cfcfc1840685",
+            "delay_ms": 650
+          },
+          {
+            "index": 1,
+            "png": "animations/frames/listening/01.png",
+            "png_sha256": "53cf74a6f5424549d14763359b07b1041e6e803c48158285c7d7aa538e36d96f",
+            "rgb565_gzip": "device-animation/otter/pixel_game/listening/01.565.gz",
+            "gzip_bytes": 24932,
+            "gzip_sha256": "23e5400871d27b8f98f858e87f09326c900785401bd2a417aa7d57cf15796a1e",
+            "raw_bytes": 153600,
+            "raw_sha256": "bbfb853edd7522ef4e0e60ce3721ce79c2f49cf76aa17c657a5be2f4e3a2b1f9",
+            "delay_ms": 220
+          },
+          {
+            "index": 2,
+            "png": "animations/frames/listening/02.png",
+            "png_sha256": "01c736ce01654b78a14a920944de3ddcf9300a43c4e5851b9754902e78cc94de",
+            "rgb565_gzip": "device-animation/otter/pixel_game/listening/02.565.gz",
+            "gzip_bytes": 23474,
+            "gzip_sha256": "50d70a43e61fe2aea070585610b0f32f4e3ab77ec317ed7bfe4ff2fa191070bd",
+            "raw_bytes": 153600,
+            "raw_sha256": "ea4f36a4f17469c75f36b8184f285752b9ffdfecae5972db6520811bd706797f",
+            "delay_ms": 150
+          },
+          {
+            "index": 3,
+            "png": "animations/frames/listening/03.png",
+            "png_sha256": "4d8e728b72ad6a34a5897eefe00ad05f93afb75c32018b394550a163c8c09b50",
+            "rgb565_gzip": "device-animation/otter/pixel_game/listening/03.565.gz",
+            "gzip_bytes": 24312,
+            "gzip_sha256": "8aec452804bac0d49ee03771b3033ac4ab103b57995f74b68819d74c7f5238ce",
+            "raw_bytes": 153600,
+            "raw_sha256": "81ef31c80b65f5ebd440eaaf64cefeb08857d194f0a3a3aaa14ea70b71f04c06",
+            "delay_ms": 220
+          }
+        ],
+        "poster_thumbnail": "animations/thumbnails/listening.png"
+      }
+    },
+    {
+      "id": "thinking",
+      "name": "想一想",
+      "group": "conversation",
+      "existing_mood": false,
+      "atlas": "voice",
+      "column": 1,
+      "caption": "让我把线索串起来。",
+      "trigger": "建议用于转写中、chatBusy 等待回复；当前桌面聊天忙碌统一显示 working。",
+      "source": "desktop/src/main.tsx · chatBusy；desktop/src/VoiceControls.tsx · transcribing；新增视觉状态",
+      "assets": {
+        "png": "assets/thinking.png",
+        "rgb565": "device/otter/pixel_game/thinking.565",
+        "flash_path": "/otter/pixel_game/thinking.565",
+        "bytes": 153600,
+        "sha256": "fa9064adf0f54251b7f83b515673695e16d543b80de72f7d4a0944e9192e4b94",
+        "png_sha256": "793ccd19bf8376fcc83d363b9cb465201a16d581a28ccab1ba66cfca7028832b"
+      },
+      "thumbnail": {
+        "png": "thumbnails/thinking.png",
+        "rgb565": "device/otter/pixel_game/thinking.thumb.565",
+        "flash_path": "/otter/pixel_game/thinking.thumb.565",
+        "width": 96,
+        "height": 64,
+        "bytes": 12288,
+        "sha256": "3abb07b8ed3a38420fc98eaf669bea92e9fb31d1336a00edd54f1239fae520fd",
+        "png_sha256": "8a528ca50db3cace765994f8217258d515f8009a1cb930d314268053a2e27e0a"
+      },
+      "animation": {
+        "gif": "animations/gif/thinking.gif",
+        "thumbnail_gif": "animations/thumbnails/thinking.gif",
+        "poster": "animations/frames/thinking/00.png",
+        "frame_count": 4,
+        "delay_ms": [
+          700,
+          400,
+          120,
+          400
+        ],
+        "duration_ms": 1620,
+        "loop": 0,
+        "width": 240,
+        "height": 320,
+        "motion": "托腮转动眼神",
+        "bytes": 81845,
+        "sha256": "f843695baa30ec98eaf705c928ea82ec5f2df4470681e24c5bb5a2d13be17936",
+        "thumbnail_sha256": "9cf191b1b8eead4dcc642a178cd296f958155aa62c09ff0ecb7aca919e4179f9",
+        "device_gzip_bytes": 97079,
+        "source": "sources/animation/thinking.png",
+        "source_sha256": "ca365a25a7a0a3a1d8e657b3189e0f9ffeee87e698ecd66835aeb7af2d4f75a4",
+        "registration": {
+          "scale": 0.46875,
+          "body_center_x": 120,
+          "baseline_y": 260,
+          "method": "nearest-neighbour geometry, brown torso baseline and horizontal axis",
+          "background": "border-connected blue matte normalized to #123f4b"
+        },
+        "frames": [
+          {
+            "index": 0,
+            "png": "animations/frames/thinking/00.png",
+            "png_sha256": "0044124e2de182d7893dd459871509c748668abb68c146f6f097d8eb7c83f903",
+            "rgb565_gzip": "device-animation/otter/pixel_game/thinking/00.565.gz",
+            "gzip_bytes": 24020,
+            "gzip_sha256": "517f681083f2b5b2abc7d4a000562d7f3847bf72d009b167f3eab98cb000dfb8",
+            "raw_bytes": 153600,
+            "raw_sha256": "55de3ac80170f44b541f19d6d1a330abf24c628ba9c37a0c48fb581d4339d695",
+            "delay_ms": 700
+          },
+          {
+            "index": 1,
+            "png": "animations/frames/thinking/01.png",
+            "png_sha256": "fdb8448d668f506b3f41e2e6c82037a3d3e8fdf144104b12c5dfde97623389ea",
+            "rgb565_gzip": "device-animation/otter/pixel_game/thinking/01.565.gz",
+            "gzip_bytes": 24766,
+            "gzip_sha256": "77fe5755a2ca4074519deea536e4f47787fad6ec1a3d1962a7d63c233c5f748c",
+            "raw_bytes": 153600,
+            "raw_sha256": "a3976b209b864c6f824c0fbb9841a9929b90cbe078ad5b2fe2fab24273e636e2",
+            "delay_ms": 400
+          },
+          {
+            "index": 2,
+            "png": "animations/frames/thinking/02.png",
+            "png_sha256": "bd458ef4c8f349a09902c347d80bbf5e22bf4e3a80ea80c1115b83dc10b4151f",
+            "rgb565_gzip": "device-animation/otter/pixel_game/thinking/02.565.gz",
+            "gzip_bytes": 23766,
+            "gzip_sha256": "582e466bc8623e50a82a7827928f632964a9d989ba44912fa8051402b2f980d8",
+            "raw_bytes": 153600,
+            "raw_sha256": "6e89b2cefe4ef9245fb27d6a18a43711b1293cbcfc433d8c66bd76f18a67d8f0",
+            "delay_ms": 120
+          },
+          {
+            "index": 3,
+            "png": "animations/frames/thinking/03.png",
+            "png_sha256": "1bc252fd0479548c05069582018eaa751f1aab82caec5bf0bb074b4927eca24e",
+            "rgb565_gzip": "device-animation/otter/pixel_game/thinking/03.565.gz",
+            "gzip_bytes": 24527,
+            "gzip_sha256": "9435c4875edc1653f1b4439f93596fa2086feee70d86c28de033df2b64c125d2",
+            "raw_bytes": 153600,
+            "raw_sha256": "dfcb5d401c7dd6e9f969bc95d92f35aac5beb37b73b7430d0a0061ac75443f4c",
+            "delay_ms": 400
+          }
+        ],
+        "poster_thumbnail": "animations/thumbnails/thinking.png"
+      }
+    },
+    {
+      "id": "speaking",
+      "name": "和你说话",
+      "group": "conversation",
+      "existing_mood": true,
+      "atlas": "voice",
+      "column": 2,
+      "caption": "这件事，我们可以这样做。",
+      "trigger": "voice.activity.data.speaking 为 true，停止朗读时结束。",
+      "source": "desktop/src/main.tsx · speaking；desktop/electron/speech.cjs",
+      "assets": {
+        "png": "assets/speaking.png",
+        "rgb565": "device/otter/pixel_game/speaking.565",
+        "flash_path": "/otter/pixel_game/speaking.565",
+        "bytes": 153600,
+        "sha256": "c35a1280cc0e648af748b1bbee0cea4a7965732ae290085c35c7ba78c2fa019f",
+        "png_sha256": "c39a85617b5f6309a359b21851f03a56bd8c35ae86d3af6a35934afcc30f2b11"
+      },
+      "thumbnail": {
+        "png": "thumbnails/speaking.png",
+        "rgb565": "device/otter/pixel_game/speaking.thumb.565",
+        "flash_path": "/otter/pixel_game/speaking.thumb.565",
+        "width": 96,
+        "height": 64,
+        "bytes": 12288,
+        "sha256": "e16737582c1207184dcd6b216e2b3eb684919fd24d6a143b9f0d4ae5676b7154",
+        "png_sha256": "fe9401fa300bca208bfa632b0ce503a862e432434d19b5f5774cc531d2131238"
+      },
+      "animation": {
+        "gif": "animations/gif/speaking.gif",
+        "thumbnail_gif": "animations/thumbnails/speaking.gif",
+        "poster": "animations/frames/speaking/00.png",
+        "frame_count": 4,
+        "delay_ms": [
+          180,
+          160,
+          180,
+          160
+        ],
+        "duration_ms": 680,
+        "loop": 0,
+        "width": 240,
+        "height": 320,
+        "motion": "闭嘴、小张嘴、大张嘴",
+        "bytes": 78541,
+        "sha256": "9e5804447ef3dc111565df25c2bd8d11925218f98602f5183d8492f07ea65cf6",
+        "thumbnail_sha256": "42c5e75b389855aad92c69e1c8e6fed7cff8c0293d39d2e3fbac688a378609ae",
+        "device_gzip_bytes": 91560,
+        "source": "sources/animation/speaking.png",
+        "source_sha256": "268f4989cfb70d9d957c2a915a2b580f72d7b6f8cb952ef4b2a8b3764cf93980",
+        "registration": {
+          "scale": 0.4543610547667343,
+          "body_center_x": 120,
+          "baseline_y": 260,
+          "method": "nearest-neighbour geometry, brown torso baseline and horizontal axis",
+          "background": "border-connected blue matte normalized to #123f4b"
+        },
+        "frames": [
+          {
+            "index": 0,
+            "png": "animations/frames/speaking/00.png",
+            "png_sha256": "a3631ddc8dc7530a6b1d597cbc88f74477576001edeeca85cbbed223688d1709",
+            "rgb565_gzip": "device-animation/otter/pixel_game/speaking/00.565.gz",
+            "gzip_bytes": 22516,
+            "gzip_sha256": "265fca62f322e587d0e33889cfc2bc28da6bb81703b24dd8ed55961dd9d93c9b",
+            "raw_bytes": 153600,
+            "raw_sha256": "5eb2bf30fc8d13c57997273cd8e58dea3c4f3e5a6ed292b487047df035844439",
+            "delay_ms": 180
+          },
+          {
+            "index": 1,
+            "png": "animations/frames/speaking/01.png",
+            "png_sha256": "060daef13633b68f2f2939630e442ef97132d07a8a516592d99dd5ce313ff41e",
+            "rgb565_gzip": "device-animation/otter/pixel_game/speaking/01.565.gz",
+            "gzip_bytes": 23167,
+            "gzip_sha256": "353d5bd0698e201dc1261c85ee6233b0d09f4a7b63b00df97731bf3c24d41e2c",
+            "raw_bytes": 153600,
+            "raw_sha256": "a7fd362703e76bbc693a3579fd43cc9ef8b26e4ceda1e00064ea897b0c27adfa",
+            "delay_ms": 160
+          },
+          {
+            "index": 2,
+            "png": "animations/frames/speaking/02.png",
+            "png_sha256": "ca4d2378c0f6f68158673fbf2d1770802db2aab6103d64d3406b939f44eea5ec",
+            "rgb565_gzip": "device-animation/otter/pixel_game/speaking/02.565.gz",
+            "gzip_bytes": 23315,
+            "gzip_sha256": "d3ff919ef6bbf3316aa1626812c68652851042f02745d7ebc67ae0fb3bc06e41",
+            "raw_bytes": 153600,
+            "raw_sha256": "e95e508106800fd38ff3fe1bcece1f786e6c86ebae51649e1b3eca4ed2c983d8",
+            "delay_ms": 180
+          },
+          {
+            "index": 3,
+            "png": "animations/frames/speaking/03.png",
+            "png_sha256": "ca0d7b4b28bbb3756eeb4b9fac957aedcc0ac96a13683ea4a342375e2087346d",
+            "rgb565_gzip": "device-animation/otter/pixel_game/speaking/03.565.gz",
+            "gzip_bytes": 22562,
+            "gzip_sha256": "e256b96a7565c4d42b0f1478354178bc9c53f05c6d97dab01bc7289d6be0ddee",
+            "raw_bytes": 153600,
+            "raw_sha256": "c4ba55f4aa3ff099e683f07150eb29a50ae0f0f5b6e60f3cb48aba43d5f62a36",
+            "delay_ms": 160
+          }
+        ],
+        "poster_thumbnail": "animations/thumbnails/speaking.png"
+      }
+    },
+    {
+      "id": "working",
+      "name": "整理简报",
+      "group": "conversation",
+      "existing_mood": true,
+      "atlas": "task",
+      "column": 0,
+      "caption": "把今天的线索整理好。",
+      "trigger": "工作任务 job.status 为 queued / running；原 working 状态可直接复用。",
+      "source": "desktop/src/main.tsx · working / job.status",
+      "assets": {
+        "png": "assets/working.png",
+        "rgb565": "device/otter/pixel_game/working.565",
+        "flash_path": "/otter/pixel_game/working.565",
+        "bytes": 153600,
+        "sha256": "46c315892f72d5f85bb18ff8973753b7d616a0289a1cd6e45cd81afce6a3ebaf",
+        "png_sha256": "1687168f842c6caa7d1f50de3d30922e01a7f088aaa1de02905667674031ba3f"
+      },
+      "thumbnail": {
+        "png": "thumbnails/working.png",
+        "rgb565": "device/otter/pixel_game/working.thumb.565",
+        "flash_path": "/otter/pixel_game/working.thumb.565",
+        "width": 96,
+        "height": 64,
+        "bytes": 12288,
+        "sha256": "7f13b96e66e62a6a9c0bc40a1949a30cbcd8aef23afb985905cdeb4791efff82",
+        "png_sha256": "7879c6b3e0a692337e55a2b4e46576ae38ff0347aef57b2fd2db21f1aed1c56d"
+      },
+      "animation": {
+        "gif": "animations/gif/working.gif",
+        "thumbnail_gif": "animations/thumbnails/working.gif",
+        "poster": "animations/frames/working/00.png",
+        "frame_count": 4,
+        "delay_ms": [
+          550,
+          300,
+          180,
+          300
+        ],
+        "duration_ms": 1330,
+        "loop": 0,
+        "width": 240,
+        "height": 320,
+        "motion": "埋头整理，小爪敲键",
+        "bytes": 71690,
+        "sha256": "69a4f5df3f06353961b07c1b7be4016c3d045a2ca1489877be956342014631c0",
+        "thumbnail_sha256": "9ad50428413b93562e1bd121b7bced93ca26ba2fa5494f2f173aab5d4fd0d4a5",
+        "device_gzip_bytes": 85322,
+        "source": "sources/animation/working.png",
+        "source_sha256": "a3bde5e653f67830a55b7976ad58a4596d69e7f146358baba3557ea6efbd6080",
+        "registration": {
+          "scale": 0.46875,
+          "body_center_x": 120,
+          "baseline_y": 260,
+          "method": "nearest-neighbour geometry, brown torso baseline and horizontal axis",
+          "background": "border-connected blue matte normalized to #123f4b"
+        },
+        "frames": [
+          {
+            "index": 0,
+            "png": "animations/frames/working/00.png",
+            "png_sha256": "2aae8d763b8b638f73926598d8c29c03f8b1a3b1414ba79aa06e7b3155672469",
+            "rgb565_gzip": "device-animation/otter/pixel_game/working/00.565.gz",
+            "gzip_bytes": 21456,
+            "gzip_sha256": "a94aba4512d27a0bd942fa01be1f3d95f1e4182ceba14934a99d25d759ab148b",
+            "raw_bytes": 153600,
+            "raw_sha256": "e09a434e027d50ecdd6886568889be3047adfabcaf14c99d8d7a661a7fa230c7",
+            "delay_ms": 550
+          },
+          {
+            "index": 1,
+            "png": "animations/frames/working/01.png",
+            "png_sha256": "3d922f3b2c16512bae989818ec99e77a186b9bed9973cef142bb9f058ce9ee2a",
+            "rgb565_gzip": "device-animation/otter/pixel_game/working/01.565.gz",
+            "gzip_bytes": 21335,
+            "gzip_sha256": "004ca486e78a04dcea0f36247e5a9babc8b921a0acb7b794be49b12bf7d6ce42",
+            "raw_bytes": 153600,
+            "raw_sha256": "995a4ce41acf58e1a5187a35b51f96a2922ac06215f13ece2f4befb1b77bdb3c",
+            "delay_ms": 300
+          },
+          {
+            "index": 2,
+            "png": "animations/frames/working/02.png",
+            "png_sha256": "8d196232f0d2aa55ced3074bfe6d99f949be6ae4fc7cad5463e400023582605d",
+            "rgb565_gzip": "device-animation/otter/pixel_game/working/02.565.gz",
+            "gzip_bytes": 20640,
+            "gzip_sha256": "5bd04bde62298353431f2f7700d667e913cd197b810a3375f8ec6858de31fef9",
+            "raw_bytes": 153600,
+            "raw_sha256": "45f8b509d220663e7e38e07c55e6f5de5a4c093be83a906d22191717ac9a32c4",
+            "delay_ms": 180
+          },
+          {
+            "index": 3,
+            "png": "animations/frames/working/03.png",
+            "png_sha256": "dbd2b2bc08d581e3524817d7fcf24704bf4700d7c6d6a3eb30f4ecb33a698ff4",
+            "rgb565_gzip": "device-animation/otter/pixel_game/working/03.565.gz",
+            "gzip_bytes": 21891,
+            "gzip_sha256": "1ab580ceea896852f1b2697e90be5ad01de7d1fdae951accc6481e2d293a2df6",
+            "raw_bytes": 153600,
+            "raw_sha256": "dd8cee77061468fa056ea7c05499af7e392dd92d61f904bd493ada6c8baf900a",
+            "delay_ms": 300
+          }
+        ],
+        "poster_thumbnail": "animations/thumbnails/working.png"
+      }
+    },
+    {
+      "id": "focus",
+      "name": "安静陪你专注",
+      "group": "assistant",
+      "existing_mood": false,
+      "atlas": "task",
+      "column": 1,
+      "caption": "你专心，我陪着。",
+      "trigger": "存在有效 focus 计时；结束后转提醒或伸懒腰。",
+      "source": "desktop/src/AssistantPane.tsx · state.focus；新增视觉状态",
+      "assets": {
+        "png": "assets/focus.png",
+        "rgb565": "device/otter/pixel_game/focus.565",
+        "flash_path": "/otter/pixel_game/focus.565",
+        "bytes": 153600,
+        "sha256": "e79cceb586472c77e7c4ed574c48ea2c07bcc686df99f154df5a57814dd66a99",
+        "png_sha256": "7ff9a7a35f5beba8c3027c24bf696677c8579a6094533535aab2603797e51229"
+      },
+      "thumbnail": {
+        "png": "thumbnails/focus.png",
+        "rgb565": "device/otter/pixel_game/focus.thumb.565",
+        "flash_path": "/otter/pixel_game/focus.thumb.565",
+        "width": 96,
+        "height": 64,
+        "bytes": 12288,
+        "sha256": "08556b98ae80965be6213851f024775d80ba77701f0f81f406194aa2fc9d6946",
+        "png_sha256": "3126dc1ced3852bd7d5f83f57062ce8f61bcac5d3574f38c1b75bfe7d31b478a"
+      },
+      "animation": {
+        "gif": "animations/gif/focus.gif",
+        "thumbnail_gif": "animations/thumbnails/focus.gif",
+        "poster": "animations/frames/focus/00.png",
+        "frame_count": 4,
+        "delay_ms": [
+          1400,
+          200,
+          160,
+          200
+        ],
+        "duration_ms": 1960,
+        "loop": 0,
+        "width": 240,
+        "height": 320,
+        "motion": "安静眨眼，沙漏轻动",
+        "bytes": 69774,
+        "sha256": "d3c2cf550fc80ade56d9f7f79bc097e96ec40e58139f4a67028f4138d763cc5b",
+        "thumbnail_sha256": "9d595d0ead804a3ba7fb0d6278b1b20db2698b4d051e95fee445ce961e565ecc",
+        "device_gzip_bytes": 83832,
+        "source": "sources/animation/focus.png",
+        "source_sha256": "32ae87cc35a791f274abf2aa65fb62f4fbaa2aabc1be465b52bbb414014e9eb3",
+        "registration": {
+          "scale": 0.4218455743879473,
+          "body_center_x": 120,
+          "baseline_y": 260,
+          "method": "nearest-neighbour geometry, brown torso baseline and horizontal axis",
+          "background": "border-connected blue matte normalized to #123f4b"
+        },
+        "frames": [
+          {
+            "index": 0,
+            "png": "animations/frames/focus/00.png",
+            "png_sha256": "a002ff98968d790cb8e4aee98a53572df5b4dbd5d7f664add34ad2fb148acca4",
+            "rgb565_gzip": "device-animation/otter/pixel_game/focus/00.565.gz",
+            "gzip_bytes": 21226,
+            "gzip_sha256": "d6ff57dc8f813147e773d1e2bfbd03b70942dfcedb1740b0f6dcd1d507495fe5",
+            "raw_bytes": 153600,
+            "raw_sha256": "72a671003ad45a468f61b9e90ba5c8306a1860c964c2d849c092eb55818c8c92",
+            "delay_ms": 1400
+          },
+          {
+            "index": 1,
+            "png": "animations/frames/focus/01.png",
+            "png_sha256": "86634df9baa25ccea6401cd42db1a634fbb93e63a0e4dbb13fdf15e055605a75",
+            "rgb565_gzip": "device-animation/otter/pixel_game/focus/01.565.gz",
+            "gzip_bytes": 21004,
+            "gzip_sha256": "d557fa2f0aa2120dba2484693f93a15826a9faf0c6c73a496fe2d8d63fdbed05",
+            "raw_bytes": 153600,
+            "raw_sha256": "838c2f54927eacc6d2f30ccf95423272c4d0d646597cf08501c376392d44a31f",
+            "delay_ms": 200
+          },
+          {
+            "index": 2,
+            "png": "animations/frames/focus/02.png",
+            "png_sha256": "5e6b38ad7efc40b547e16c78df85228953e47174c9c2aa434bf9d7e2542bbcd0",
+            "rgb565_gzip": "device-animation/otter/pixel_game/focus/02.565.gz",
+            "gzip_bytes": 20667,
+            "gzip_sha256": "8fedbaac578b041ca3562576173e77c432a0811a64d2b1e950f38ceb1710ec61",
+            "raw_bytes": 153600,
+            "raw_sha256": "df1b8e983361a411f22ca5658436c9d55dedb2a3a94600e136fdd29f1d252d0a",
+            "delay_ms": 160
+          },
+          {
+            "index": 3,
+            "png": "animations/frames/focus/03.png",
+            "png_sha256": "ffa6e9a04df9f47a0f0c6453bb4557082b2b07885fc595cbd5e374e166c804b1",
+            "rgb565_gzip": "device-animation/otter/pixel_game/focus/03.565.gz",
+            "gzip_bytes": 20935,
+            "gzip_sha256": "828db89d910916b91903524ac573719e8a521d39fc880864189f714afcef7d26",
+            "raw_bytes": 153600,
+            "raw_sha256": "5c2d236ae7c6291e3b5a96b97e3f4d97503bcb6e6615487069f2edb2e3822305",
+            "delay_ms": 200
+          }
+        ],
+        "poster_thumbnail": "animations/thumbnails/focus.png"
+      }
+    },
+    {
+      "id": "awaiting_confirmation",
+      "name": "等你确认",
+      "group": "assistant",
+      "existing_mood": false,
+      "atlas": "task",
+      "column": 2,
+      "caption": "先给你看看，由你决定。",
+      "trigger": "记忆提议、任务提议或交接请求等待用户批准；表情不能代替确认按钮。",
+      "source": "desktop/src/ChatPane.tsx；desktop/src/HandoffPane.tsx；新增视觉状态",
+      "assets": {
+        "png": "assets/awaiting_confirmation.png",
+        "rgb565": "device/otter/pixel_game/awaiting_confirmation.565",
+        "flash_path": "/otter/pixel_game/awaiting_confirmation.565",
+        "bytes": 153600,
+        "sha256": "27e084390331b6785e7c38f72ff502f96c17ad8637d6d28c8c67a84af126c7a6",
+        "png_sha256": "f72eaeda3c49965a4af4db321de9ee8e9d6fff2665ababe70d991684965b052a"
+      },
+      "thumbnail": {
+        "png": "thumbnails/awaiting_confirmation.png",
+        "rgb565": "device/otter/pixel_game/awaiting_confirmation.thumb.565",
+        "flash_path": "/otter/pixel_game/awaiting_confirmation.thumb.565",
+        "width": 96,
+        "height": 64,
+        "bytes": 12288,
+        "sha256": "55a04b3670877cd9c0ce96b3985d52c43d088fffe49916a53bff586dce4ad890",
+        "png_sha256": "2006dafa56fd92b9f148d0efb53a84db05de12dadff740aa4d23955bd86e3255"
+      },
+      "animation": {
+        "gif": "animations/gif/awaiting_confirmation.gif",
+        "thumbnail_gif": "animations/thumbnails/awaiting_confirmation.gif",
+        "poster": "animations/frames/awaiting_confirmation/00.png",
+        "frame_count": 4,
+        "delay_ms": [
+          1200,
+          180,
+          140,
+          180
+        ],
+        "duration_ms": 1700,
+        "loop": 0,
+        "width": 240,
+        "height": 320,
+        "motion": "托着卡片，等你决定",
+        "bytes": 70127,
+        "sha256": "303759c3ec9c896ec886f31840030d7a62eb1589d9bab110b4ab61d707398529",
+        "thumbnail_sha256": "45cb85ee7933b31c79a77be4b98aa0ba8e075c95c73c1f7b587b83cfda0a6509",
+        "device_gzip_bytes": 82097,
+        "source": "sources/animation/awaiting_confirmation.png",
+        "source_sha256": "439d50fd7f7ef35ab97c27d5fe081d491ebd84465e70c7738b9083b80ec3dc7a",
+        "registration": {
+          "scale": 0.4392156862745098,
+          "body_center_x": 120,
+          "baseline_y": 260,
+          "method": "nearest-neighbour geometry, brown torso baseline and horizontal axis",
+          "background": "border-connected blue matte normalized to #123f4b"
+        },
+        "frames": [
+          {
+            "index": 0,
+            "png": "animations/frames/awaiting_confirmation/00.png",
+            "png_sha256": "68f595f57b543130be4126ced00379f124920771e55adff5de6de867e230704b",
+            "rgb565_gzip": "device-animation/otter/pixel_game/awaiting_confirmation/00.565.gz",
+            "gzip_bytes": 20661,
+            "gzip_sha256": "fb55e10adeae753edf104da78423599efa7614fb88a9aef4799dd88359b27d93",
+            "raw_bytes": 153600,
+            "raw_sha256": "f2c23d7e58aca715c61b583a250503ff6e46c073020950c52bf3d7f6669ab4a3",
+            "delay_ms": 1200
+          },
+          {
+            "index": 1,
+            "png": "animations/frames/awaiting_confirmation/01.png",
+            "png_sha256": "1fa57a817dadf5498cebc97aa33aa7b69327465893bb7752d0ebd6c2b7806c27",
+            "rgb565_gzip": "device-animation/otter/pixel_game/awaiting_confirmation/01.565.gz",
+            "gzip_bytes": 20204,
+            "gzip_sha256": "131db03ba06e25c9df06bcb781b0a409c9a9c13942d115b46f7e1556d3a8a98e",
+            "raw_bytes": 153600,
+            "raw_sha256": "50598cc3dea7bd05e080b5a028e5d9606e3627671395844d9eaf84e3ef576e76",
+            "delay_ms": 180
+          },
+          {
+            "index": 2,
+            "png": "animations/frames/awaiting_confirmation/02.png",
+            "png_sha256": "efde2ce57c67b6759b1eabdd89811730b647d81dca808ee2ba6a22eaaf4344d5",
+            "rgb565_gzip": "device-animation/otter/pixel_game/awaiting_confirmation/02.565.gz",
+            "gzip_bytes": 20005,
+            "gzip_sha256": "59d617b38b2819ade89520d63a8eacf6fe964795376a7103829f4f7631ff88f3",
+            "raw_bytes": 153600,
+            "raw_sha256": "57d060421c977f117f943deca5d780e228e6349fc7631d4fa0d74b92691dbf5d",
+            "delay_ms": 140
+          },
+          {
+            "index": 3,
+            "png": "animations/frames/awaiting_confirmation/03.png",
+            "png_sha256": "0a7453b888f7ca8b29a8e27240cca71f58eca929c7de223ae0a154e71369a5b8",
+            "rgb565_gzip": "device-animation/otter/pixel_game/awaiting_confirmation/03.565.gz",
+            "gzip_bytes": 21227,
+            "gzip_sha256": "dd20deab8aa27fcb67f76e2bed824b80db254e786ff549561cff972e5fadbbb4",
+            "raw_bytes": 153600,
+            "raw_sha256": "b79b421fb8419738ce2bc64854f5091c3bf4958ab98fa27c0eb9f16434d8ba83",
+            "delay_ms": 180
+          }
+        ],
+        "poster_thumbnail": "animations/thumbnails/awaiting_confirmation.png"
+      }
+    },
+    {
+      "id": "eating",
+      "name": "吃小鱼",
+      "group": "pet",
+      "existing_mood": true,
+      "atlas": "pet_play",
+      "column": 0,
+      "caption": "啊呜！这条小鱼真香。",
+      "trigger": "feed 互动，沿用桌面 3800ms 效果和冷却。",
+      "source": "desktop/electron/pet-state.cjs · ACTIONS.feed",
+      "assets": {
+        "png": "assets/eating.png",
+        "rgb565": "device/otter/pixel_game/eating.565",
+        "flash_path": "/otter/pixel_game/eating.565",
+        "bytes": 153600,
+        "sha256": "230e58102a232d4bf074e1665832b27e4c7dceab31a168b8bd5c05cae6f803d1",
+        "png_sha256": "fa0d133e2f9f54cc17e2e2e8e6309adfb13a577fdc0e14c46e9a7f83a301622b"
+      },
+      "thumbnail": {
+        "png": "thumbnails/eating.png",
+        "rgb565": "device/otter/pixel_game/eating.thumb.565",
+        "flash_path": "/otter/pixel_game/eating.thumb.565",
+        "width": 96,
+        "height": 64,
+        "bytes": 12288,
+        "sha256": "9be69c17173e8fb599d44c2b8150babf3f806da19fda356b6dd8426f9554bf0a",
+        "png_sha256": "73ce35092dce5fa3ff930f1cd290a246e5701d3fd94d9c8e3a675fb7d92b03b5"
+      },
+      "animation": {
+        "gif": "animations/gif/eating.gif",
+        "thumbnail_gif": "animations/thumbnails/eating.gif",
+        "poster": "animations/frames/eating/00.png",
+        "frame_count": 4,
+        "delay_ms": [
+          420,
+          220,
+          260,
+          220
+        ],
+        "duration_ms": 1120,
+        "loop": 0,
+        "width": 240,
+        "height": 320,
+        "motion": "抱着小鱼慢慢嚼",
+        "bytes": 77238,
+        "sha256": "61eb61fc3fa9dd54414ba6aa74597ededde6ffdea966a39d32c76ed4448bdb39",
+        "thumbnail_sha256": "588ee811685789b2bdc4c5ab8ebb0619f49c5c614516866398d548c701bce02c",
+        "device_gzip_bytes": 95908,
+        "source": "sources/animation/eating.png",
+        "source_sha256": "b19992299395155d0d33d82e76dd1b89a9245c3d25605f6f6f4a08d21e49b8cd",
+        "registration": {
+          "scale": 0.46875,
+          "body_center_x": 120,
+          "baseline_y": 260,
+          "method": "nearest-neighbour geometry, brown torso baseline and horizontal axis",
+          "background": "border-connected blue matte normalized to #123f4b"
+        },
+        "frames": [
+          {
+            "index": 0,
+            "png": "animations/frames/eating/00.png",
+            "png_sha256": "e9efeb32f1adca086a46a43cdc1dfdc39cbcdd40f4d900a9856586f48577e4c4",
+            "rgb565_gzip": "device-animation/otter/pixel_game/eating/00.565.gz",
+            "gzip_bytes": 23964,
+            "gzip_sha256": "dc19c810007d1e94a9f92e9b655460cdb7f64b909cd3779f8de22cb2cbbdb7fd",
+            "raw_bytes": 153600,
+            "raw_sha256": "078047628ebcd0f6e34cf5e17514098b1e8db6d5d1e89f9db5df717907482331",
+            "delay_ms": 420
+          },
+          {
+            "index": 1,
+            "png": "animations/frames/eating/01.png",
+            "png_sha256": "36a329caafbc275cb9797fc19fb9c5e2908c4a95fca1c7a4fef427ad82cf6545",
+            "rgb565_gzip": "device-animation/otter/pixel_game/eating/01.565.gz",
+            "gzip_bytes": 23989,
+            "gzip_sha256": "758e116a409f475232cc3b99c20537493981f6f24bf0b77eb5d20b0eae66ef87",
+            "raw_bytes": 153600,
+            "raw_sha256": "60cb8e43ac38ab385da4ba356e6a497a9def8e0d612a9ee7065731b09f5192cf",
+            "delay_ms": 220
+          },
+          {
+            "index": 2,
+            "png": "animations/frames/eating/02.png",
+            "png_sha256": "3223f634300fe517f77be26e4cd44c78565eb6325febc622720fca75a5b06d7b",
+            "rgb565_gzip": "device-animation/otter/pixel_game/eating/02.565.gz",
+            "gzip_bytes": 23931,
+            "gzip_sha256": "29e7b974dc79e775b175475005e62dd2624e370f7ad3afa5aaef4f93b6df00e4",
+            "raw_bytes": 153600,
+            "raw_sha256": "439a9c135012b2a8dcb578ef9e521b21be3104809f0b4eb28c77c7e59ba675db",
+            "delay_ms": 260
+          },
+          {
+            "index": 3,
+            "png": "animations/frames/eating/03.png",
+            "png_sha256": "9d0c884e4c297238b3545c4be16d182d685fc28ae40c3c100b035621effc9042",
+            "rgb565_gzip": "device-animation/otter/pixel_game/eating/03.565.gz",
+            "gzip_bytes": 24024,
+            "gzip_sha256": "8b9522abb5aa7e6aa0d0e335399ca2d81bcd03c3ce75909e9b33bf664c49560e",
+            "raw_bytes": 153600,
+            "raw_sha256": "f2f94b5c598a136f233c20783b06c107a7e5c45fce246270f11bc952aa943659",
+            "delay_ms": 220
+          }
+        ],
+        "poster_thumbnail": "animations/thumbnails/eating.png"
+      }
+    },
+    {
+      "id": "playing",
+      "name": "玩小球",
+      "group": "pet",
+      "existing_mood": true,
+      "atlas": "pet_play",
+      "column": 1,
+      "caption": "接住啦，轮到你！",
+      "trigger": "play 互动，沿用桌面 4200ms 效果。",
+      "source": "desktop/electron/pet-state.cjs · ACTIONS.play",
+      "assets": {
+        "png": "assets/playing.png",
+        "rgb565": "device/otter/pixel_game/playing.565",
+        "flash_path": "/otter/pixel_game/playing.565",
+        "bytes": 153600,
+        "sha256": "e38b9c54203f840b121c30924347e92d7208b1c5d8ffcc4cf0088a6e4f680f4b",
+        "png_sha256": "114ecb7277f7251d86660c590df3127b8d7c7998e406fd14f5f21519fe594c5e"
+      },
+      "thumbnail": {
+        "png": "thumbnails/playing.png",
+        "rgb565": "device/otter/pixel_game/playing.thumb.565",
+        "flash_path": "/otter/pixel_game/playing.thumb.565",
+        "width": 96,
+        "height": 64,
+        "bytes": 12288,
+        "sha256": "5f0d09c64275cb0af575f5b26a23e5ab3ff6fdcdbbe9ba3596c9332d39eda754",
+        "png_sha256": "b71b2dade8be4b0a691820d41977bed9e08e82a0eb5830e2b11a1bf241ec699b"
+      },
+      "animation": {
+        "gif": "animations/gif/playing.gif",
+        "thumbnail_gif": "animations/thumbnails/playing.gif",
+        "poster": "animations/frames/playing/00.png",
+        "frame_count": 4,
+        "delay_ms": [
+          320,
+          240,
+          320,
+          240
+        ],
+        "duration_ms": 1120,
+        "loop": 0,
+        "width": 240,
+        "height": 320,
+        "motion": "小球在爪子间滚动",
+        "bytes": 88568,
+        "sha256": "6548125dae9796330b1ccf0b0832ea78948a8bf104120fdea80f67eed606f1ae",
+        "thumbnail_sha256": "c76a0a9c347b0830067f5daf53fd3ed279b6b582d50532810a859e72ab535b9a",
+        "device_gzip_bytes": 105171,
+        "source": "sources/animation/playing.png",
+        "source_sha256": "59da20450150297b17186a2ea0e809784b5645c4e4a27db52b0c068e10ef9aac",
+        "registration": {
+          "scale": 0.46875,
+          "body_center_x": 120,
+          "baseline_y": 260,
+          "method": "nearest-neighbour geometry, brown torso baseline and horizontal axis",
+          "background": "border-connected blue matte normalized to #123f4b"
+        },
+        "frames": [
+          {
+            "index": 0,
+            "png": "animations/frames/playing/00.png",
+            "png_sha256": "fa11a86e89cf2dcd1fe64c29f61e8802f60139db93a1480f54b3e74005c25be2",
+            "rgb565_gzip": "device-animation/otter/pixel_game/playing/00.565.gz",
+            "gzip_bytes": 26417,
+            "gzip_sha256": "34b6f7d90112af850e7e7a767e199da20e323b5151a2b5f9beba48c0d70e1737",
+            "raw_bytes": 153600,
+            "raw_sha256": "3a588fc112fa11f4c274440b3a1ef80341a0736ca2c3e28b1f046dafb9410ff3",
+            "delay_ms": 320
+          },
+          {
+            "index": 1,
+            "png": "animations/frames/playing/01.png",
+            "png_sha256": "437f2abdd04f0a760e5b360edeccfc285f002e7fd7b3dc737ba206435c7db903",
+            "rgb565_gzip": "device-animation/otter/pixel_game/playing/01.565.gz",
+            "gzip_bytes": 26397,
+            "gzip_sha256": "3e92ac2a20674f9fe8339065405ee156f30ad5fea3e380455b11a2d22c496408",
+            "raw_bytes": 153600,
+            "raw_sha256": "4458dd1702822078474a36c9d4e88ebd2107dfff94906f68f7d3119b2d2dd72b",
+            "delay_ms": 240
+          },
+          {
+            "index": 2,
+            "png": "animations/frames/playing/02.png",
+            "png_sha256": "d1527b38758a4d27ccd0f9e73f4a040af0268a1a3f7ae3cef703e112a1de7d14",
+            "rgb565_gzip": "device-animation/otter/pixel_game/playing/02.565.gz",
+            "gzip_bytes": 25963,
+            "gzip_sha256": "ee8e183c4524d37b337e7915d074b81253aab29117a747421a4884900a6d6b35",
+            "raw_bytes": 153600,
+            "raw_sha256": "4a76da8e9fbd436a91805a812e5c4bafbd64fc8c7ad52f9660f56d2434544eb9",
+            "delay_ms": 320
+          },
+          {
+            "index": 3,
+            "png": "animations/frames/playing/03.png",
+            "png_sha256": "a65853844a1f867a08c581c723da54a6e124b2b75b512169da6f90f8b68b4e58",
+            "rgb565_gzip": "device-animation/otter/pixel_game/playing/03.565.gz",
+            "gzip_bytes": 26394,
+            "gzip_sha256": "5e03fa351a4aaaee7bb00595b0374eeccdc4cbdaaa223dd608929df9c71b8d6a",
+            "raw_bytes": 153600,
+            "raw_sha256": "917d97cc261094a466b226f25eee08936597ad49d23a4afebac22aee59b8f136",
+            "delay_ms": 240
+          }
+        ],
+        "poster_thumbnail": "animations/thumbnails/playing.png"
+      }
+    },
+    {
+      "id": "dancing",
+      "name": "跳水獭舞",
+      "group": "pet",
+      "existing_mood": true,
+      "atlas": "pet_play",
+      "column": 2,
+      "caption": "工作间隙，晃一晃。",
+      "trigger": "dance 互动，沿用桌面 4500ms 效果。",
+      "source": "desktop/electron/pet-state.cjs · ACTIONS.dance",
+      "assets": {
+        "png": "assets/dancing.png",
+        "rgb565": "device/otter/pixel_game/dancing.565",
+        "flash_path": "/otter/pixel_game/dancing.565",
+        "bytes": 153600,
+        "sha256": "4e3209fc10b63c4cd4475fa632b454103789f7a3c93679c5531c1bf12bd4263f",
+        "png_sha256": "d6b56e025c1cf05f5cc0dddbb82a9346381da2c4ecbf908756c1d43b616042e8"
+      },
+      "thumbnail": {
+        "png": "thumbnails/dancing.png",
+        "rgb565": "device/otter/pixel_game/dancing.thumb.565",
+        "flash_path": "/otter/pixel_game/dancing.thumb.565",
+        "width": 96,
+        "height": 64,
+        "bytes": 12288,
+        "sha256": "ab85daf9cbaff9b387cfeeb719dfb7b2c71d5b5e81aef444966f4beffe3efac3",
+        "png_sha256": "499bde38b5ddfc28d11bf226cdcbbf44163b896e90f8c78f5b416b99602fc5f1"
+      },
+      "animation": {
+        "gif": "animations/gif/dancing.gif",
+        "thumbnail_gif": "animations/thumbnails/dancing.gif",
+        "poster": "animations/frames/dancing/00.png",
+        "frame_count": 4,
+        "delay_ms": [
+          260,
+          260,
+          260,
+          260
+        ],
+        "duration_ms": 1040,
+        "loop": 0,
+        "width": 240,
+        "height": 320,
+        "motion": "小爪交替，左右轻摆",
+        "bytes": 66066,
+        "sha256": "b1d2eda32209b494747145c6b2769ef3ae5c00aa7b582a296de2a84abce53f9a",
+        "thumbnail_sha256": "55f961b829374f020c731a02b39c5e34d031b7756d847c865517896d9b5d120a",
+        "device_gzip_bytes": 78294,
+        "source": "sources/animation/dancing.png",
+        "source_sha256": "b45f31ed969c0e70cfe7a334f35c3cc0fa76006832d2ba67d575f5c491d28b7a",
+        "registration": {
+          "scale": 0.4132841328413284,
+          "body_center_x": 120,
+          "baseline_y": 260,
+          "method": "nearest-neighbour geometry, brown torso baseline and horizontal axis",
+          "background": "border-connected blue matte normalized to #123f4b"
+        },
+        "frames": [
+          {
+            "index": 0,
+            "png": "animations/frames/dancing/00.png",
+            "png_sha256": "b2b612fd83adb0bc5522684521560112d05fddbc3d2e1a86d2fa4647dd90ee40",
+            "rgb565_gzip": "device-animation/otter/pixel_game/dancing/00.565.gz",
+            "gzip_bytes": 20575,
+            "gzip_sha256": "cb6de21a57ed22415c7cd5b40688fcc3370c2efd6c099e1f9667c931b45d2a96",
+            "raw_bytes": 153600,
+            "raw_sha256": "ef859683455066e60d7eb87ba708b9260d4f4e4a63b0d021d2ee4ea89c006f3a",
+            "delay_ms": 260
+          },
+          {
+            "index": 1,
+            "png": "animations/frames/dancing/01.png",
+            "png_sha256": "7e346b5c8a0a867f29b7cc345b6b793e67fd105d9c3be90ae684bd5a2bac7f7b",
+            "rgb565_gzip": "device-animation/otter/pixel_game/dancing/01.565.gz",
+            "gzip_bytes": 19253,
+            "gzip_sha256": "877020c9c63a24e2e7ed7591b944abea3966c2c4150b630f61965e1fbe9d83f1",
+            "raw_bytes": 153600,
+            "raw_sha256": "823beb3934fc4f763a35592b2dbb99141b8581a56f1672ac0a39438d0e1e515d",
+            "delay_ms": 260
+          },
+          {
+            "index": 2,
+            "png": "animations/frames/dancing/02.png",
+            "png_sha256": "aac9617ae6586ea34d08b82ed838daf20f4fd67340cf69e603e3f6e942a16a2b",
+            "rgb565_gzip": "device-animation/otter/pixel_game/dancing/02.565.gz",
+            "gzip_bytes": 20028,
+            "gzip_sha256": "8fc56d6931faf45dd53119fdb202f3bdc5cccbc9709b002d4f3d7e3e9f0fbbbc",
+            "raw_bytes": 153600,
+            "raw_sha256": "3fd31359cff5f5b9aba0c9df1527d187cc5518046c73c7334d212251e4d381fb",
+            "delay_ms": 260
+          },
+          {
+            "index": 3,
+            "png": "animations/frames/dancing/03.png",
+            "png_sha256": "3a664d4dcbd877a90fa713635f0ebd5d4a585bc5c6a7da7a6af0b1cfb5e35c52",
+            "rgb565_gzip": "device-animation/otter/pixel_game/dancing/03.565.gz",
+            "gzip_bytes": 18438,
+            "gzip_sha256": "57d3ba1276f836bcf358f0429c4fc9567f740de0db36efc31f95a843c916e3e9",
+            "raw_bytes": 153600,
+            "raw_sha256": "b67d3add36f889745dd38b0adc23901af1d9cc6658f47b5f81ed879176059391",
+            "delay_ms": 260
+          }
+        ],
+        "poster_thumbnail": "animations/thumbnails/dancing.png"
+      }
+    },
+    {
+      "id": "waving",
+      "name": "打招呼",
+      "group": "pet",
+      "existing_mood": true,
+      "atlas": "pet_affection",
+      "column": 0,
+      "caption": "嗨，今天也一起慢慢来。",
+      "trigger": "wave 互动，沿用桌面 2800ms 效果。",
+      "source": "desktop/electron/pet-state.cjs · ACTIONS.wave",
+      "assets": {
+        "png": "assets/waving.png",
+        "rgb565": "device/otter/pixel_game/waving.565",
+        "flash_path": "/otter/pixel_game/waving.565",
+        "bytes": 153600,
+        "sha256": "c308d55b29238dfc420bba82673123c3ca13296aae059484d2933a3be1781174",
+        "png_sha256": "4f885ce8dec8c183a9e9b8f04ab33dc78e625d417437a4d2ebcd37629d126d47"
+      },
+      "thumbnail": {
+        "png": "thumbnails/waving.png",
+        "rgb565": "device/otter/pixel_game/waving.thumb.565",
+        "flash_path": "/otter/pixel_game/waving.thumb.565",
+        "width": 96,
+        "height": 64,
+        "bytes": 12288,
+        "sha256": "5eb6c102408cdce45f37fd034023f4b77af9efc208fb4121943c10f396099acc",
+        "png_sha256": "51d2b9a1609bf02a4e544a888575609307b280f4267d41d17fa4b7632c71404e"
+      },
+      "animation": {
+        "gif": "animations/gif/waving.gif",
+        "thumbnail_gif": "animations/thumbnails/waving.gif",
+        "poster": "animations/frames/waving/00.png",
+        "frame_count": 4,
+        "delay_ms": [
+          500,
+          230,
+          230,
+          230
+        ],
+        "duration_ms": 1190,
+        "loop": 0,
+        "width": 240,
+        "height": 320,
+        "motion": "同一只小爪轻挥",
+        "bytes": 61762,
+        "sha256": "436c80c648a2bc3a4a18e404412c34322bfdc59f312a1c55192b61554c063306",
+        "thumbnail_sha256": "d1cbcea14e7744da18f9c08d7a1751437892241c75d7009f472d5ad3de13c656",
+        "device_gzip_bytes": 71176,
+        "source": "sources/animation/waving.png",
+        "source_sha256": "22541b5db9897e2cf4ffe368c7482e527cee88a2ba1791f3d06378becf6cb5ad",
+        "registration": {
+          "scale": 0.4171322160148976,
+          "body_center_x": 120,
+          "baseline_y": 260,
+          "method": "nearest-neighbour geometry, brown torso baseline and horizontal axis",
+          "background": "border-connected blue matte normalized to #123f4b"
+        },
+        "frames": [
+          {
+            "index": 0,
+            "png": "animations/frames/waving/00.png",
+            "png_sha256": "57b45974c973432322d3bffbf4167f0519fc4e2aae2638c5be150ccb2d37c298",
+            "rgb565_gzip": "device-animation/otter/pixel_game/waving/00.565.gz",
+            "gzip_bytes": 17571,
+            "gzip_sha256": "d9459dd24d88019cd2c5c0d39e8a235a29fbbd7e3e5c3c7f4298e3ee69a41533",
+            "raw_bytes": 153600,
+            "raw_sha256": "b2e6acbd64ae918e7fddc7dc377a3eb3ccfbb1cf3a1aad2dffa4d4e736fc0baf",
+            "delay_ms": 500
+          },
+          {
+            "index": 1,
+            "png": "animations/frames/waving/01.png",
+            "png_sha256": "527547b9932ab8feff6231de56b7e914152bea330187f788c7fdf8300c20a698",
+            "rgb565_gzip": "device-animation/otter/pixel_game/waving/01.565.gz",
+            "gzip_bytes": 18241,
+            "gzip_sha256": "84a1c5de733cbe090bab0210406321b3445a287bb33acfc34e9b1ddfb82dcd92",
+            "raw_bytes": 153600,
+            "raw_sha256": "48d73af480dcbf1e48581260e31a93f9a817e903c630c7ca0c9b931f6807b075",
+            "delay_ms": 230
+          },
+          {
+            "index": 2,
+            "png": "animations/frames/waving/02.png",
+            "png_sha256": "64740e3c97e0d1a8b119825d3b4967ee3da2f1acc2c3236346aedb80c0a339a3",
+            "rgb565_gzip": "device-animation/otter/pixel_game/waving/02.565.gz",
+            "gzip_bytes": 17220,
+            "gzip_sha256": "fd51dea3921df9299fbb24c0984ee73bb8b61927bb1e332ca71541817b4e6ae6",
+            "raw_bytes": 153600,
+            "raw_sha256": "f34474bd095f292256bdd9638f8fb32ca2d733b9b5821f591b558d04a9fbc8df",
+            "delay_ms": 230
+          },
+          {
+            "index": 3,
+            "png": "animations/frames/waving/03.png",
+            "png_sha256": "4556174e96c75f8ddc8416d8c50a3cd7b92ca40e3ebde0adecce1b4f3bbbf446",
+            "rgb565_gzip": "device-animation/otter/pixel_game/waving/03.565.gz",
+            "gzip_bytes": 18144,
+            "gzip_sha256": "55e9440b7689ab4f72f58ad4e7ce34591484fdf37b2f79f59935757eb1491bf9",
+            "raw_bytes": 153600,
+            "raw_sha256": "3b2397f3aea4eee0083252558011049f7547e02ee62c9507a1d16773f499ea66",
+            "delay_ms": 230
+          }
+        ],
+        "poster_thumbnail": "animations/thumbnails/waving.png"
+      }
+    },
+    {
+      "id": "tickled",
+      "name": "被挠痒痒",
+      "group": "pet",
+      "existing_mood": true,
+      "atlas": "pet_affection",
+      "column": 1,
+      "caption": "哈哈，投降啦！",
+      "trigger": "tickle 互动，沿用桌面 3000ms 效果。",
+      "source": "desktop/electron/pet-state.cjs · ACTIONS.tickle",
+      "assets": {
+        "png": "assets/tickled.png",
+        "rgb565": "device/otter/pixel_game/tickled.565",
+        "flash_path": "/otter/pixel_game/tickled.565",
+        "bytes": 153600,
+        "sha256": "0990d6874c6c5e2f7783a24fe03049369dd95b70e3b0237ecb2d3b9e0d47cda6",
+        "png_sha256": "a4ce5b0808c6ea91322da977c1768ac48223ca3473decc3adbf629f80718ce34"
+      },
+      "thumbnail": {
+        "png": "thumbnails/tickled.png",
+        "rgb565": "device/otter/pixel_game/tickled.thumb.565",
+        "flash_path": "/otter/pixel_game/tickled.thumb.565",
+        "width": 96,
+        "height": 64,
+        "bytes": 12288,
+        "sha256": "f8cbbd5bfb6e9fa558a6884d7d009ab4a9a6ab19bdfbea658f172c00b9aaa207",
+        "png_sha256": "f4f72d3bdaf8d67a9b24adaf14765ed3b5ed6fb88a577839af6d50aaead0014f"
+      },
+      "animation": {
+        "gif": "animations/gif/tickled.gif",
+        "thumbnail_gif": "animations/thumbnails/tickled.gif",
+        "poster": "animations/frames/tickled/00.png",
+        "frame_count": 4,
+        "delay_ms": [
+          300,
+          180,
+          260,
+          180
+        ],
+        "duration_ms": 920,
+        "loop": 0,
+        "width": 240,
+        "height": 320,
+        "motion": "护着肚皮笑起来",
+        "bytes": 60735,
+        "sha256": "3aea4e99c435c1d92544cd7986e5cb7b776af3f951ac634486a0d4ecc94da576",
+        "thumbnail_sha256": "0bd66340496afc932584b73442337cd4e2e55bca7ef50e195ff88d9da51faf53",
+        "device_gzip_bytes": 74021,
+        "source": "sources/animation/tickled.png",
+        "source_sha256": "1fee35e8457c55c9926ba4a117e135c05d2364d15c603ca525b77020b3f62b0f",
+        "registration": {
+          "scale": 0.46875,
+          "body_center_x": 120,
+          "baseline_y": 260,
+          "method": "nearest-neighbour geometry, brown torso baseline and horizontal axis",
+          "background": "border-connected blue matte normalized to #123f4b"
+        },
+        "frames": [
+          {
+            "index": 0,
+            "png": "animations/frames/tickled/00.png",
+            "png_sha256": "a4581df18db31b5f1cb86a4926b3b5490c1e0d7055499e9440e79ed5d13e63ae",
+            "rgb565_gzip": "device-animation/otter/pixel_game/tickled/00.565.gz",
+            "gzip_bytes": 18556,
+            "gzip_sha256": "297929adc0124b730775d86ea5028ea7d257e908daaf66cba9df9f3516d2877a",
+            "raw_bytes": 153600,
+            "raw_sha256": "749ecc55239f845f812643dfd8c6e1807c0fbeabcf451ae2685371a92125fb50",
+            "delay_ms": 300
+          },
+          {
+            "index": 1,
+            "png": "animations/frames/tickled/01.png",
+            "png_sha256": "9759d553b62fce7abe2aa396a0d23cbcd3981d1a1718005a505e0bf6aba6b76f",
+            "rgb565_gzip": "device-animation/otter/pixel_game/tickled/01.565.gz",
+            "gzip_bytes": 18724,
+            "gzip_sha256": "1b707a4c3869acb8fd6dcf2ab31d7bb9e5248d4b87906f7571315f6cd0acfee9",
+            "raw_bytes": 153600,
+            "raw_sha256": "8a7f13ccef74d5f42bd8a1bb467b7dbcb016a0b8396a1e1f7f0ef09678db7c6c",
+            "delay_ms": 180
+          },
+          {
+            "index": 2,
+            "png": "animations/frames/tickled/02.png",
+            "png_sha256": "5b44cdc75bac82063dbfe2780c735ab3456932c53276c41c9b27d8535d37dd93",
+            "rgb565_gzip": "device-animation/otter/pixel_game/tickled/02.565.gz",
+            "gzip_bytes": 18383,
+            "gzip_sha256": "d6665a7947dcb1067d1943bea619e1c10a3e84084c25b3dfb10299af9c6d4f16",
+            "raw_bytes": 153600,
+            "raw_sha256": "e4eea14b938a707c9614156f9a4b960b67dc86bb9203f5bacb66ed13c68dea44",
+            "delay_ms": 260
+          },
+          {
+            "index": 3,
+            "png": "animations/frames/tickled/03.png",
+            "png_sha256": "c18a266b4d8658e41a48b9893357802d646df3b09a019e787681eb80c1eae263",
+            "rgb565_gzip": "device-animation/otter/pixel_game/tickled/03.565.gz",
+            "gzip_bytes": 18358,
+            "gzip_sha256": "678f75e9950d7f365758eef16a737bb6691fd818e1615b48c87bf1a09679d10a",
+            "raw_bytes": 153600,
+            "raw_sha256": "5122916a3ae1d731b6630860de850b75723775e13845a62a2d83a326777bae00",
+            "delay_ms": 180
+          }
+        ],
+        "poster_thumbnail": "animations/thumbnails/tickled.png"
+      }
+    },
+    {
+      "id": "waking",
+      "name": "伸个懒腰",
+      "group": "pet",
+      "existing_mood": true,
+      "atlas": "pet_affection",
+      "column": 2,
+      "caption": "我醒啦，又能一起玩了。",
+      "trigger": "wake 互动，沿用桌面 3000ms 效果。",
+      "source": "desktop/electron/pet-state.cjs · ACTIONS.wake",
+      "assets": {
+        "png": "assets/waking.png",
+        "rgb565": "device/otter/pixel_game/waking.565",
+        "flash_path": "/otter/pixel_game/waking.565",
+        "bytes": 153600,
+        "sha256": "0de0076106560ac892df1f1f5b976f8a40be5a7776c83bb0a5bcea7e3c2d4a98",
+        "png_sha256": "223490b5956deda6632d3f2b187b777d4a6c346a824b516d11b6a0af56f976a9"
+      },
+      "thumbnail": {
+        "png": "thumbnails/waking.png",
+        "rgb565": "device/otter/pixel_game/waking.thumb.565",
+        "flash_path": "/otter/pixel_game/waking.thumb.565",
+        "width": 96,
+        "height": 64,
+        "bytes": 12288,
+        "sha256": "11febb438ab2b1f56243847a3964dd765f21bbb3ace9b2f60e4772e003620d66",
+        "png_sha256": "81c0ab4c63ce8edc6438e37ea4d4dc9d078dbe251a67acfd56aff81de3224e34"
+      },
+      "animation": {
+        "gif": "animations/gif/waking.gif",
+        "thumbnail_gif": "animations/thumbnails/waking.gif",
+        "poster": "animations/frames/waking/00.png",
+        "frame_count": 4,
+        "delay_ms": [
+          600,
+          350,
+          500,
+          350
+        ],
+        "duration_ms": 1800,
+        "loop": 0,
+        "width": 240,
+        "height": 320,
+        "motion": "打个哈欠，伸伸爪子",
+        "bytes": 62784,
+        "sha256": "38aebb4008628e65d66343e6ca46cecd5082aa69b6227bda89ae7024a6cf1695",
+        "thumbnail_sha256": "9eb7b146fb4fe36c2183b419e578479747970ad52feb057b21a2e389cf050c91",
+        "device_gzip_bytes": 74847,
+        "source": "sources/animation/waking.png",
+        "source_sha256": "3852767b5d5e1efc4d573a245b21b67648ef0f376a3221cb88f438c5b1d5122a",
+        "registration": {
+          "scale": 0.46875,
+          "body_center_x": 120,
+          "baseline_y": 260,
+          "method": "nearest-neighbour geometry, brown torso baseline and horizontal axis",
+          "background": "border-connected blue matte normalized to #123f4b"
+        },
+        "frames": [
+          {
+            "index": 0,
+            "png": "animations/frames/waking/00.png",
+            "png_sha256": "2c6b8bddcaaeffbe37d728f70b1a91231456ceca372e132df8617268fdd93e2e",
+            "rgb565_gzip": "device-animation/otter/pixel_game/waking/00.565.gz",
+            "gzip_bytes": 18856,
+            "gzip_sha256": "5cfc19fe53e68b59287ea064878546eb2f83c554c7cdc8d9ed1b8e4edee3ddc3",
+            "raw_bytes": 153600,
+            "raw_sha256": "f4a285fc21f5e3e81c10528e01db2858aa0e190f8e3dd7509434c8a2ca6a773f",
+            "delay_ms": 600
+          },
+          {
+            "index": 1,
+            "png": "animations/frames/waking/01.png",
+            "png_sha256": "d4fe04120ee0495050c89051fdc15d3cc3f6c02c7dc3673a049eb5b7fb856cbc",
+            "rgb565_gzip": "device-animation/otter/pixel_game/waking/01.565.gz",
+            "gzip_bytes": 18941,
+            "gzip_sha256": "4e3f9c18e6c7ef99d834435dabebb5bc605db54b271ec0239cf50f9dab7adc97",
+            "raw_bytes": 153600,
+            "raw_sha256": "d2ca049a60145d2417011489ea8b411b1658b57cbedd74b5ef183a279e493acc",
+            "delay_ms": 350
+          },
+          {
+            "index": 2,
+            "png": "animations/frames/waking/02.png",
+            "png_sha256": "611626f550623d0b32fb6b580437c87e69d6dd30ee1310eb905440858b1b5127",
+            "rgb565_gzip": "device-animation/otter/pixel_game/waking/02.565.gz",
+            "gzip_bytes": 18533,
+            "gzip_sha256": "cd83e1d0c0c76876b74723707cc21daab21f3976c48f1f794c18f6229f6b1545",
+            "raw_bytes": 153600,
+            "raw_sha256": "4e55709b7abb4b99f6ac6b156623ab6e8d56dd3f554b37afd479c8da39fe28ad",
+            "delay_ms": 500
+          },
+          {
+            "index": 3,
+            "png": "animations/frames/waking/03.png",
+            "png_sha256": "8fa1bb030a9737bc65b46073e36d4c59fd6d3d28f6550cc244107ac547253233",
+            "rgb565_gzip": "device-animation/otter/pixel_game/waking/03.565.gz",
+            "gzip_bytes": 18517,
+            "gzip_sha256": "74b4dcd325f1d12ca9fc04d99076d929d541e81acab37efe92d9102bdef7670d",
+            "raw_bytes": 153600,
+            "raw_sha256": "9f9137465b863610a77b6ce959fc51bc9e4cab4205a0ab8276e0474eed8f8361",
+            "delay_ms": 350
+          }
+        ],
+        "poster_thumbnail": "animations/thumbnails/waking.png"
+      }
+    },
+    {
+      "id": "held",
+      "name": "被提起来",
+      "group": "pet",
+      "existing_mood": true,
+      "atlas": "status",
+      "column": 0,
+      "caption": "咦，要搬到哪里呀？",
+      "trigger": "拖动桌面宠物，held 为 true；松开后恢复。",
+      "source": "desktop/src/main.tsx · Pet() held",
+      "assets": {
+        "png": "assets/held.png",
+        "rgb565": "device/otter/pixel_game/held.565",
+        "flash_path": "/otter/pixel_game/held.565",
+        "bytes": 153600,
+        "sha256": "7cf61acc23a4a26b3cbdea3614076a0050e364d5f328d14e7155c4950dc3354c",
+        "png_sha256": "3211f7882bed3bfb97e1e0aa31407e900edf4bccea98507253a5c050c288a45a"
+      },
+      "thumbnail": {
+        "png": "thumbnails/held.png",
+        "rgb565": "device/otter/pixel_game/held.thumb.565",
+        "flash_path": "/otter/pixel_game/held.thumb.565",
+        "width": 96,
+        "height": 64,
+        "bytes": 12288,
+        "sha256": "1846169c1d552a19a9570e28c2697ade3fb92d32665e4b82838e70fa16be4d09",
+        "png_sha256": "856917b144cb459667abbb7560fc7d6bb2710f27c7f1225a3ddcf218be7914fa"
+      },
+      "animation": {
+        "gif": "animations/gif/held.gif",
+        "thumbnail_gif": "animations/thumbnails/held.gif",
+        "poster": "animations/frames/held/00.png",
+        "frame_count": 4,
+        "delay_ms": [
+          700,
+          180,
+          160,
+          220
+        ],
+        "duration_ms": 1260,
+        "loop": 0,
+        "width": 240,
+        "height": 320,
+        "motion": "惊讶眨眼，小爪轻垂",
+        "bytes": 89151,
+        "sha256": "905b79fcbedee1eac724bafcb02bb420e87a64f1e7120b94058b31209cd5f246",
+        "thumbnail_sha256": "2ef9ed70927e631579fe3bc629a8ead42d42ff36af8495556c09fc254049fb62",
+        "device_gzip_bytes": 105992,
+        "source": "sources/animation/held.png",
+        "source_sha256": "ad98f6afb1e18b45101312b58a507de12cbf4278886336c80c1c6a2603c53117",
+        "registration": {
+          "scale": 0.46875,
+          "body_center_x": 120,
+          "baseline_y": 260,
+          "method": "nearest-neighbour geometry, brown torso baseline and horizontal axis",
+          "background": "border-connected blue matte normalized to #123f4b"
+        },
+        "frames": [
+          {
+            "index": 0,
+            "png": "animations/frames/held/00.png",
+            "png_sha256": "4c0fd10da71d09cab7f1bbdc8bfcab2e6679bfdeadb6c7b8fc689ff798c4e283",
+            "rgb565_gzip": "device-animation/otter/pixel_game/held/00.565.gz",
+            "gzip_bytes": 26571,
+            "gzip_sha256": "3a3505db3f3dadc63bdfe75f18d6f1b4c328516238010710aadf1b7a42ef0f3d",
+            "raw_bytes": 153600,
+            "raw_sha256": "524c2f881025f94a75b893050445f209b7929ae9eba9b4c5823506de67ce3db1",
+            "delay_ms": 700
+          },
+          {
+            "index": 1,
+            "png": "animations/frames/held/01.png",
+            "png_sha256": "144160b980dd02c3f6ff2913cddeedd38a0dcb407e4fdad016cc2632c5505d98",
+            "rgb565_gzip": "device-animation/otter/pixel_game/held/01.565.gz",
+            "gzip_bytes": 27142,
+            "gzip_sha256": "a29bc954891378259c0ced8e3518774f9fe818575e69a51e11c65bae6e256444",
+            "raw_bytes": 153600,
+            "raw_sha256": "65a148960374df912a74787847b46a0f1a658f5db8c3877279bc717dd831dbce",
+            "delay_ms": 180
+          },
+          {
+            "index": 2,
+            "png": "animations/frames/held/02.png",
+            "png_sha256": "1c866a73d540e51e00cc4a0cd7f56e76d92fc7c524a1a95b05b5455064693295",
+            "rgb565_gzip": "device-animation/otter/pixel_game/held/02.565.gz",
+            "gzip_bytes": 25717,
+            "gzip_sha256": "530477d96938b26d0c924d1c13dd4f0a5db7d30c523718d22d615f03108e4660",
+            "raw_bytes": 153600,
+            "raw_sha256": "3bc0c63e36a8d2f8d25a049068db97aa2f876bf41ef230f25c6d6090176cfb18",
+            "delay_ms": 160
+          },
+          {
+            "index": 3,
+            "png": "animations/frames/held/03.png",
+            "png_sha256": "d6891f1ef405885f38a126240a30d84f5f1c27464c33a847047669c2dc3740c4",
+            "rgb565_gzip": "device-animation/otter/pixel_game/held/03.565.gz",
+            "gzip_bytes": 26562,
+            "gzip_sha256": "936e16ade9e5256498f14c924398ec0faea43c162c20ce6a505b935b3272e967",
+            "raw_bytes": 153600,
+            "raw_sha256": "b7558d0771928d4122d182b14e11395fb16171c3f8d1f0f30f6d2919f3ead75d",
+            "delay_ms": 220
+          }
+        ],
+        "poster_thumbnail": "animations/thumbnails/held.png"
+      }
+    },
+    {
+      "id": "offline",
+      "name": "暂时离线",
+      "group": "connection",
+      "existing_mood": true,
+      "atlas": "status",
+      "column": 1,
+      "caption": "连接歇了一下，我还在。",
+      "trigger": "已有 offline Mood 素材位；需要显式连接事件接入，不能从 health 未加载推断离线。",
+      "source": "desktop/src/Otter.tsx · Mood.offline；desktop/src/main.tsx · connection",
+      "assets": {
+        "png": "assets/offline.png",
+        "rgb565": "device/otter/pixel_game/offline.565",
+        "flash_path": "/otter/pixel_game/offline.565",
+        "bytes": 153600,
+        "sha256": "cc1095635720111be5a6be769cf6ffb6c964528629ff982017ff859df467cec5",
+        "png_sha256": "304086d0855fc71b1b1866d382f9bea680e2e5b323b575b54e2f849f4cf675f2"
+      },
+      "thumbnail": {
+        "png": "thumbnails/offline.png",
+        "rgb565": "device/otter/pixel_game/offline.thumb.565",
+        "flash_path": "/otter/pixel_game/offline.thumb.565",
+        "width": 96,
+        "height": 64,
+        "bytes": 12288,
+        "sha256": "e5bb95ae1e2246c851844869a74a1df040bc272939ddecf63914091bfd5f6587",
+        "png_sha256": "925593ae4a22427209a23e792fda9269cdd083e3e48b1ecadb517d8cb365e6b1"
+      },
+      "animation": {
+        "gif": "animations/gif/offline.gif",
+        "thumbnail_gif": "animations/thumbnails/offline.gif",
+        "poster": "animations/frames/offline/00.png",
+        "frame_count": 4,
+        "delay_ms": [
+          1400,
+          220,
+          180,
+          220
+        ],
+        "duration_ms": 2020,
+        "loop": 0,
+        "width": 240,
+        "height": 320,
+        "motion": "托腮慢眨，等待连接",
+        "bytes": 67001,
+        "sha256": "0cc136758b3e4bd56b6ce86341c2e892fd6c28ef3eb9442cfacb3150428f78fd",
+        "thumbnail_sha256": "1e1d89f1238a666288d35aa54e2b85850dd12e6725a108e7cd1c874f2850f6c0",
+        "device_gzip_bytes": 79791,
+        "source": "sources/animation/offline.png",
+        "source_sha256": "26b39eae2dcd7cd747458340a38ea2393a1af54bb833f5aa6cc328b30afa14c4",
+        "registration": {
+          "scale": 0.4497991967871486,
+          "body_center_x": 120,
+          "baseline_y": 260,
+          "method": "nearest-neighbour geometry, brown torso baseline and horizontal axis",
+          "background": "border-connected blue matte normalized to #123f4b"
+        },
+        "frames": [
+          {
+            "index": 0,
+            "png": "animations/frames/offline/00.png",
+            "png_sha256": "cbda231df0b28243739cd0d86768baddb0aa063987d82b8a1ecef19c92dbb79e",
+            "rgb565_gzip": "device-animation/otter/pixel_game/offline/00.565.gz",
+            "gzip_bytes": 20356,
+            "gzip_sha256": "46a58d0df9f0b36ed69bb2b431b2b220f137e7d852b5adc4668c6730001352c1",
+            "raw_bytes": 153600,
+            "raw_sha256": "121b923adae619e7598c32fe623616b237e7b021983ed4d90a803c01beb3d9ee",
+            "delay_ms": 1400
+          },
+          {
+            "index": 1,
+            "png": "animations/frames/offline/01.png",
+            "png_sha256": "ab9233fff90b1dfa1574cb6088215e3202c2682a1cc7ef6f7f3d4e6a774ba30a",
+            "rgb565_gzip": "device-animation/otter/pixel_game/offline/01.565.gz",
+            "gzip_bytes": 19647,
+            "gzip_sha256": "73b2b2084c7f7df84d642ecb3cab342db978564ff9287683f665e457b5bb0bf5",
+            "raw_bytes": 153600,
+            "raw_sha256": "3e1268958d4430a5e2a69f4862102e7474d832486aff492e2608b880c352266a",
+            "delay_ms": 220
+          },
+          {
+            "index": 2,
+            "png": "animations/frames/offline/02.png",
+            "png_sha256": "d9f58858da3ccafd67c2632c698487b4145468cb79c244378bbf5940974b2b1b",
+            "rgb565_gzip": "device-animation/otter/pixel_game/offline/02.565.gz",
+            "gzip_bytes": 19574,
+            "gzip_sha256": "ec00323eb404a8c075a385b64e3992d89f7a9bafd51532144684a019f0700c1e",
+            "raw_bytes": 153600,
+            "raw_sha256": "0d47f4f02e4b4e27a4982ab5fb6a2ad3f0fecee7cbe9287c30816b5da138e03d",
+            "delay_ms": 180
+          },
+          {
+            "index": 3,
+            "png": "animations/frames/offline/03.png",
+            "png_sha256": "5425f79333fd6e8aaabca89d3e1fa3d0f5cbca881bf9e87e8a9fff9f0e5b1585",
+            "rgb565_gzip": "device-animation/otter/pixel_game/offline/03.565.gz",
+            "gzip_bytes": 20214,
+            "gzip_sha256": "4b8e44b50a53a715ed3779e28fadfc98179ea658ede5f7932b88eb80fa57f3e9",
+            "raw_bytes": 153600,
+            "raw_sha256": "c7f7711d66664dd7d1e53b24bc5e21be92c2fafb468f4215520f335ac97c5ff0",
+            "delay_ms": 220
+          }
+        ],
+        "poster_thumbnail": "animations/thumbnails/offline.png"
+      }
+    },
+    {
+      "id": "error",
+      "name": "遇到小问题",
+      "group": "connection",
+      "existing_mood": false,
+      "atlas": "status",
+      "column": 2,
+      "caption": "这里卡住了，我们看看原因。",
+      "trigger": "明确操作失败的短时反馈；保留原来的错误文字和重试入口。",
+      "source": "desktop/src/main.tsx · error；desktop/src/VoiceControls.tsx · error；新增视觉状态",
+      "assets": {
+        "png": "assets/error.png",
+        "rgb565": "device/otter/pixel_game/error.565",
+        "flash_path": "/otter/pixel_game/error.565",
+        "bytes": 153600,
+        "sha256": "e38b997c675854ff8117f6d519815de9f745b86c7fd345e5245bb0fa867e2319",
+        "png_sha256": "91745c3884d208d5fc0358d06655d237df17a8dcec014e9b08058cb06bc0cf4a"
+      },
+      "thumbnail": {
+        "png": "thumbnails/error.png",
+        "rgb565": "device/otter/pixel_game/error.thumb.565",
+        "flash_path": "/otter/pixel_game/error.thumb.565",
+        "width": 96,
+        "height": 64,
+        "bytes": 12288,
+        "sha256": "5681691fc2e8c1fdf2ff24221ac2a123e409960688ee8dc6df5774f8cf1a1b72",
+        "png_sha256": "02ead30e6c2c43d91c9f0389fbd0a40656f457518a0eaf853dbc60137e436430"
+      },
+      "animation": {
+        "gif": "animations/gif/error.gif",
+        "thumbnail_gif": "animations/thumbnails/error.gif",
+        "poster": "animations/frames/error/00.png",
+        "frame_count": 4,
+        "delay_ms": [
+          1000,
+          300,
+          200,
+          300
+        ],
+        "duration_ms": 1800,
+        "loop": 0,
+        "width": 240,
+        "height": 320,
+        "motion": "困惑挑眉，提示轻变",
+        "bytes": 77173,
+        "sha256": "ee3d24e6f731e28976a05599da79f1d75008ee5b20c399deb622a86c0abc5f96",
+        "thumbnail_sha256": "65c9fea1c93509dc87ba23c08b35a62c71efd7354aed99d866e0eefbee74ad99",
+        "device_gzip_bytes": 90476,
+        "source": "sources/animation/error.png",
+        "source_sha256": "4761284232c5b041e8e30375ce632acdb3912bf15eab1ac029a174981d4b80a2",
+        "registration": {
+          "scale": 0.4618556701030928,
+          "body_center_x": 120,
+          "baseline_y": 260,
+          "method": "nearest-neighbour geometry, brown torso baseline and horizontal axis",
+          "background": "border-connected blue matte normalized to #123f4b"
+        },
+        "frames": [
+          {
+            "index": 0,
+            "png": "animations/frames/error/00.png",
+            "png_sha256": "e84a3a196843779c6a5d1d5e57eff871b1000858f0627bff4d3f2cab9c3f51d0",
+            "rgb565_gzip": "device-animation/otter/pixel_game/error/00.565.gz",
+            "gzip_bytes": 22613,
+            "gzip_sha256": "f76d1c318dc8812d53c4ba4273b4a4bd2b6c5c48f6d71e4df023395d712e91b4",
+            "raw_bytes": 153600,
+            "raw_sha256": "2cbf7fd533f35a5cea485c52cae61855d74cbc33d8bdb942fdd085ef1901f11e",
+            "delay_ms": 1000
+          },
+          {
+            "index": 1,
+            "png": "animations/frames/error/01.png",
+            "png_sha256": "0d5d7296c8fd0ba3f5bfb1f50c7b22c594e937dc63e530625ecb7b8d87361a12",
+            "rgb565_gzip": "device-animation/otter/pixel_game/error/01.565.gz",
+            "gzip_bytes": 22478,
+            "gzip_sha256": "0e41393aac7f9998ca558c2aebb63bf9097a5e2d9cac6cbae94670509ae4e740",
+            "raw_bytes": 153600,
+            "raw_sha256": "6b286d82ed4f03dc59d53e1ec1fc8c02270388d47ff518c2a0ee212acfdad5fa",
+            "delay_ms": 300
+          },
+          {
+            "index": 2,
+            "png": "animations/frames/error/02.png",
+            "png_sha256": "aade11b0bfd3c5eb54540a6e38fda1907c4b79fc7d43ae92840aa5f7f328c113",
+            "rgb565_gzip": "device-animation/otter/pixel_game/error/02.565.gz",
+            "gzip_bytes": 22072,
+            "gzip_sha256": "97adbfd69e10f43f2d2dc367c079c18ebea06d0f473c5d8a8a70a341194b425e",
+            "raw_bytes": 153600,
+            "raw_sha256": "b1431d046cbc2cae9967a0af9c15a765cadaf091dccce19088c9480dc1d06e3b",
+            "delay_ms": 200
+          },
+          {
+            "index": 3,
+            "png": "animations/frames/error/03.png",
+            "png_sha256": "06ebd56b0c3f31aa7438b8e1a8d3180e23f65e1bc0600ea7b40a17101cd5dd49",
+            "rgb565_gzip": "device-animation/otter/pixel_game/error/03.565.gz",
+            "gzip_bytes": 23313,
+            "gzip_sha256": "0e9b094d25a89d3ee660698244532e0fec79ad62f506d858fa7eb0d85f1d3c5d",
+            "raw_bytes": 153600,
+            "raw_sha256": "a0d43a64fca010a37557c612c830d80177b114ea758bc47821a1548fd1697b52",
+            "delay_ms": 300
+          }
+        ],
+        "poster_thumbnail": "animations/thumbnails/error.png"
+      }
+    },
+    {
+      "id": "reminder",
+      "name": "提醒到点",
+      "group": "assistant",
+      "existing_mood": false,
+      "atlas": "assistant",
+      "column": 0,
+      "caption": "叮，约好的时间到了。",
+      "trigger": "提醒或专注计时到点；仅收到新的到期事件时进入，确认后恢复。",
+      "source": "desktop/electron/assistant-store.cjs · 到期提醒；desktop/electron/ambient.cjs · focus；新增视觉状态",
+      "assets": {
+        "png": "assets/reminder.png",
+        "rgb565": "device/otter/pixel_game/reminder.565",
+        "flash_path": "/otter/pixel_game/reminder.565",
+        "bytes": 153600,
+        "sha256": "07a09b11ab3b3a46dae36b1d32beac7546af87c460ea68ef990fb721ffd7bcb9",
+        "png_sha256": "3ddb036045970d73438c6064c3327292a82271682546b352cfed4ce1c729fd02"
+      },
+      "thumbnail": {
+        "png": "thumbnails/reminder.png",
+        "rgb565": "device/otter/pixel_game/reminder.thumb.565",
+        "flash_path": "/otter/pixel_game/reminder.thumb.565",
+        "width": 96,
+        "height": 64,
+        "bytes": 12288,
+        "sha256": "2b91033da7c96b85d044e493f036950e9495d64d4b4bd05985981b64ca629910",
+        "png_sha256": "d3283f86d1ed09a507e99dfdfe2b5f9990ee92d89d3483e5b2cb65d678685b66"
+      },
+      "animation": {
+        "gif": "animations/gif/reminder.gif",
+        "thumbnail_gif": "animations/thumbnails/reminder.gif",
+        "poster": "animations/frames/reminder/00.png",
+        "frame_count": 4,
+        "delay_ms": [
+          550,
+          240,
+          240,
+          240
+        ],
+        "duration_ms": 1270,
+        "loop": 0,
+        "width": 240,
+        "height": 320,
+        "motion": "轻摇小铃铛",
+        "bytes": 81720,
+        "sha256": "08232575ab522b80b65910f35a6a6129b39908866ed9b94daf43c2a0337ad7bd",
+        "thumbnail_sha256": "ce602c7db3268057973a35402f1df787a2632925c01fb0a06635817488d88137",
+        "device_gzip_bytes": 98273,
+        "source": "sources/animation/reminder.png",
+        "source_sha256": "5546b3be65f03566707922ef60f3e4211b1d4bc55244b17009513b80f887b7a6",
+        "registration": {
+          "scale": 0.46875,
+          "body_center_x": 120,
+          "baseline_y": 260,
+          "method": "nearest-neighbour geometry, brown torso baseline and horizontal axis",
+          "background": "border-connected blue matte normalized to #123f4b"
+        },
+        "frames": [
+          {
+            "index": 0,
+            "png": "animations/frames/reminder/00.png",
+            "png_sha256": "602d9f92eb816b0cc5fc6604c3aa5ac3b8f25204df57b799856c15e225b01588",
+            "rgb565_gzip": "device-animation/otter/pixel_game/reminder/00.565.gz",
+            "gzip_bytes": 24765,
+            "gzip_sha256": "adb4a0eeee3b0fb121a14b144fa356fae1f57e2339de8043048f7896466c0b0a",
+            "raw_bytes": 153600,
+            "raw_sha256": "7e0e575c07c1d74990bdec42354e7c6039ad09f4600c0fe7c74d1df1a557ca7a",
+            "delay_ms": 550
+          },
+          {
+            "index": 1,
+            "png": "animations/frames/reminder/01.png",
+            "png_sha256": "0e2c76023b5b95bb68aa4a657069fe3b82ea50b63b53ec89c0b968bde30b7a41",
+            "rgb565_gzip": "device-animation/otter/pixel_game/reminder/01.565.gz",
+            "gzip_bytes": 24499,
+            "gzip_sha256": "3988e475e0636eab763526ef99571fb41028af9a385adc383f18e651a9b13217",
+            "raw_bytes": 153600,
+            "raw_sha256": "dc32647afc23d58343ca5a07675e2f7b0ac5a946224a47358bb9cc5ed0b01d1e",
+            "delay_ms": 240
+          },
+          {
+            "index": 2,
+            "png": "animations/frames/reminder/02.png",
+            "png_sha256": "2e8fb3461aba3706d32c50e690087137b6a617f0c84b03e166d230e19202d1de",
+            "rgb565_gzip": "device-animation/otter/pixel_game/reminder/02.565.gz",
+            "gzip_bytes": 24734,
+            "gzip_sha256": "fbc658e91aae490d00bc6d4550a3d658a94ce4263e2627d323904dcc41234d66",
+            "raw_bytes": 153600,
+            "raw_sha256": "589e6ef99d535090968c04261993b304027f37f79f1ad973ea0c3cbf13572fd9",
+            "delay_ms": 240
+          },
+          {
+            "index": 3,
+            "png": "animations/frames/reminder/03.png",
+            "png_sha256": "9b1554fdbffb0fd11f1828c2783cdb732e37cbd57d8040ed23490bfe8fbe21c7",
+            "rgb565_gzip": "device-animation/otter/pixel_game/reminder/03.565.gz",
+            "gzip_bytes": 24275,
+            "gzip_sha256": "6a16ec3d354474a570e300c5f67adc05c5404f5de8473ec9baf36e44286021fe",
+            "raw_bytes": 153600,
+            "raw_sha256": "7c8e2813c8d57757630dc3d9629ace234d17ed1ebfc0164c3143bbfec71dcd48",
+            "delay_ms": 240
+          }
+        ],
+        "poster_thumbnail": "animations/thumbnails/reminder.png"
+      }
+    },
+    {
+      "id": "remembering",
+      "name": "记在小本本",
+      "group": "assistant",
+      "existing_mood": false,
+      "atlas": "assistant",
+      "column": 1,
+      "caption": "把你确认的这条收进小本本。",
+      "trigger": "用户已确认，实际保存记忆或项目快照的操作进行中；未确认提议使用 awaiting_confirmation。",
+      "source": "src/otter/companion/memory_ai.py · 不直接写记忆；desktop/src/MemoryPane.tsx；新增视觉状态",
+      "assets": {
+        "png": "assets/remembering.png",
+        "rgb565": "device/otter/pixel_game/remembering.565",
+        "flash_path": "/otter/pixel_game/remembering.565",
+        "bytes": 153600,
+        "sha256": "5f36e794297d884a933aefb16c8a88fc12d404068c3399285b6ac4780a274474",
+        "png_sha256": "fa51fc4884798d3effbb83fd202b294691ce92bd8b1d0dbfacf98bef176ca504"
+      },
+      "thumbnail": {
+        "png": "thumbnails/remembering.png",
+        "rgb565": "device/otter/pixel_game/remembering.thumb.565",
+        "flash_path": "/otter/pixel_game/remembering.thumb.565",
+        "width": 96,
+        "height": 64,
+        "bytes": 12288,
+        "sha256": "ed8a69bfdfdaacea3e1ec15d8e5a3c1df2ad24a3ccc622db2632340190e41f4b",
+        "png_sha256": "847b1ea1c51ec3cf63b690dcc7f014af3693f1a1d883bbd965ab9af6547972fc"
+      },
+      "animation": {
+        "gif": "animations/gif/remembering.gif",
+        "thumbnail_gif": "animations/thumbnails/remembering.gif",
+        "poster": "animations/frames/remembering/00.png",
+        "frame_count": 4,
+        "delay_ms": [
+          450,
+          280,
+          160,
+          280
+        ],
+        "duration_ms": 1170,
+        "loop": 0,
+        "width": 240,
+        "height": 320,
+        "motion": "拿着铅笔写小本本",
+        "bytes": 83180,
+        "sha256": "313cc4575ba8f1ac0ebc374c3ee6372e6aa0a0619beb856f41a3d88e4bedee7a",
+        "thumbnail_sha256": "c6a3dbc778a2d3286cc1bc5a991bc9ec6be17fa30cb6808313966954643d41a1",
+        "device_gzip_bytes": 100549,
+        "source": "sources/animation/remembering.png",
+        "source_sha256": "c40ec7682fd6b56f6e45411ee2e380cfbd31606d18f5cd14735776fcdabb3e47",
+        "registration": {
+          "scale": 0.46875,
+          "body_center_x": 120,
+          "baseline_y": 260,
+          "method": "nearest-neighbour geometry, brown torso baseline and horizontal axis",
+          "background": "border-connected blue matte normalized to #123f4b"
+        },
+        "frames": [
+          {
+            "index": 0,
+            "png": "animations/frames/remembering/00.png",
+            "png_sha256": "8a5cc554e325fc5e80b684d213ecf6ea0604074ad5f7d730501c47921745050c",
+            "rgb565_gzip": "device-animation/otter/pixel_game/remembering/00.565.gz",
+            "gzip_bytes": 25406,
+            "gzip_sha256": "590441dd018b38d6ef7092e2ddf01d73841bdc1c621fea8a8978fc8399dc28e8",
+            "raw_bytes": 153600,
+            "raw_sha256": "07739df6047f5e3e4ea12454a6752ce7737898eed5b9f0c3066ac1e68b12f5a5",
+            "delay_ms": 450
+          },
+          {
+            "index": 1,
+            "png": "animations/frames/remembering/01.png",
+            "png_sha256": "1a326f193a3f632dd19ec0a59e46efb0a1e7f032a00092ce0e3f16108e6d614b",
+            "rgb565_gzip": "device-animation/otter/pixel_game/remembering/01.565.gz",
+            "gzip_bytes": 25976,
+            "gzip_sha256": "16b11ec1b0c3967b0663b2b3394b12d9d74d52e76195a526b4be558f891d7047",
+            "raw_bytes": 153600,
+            "raw_sha256": "97d4ab9034644c78bffa3dda4472b0219b4df8da68933d3a102d25d0508354b5",
+            "delay_ms": 280
+          },
+          {
+            "index": 2,
+            "png": "animations/frames/remembering/02.png",
+            "png_sha256": "9a926d8721bab221bd3c9c42c36044a2a3c5f9f3bb4b8815598e64c191ec6202",
+            "rgb565_gzip": "device-animation/otter/pixel_game/remembering/02.565.gz",
+            "gzip_bytes": 24008,
+            "gzip_sha256": "f19f382da9e3d475a9582dcae6dacf9db64dbc458d326ad2b3b8111999049865",
+            "raw_bytes": 153600,
+            "raw_sha256": "b2eff771fc443c060802157b10507a3bd24f8756ce1153a629aec909acd5668a",
+            "delay_ms": 160
+          },
+          {
+            "index": 3,
+            "png": "animations/frames/remembering/03.png",
+            "png_sha256": "a817e6736fcfbf037e4d7d79c1d0fa785960d15a49abbee3badf5fca0083310f",
+            "rgb565_gzip": "device-animation/otter/pixel_game/remembering/03.565.gz",
+            "gzip_bytes": 25159,
+            "gzip_sha256": "452483f8958c17af9965d29ca4760265b3d478d616c37d4d6d590e8400ac5d35",
+            "raw_bytes": 153600,
+            "raw_sha256": "f02e8850edea4a42189b02c9631aa9520199a847c0d8bfb64a8cfa45a1ffe1f3",
+            "delay_ms": 280
+          }
+        ],
+        "poster_thumbnail": "animations/thumbnails/remembering.png"
+      }
+    },
+    {
+      "id": "success",
+      "name": "办好啦",
+      "group": "assistant",
+      "existing_mood": false,
+      "atlas": "assistant",
+      "column": 2,
+      "caption": "这件事，办好啦。",
+      "trigger": "真实的创建、保存或生成操作成功之后短暂显示；请求发出不等于成功。",
+      "source": "desktop/electron/task-assistant.cjs；desktop/src/MemoryPane.tsx；新增视觉状态",
+      "assets": {
+        "png": "assets/success.png",
+        "rgb565": "device/otter/pixel_game/success.565",
+        "flash_path": "/otter/pixel_game/success.565",
+        "bytes": 153600,
+        "sha256": "4c81aecb53c74e2e87a0927bea795693116471bdb0bc00548b3d087363ca7014",
+        "png_sha256": "b92cec7f342b4ed07ee507063074053ea933ab50033227d5b46f415b79f30dee"
+      },
+      "thumbnail": {
+        "png": "thumbnails/success.png",
+        "rgb565": "device/otter/pixel_game/success.thumb.565",
+        "flash_path": "/otter/pixel_game/success.thumb.565",
+        "width": 96,
+        "height": 64,
+        "bytes": 12288,
+        "sha256": "c46a080ebcbbd4aa75f4765d21858e377591c3352b0ac943b8d5974e21c9efb8",
+        "png_sha256": "ffb909ac5f1f4f6658f9332e38391a8023f5c5bd999efbe99b99fa9f3d1403b4"
+      },
+      "animation": {
+        "gif": "animations/gif/success.gif",
+        "thumbnail_gif": "animations/thumbnails/success.gif",
+        "poster": "animations/frames/success/00.png",
+        "frame_count": 4,
+        "delay_ms": [
+          700,
+          220,
+          220,
+          220
+        ],
+        "duration_ms": 1360,
+        "loop": 0,
+        "width": 240,
+        "height": 320,
+        "motion": "点头肯定，办好啦",
+        "bytes": 60335,
+        "sha256": "e8fa19f4ab9280519a5e591f4054997c6c9425f3e7e9b6760db4bf6303bd3470",
+        "thumbnail_sha256": "374c58d00bc59cc8bde8f402c10fed8b4d01df70eefb9f3c33e4750ed255976c",
+        "device_gzip_bytes": 70773,
+        "source": "sources/animation/success.png",
+        "source_sha256": "e08157e6e591269f42276b8e58782126bc3befa63422f5dca74ae3c8ce677a9b",
+        "registration": {
+          "scale": 0.4050632911392405,
+          "body_center_x": 120,
+          "baseline_y": 260,
+          "method": "nearest-neighbour geometry, brown torso baseline and horizontal axis",
+          "background": "border-connected blue matte normalized to #123f4b"
+        },
+        "frames": [
+          {
+            "index": 0,
+            "png": "animations/frames/success/00.png",
+            "png_sha256": "16bfdafbc6d0b64b809d3a8202ce529b78e5318af2993e12f1e724ca0e1d2f6f",
+            "rgb565_gzip": "device-animation/otter/pixel_game/success/00.565.gz",
+            "gzip_bytes": 17815,
+            "gzip_sha256": "a11bacabadb8086a76489d875b85bb532714f12ab0f2d9cf36830313b64e18d9",
+            "raw_bytes": 153600,
+            "raw_sha256": "cc09181382632b57951bf37fcd7da22af0683cc893498f1c6727c64516acc76e",
+            "delay_ms": 700
+          },
+          {
+            "index": 1,
+            "png": "animations/frames/success/01.png",
+            "png_sha256": "20c356b54bb1bd17b34b853fc5c86e0b3879517825d6f112f1f2492ccdd86092",
+            "rgb565_gzip": "device-animation/otter/pixel_game/success/01.565.gz",
+            "gzip_bytes": 17804,
+            "gzip_sha256": "f0e37b74119c799452c73b2ccdf940b61d77eead0a7b01bd5a90e5fcf0046f4f",
+            "raw_bytes": 153600,
+            "raw_sha256": "1886005e1d695ea52493be8de758a9a357bb29b748af4e7e68beb965af4084c5",
+            "delay_ms": 220
+          },
+          {
+            "index": 2,
+            "png": "animations/frames/success/02.png",
+            "png_sha256": "ad54b523fc7d12f30e3a302b656268a1cb18d78980cbdbb236725e38b34e8b1b",
+            "rgb565_gzip": "device-animation/otter/pixel_game/success/02.565.gz",
+            "gzip_bytes": 17232,
+            "gzip_sha256": "1c3d1a12be40fa604452abd6ce010da50aaef1a7ca7ebdb786c28ae7ff0487fb",
+            "raw_bytes": 153600,
+            "raw_sha256": "b8014e7e6bc70588139e8daa107d1b3a20fed2e6b06acefa1ffb673e342dfaa5",
+            "delay_ms": 220
+          },
+          {
+            "index": 3,
+            "png": "animations/frames/success/03.png",
+            "png_sha256": "7faf8bedcf1880e59942d7d73325dbe3fa3b78f3f3e33b430afd51269305465a",
+            "rgb565_gzip": "device-animation/otter/pixel_game/success/03.565.gz",
+            "gzip_bytes": 17922,
+            "gzip_sha256": "5593d5e85fa3fb443c05a650793c691f32b94096987bb75e2eea12fc5275315d",
+            "raw_bytes": 153600,
+            "raw_sha256": "7a3fc18fda89a0ad6a51ccecbe5e0b9f64a88833ed78c8ad6312146d8f437f4a",
+            "delay_ms": 220
+          }
+        ],
+        "poster_thumbnail": "animations/thumbnails/success.png"
+      }
+    }
+  ],
+  "pack_id": "otter-pixel-companion-v3",
+  "generated_date": "2026-10-24",
+  "width": 240,
+  "height": 320,
+  "pixel_format": "RGB565",
+  "byte_order": "big-endian",
+  "row_order": "top-to-bottom",
+  "bytes_per_frame": 153600,
+  "thumbnail_width": 96,
+  "thumbnail_height": 64,
+  "animation": true,
+  "desktop_mood_count": 13,
+  "additional_visual_state_count": 8,
+  "integrated": false,
+  "frame_bytes_total": 3225600,
+  "device_bytes_total": 3483648,
+  "animation_count": 21,
+  "animation_frame_count": 84,
+  "gif_bytes_total": 1548968,
+  "animation_device_gzip_bytes_total": 1842871,
+  "animation_raw_rgb565_bytes_total": 12902400
+}

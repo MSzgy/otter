@@ -1,6 +1,7 @@
-// Lessons 2-6: the physical screen can blink, react to a screen tap, play short
-// built-in sounds, read the bus servos and move them slowly within a software
-// range, and accept bounded USB commands. No Wi-Fi, credentials, or battery control.
+// Lessons 2-7: the physical screen shows the D pixel otter animations (or the
+// procedural face if the pack is missing), reacts to a screen tap, plays short
+// built-in sounds, reads the bus servos and moves them slowly within a software
+// range, and accepts bounded USB commands. No Wi-Fi, credentials, or battery control.
 #include <Arduino.h>
 #include <Wire.h>
 #include <esp_heap_caps.h>
@@ -8,6 +9,7 @@
 #include <cstring>
 #include "display.h"
 #include "face.h"
+#include "pixel_skin.h"
 #include "servo.h"
 #include "sound.h"
 
@@ -18,6 +20,11 @@ Mood baseMood = Mood::Idle;
 uint32_t happyUntil = 0, blinkUntil = 0, lastFrame = 0, lastTouchPoll = 0;
 uint32_t touches = 0;
 bool touchAvailable = false, wasTouched = false, audioAvailable = false;
+// Pixel animations: expression indexes into the pack, and what is on screen now.
+bool skinOn = false;
+int idleExpression = -1, baseExpression = -1, happyExpression = -1, shownExpression = -1;
+uint32_t expressionStarted = 0;
+const uint16_t *shownFrame = nullptr;
 char commandBuffer[96];
 size_t commandLength = 0;
 bool discardCommand = false;
@@ -27,6 +34,12 @@ bool pending(uint32_t now, uint32_t deadline) {
 }
 Mood currentMood(uint32_t now) {
   return pending(now, happyUntil) ? Mood::Happy : baseMood;
+}
+int currentExpression(uint32_t now) {
+  return pending(now, happyUntil) ? happyExpression : baseExpression;
+}
+const char *currentFaceName(uint32_t now) {
+  return skinOn ? skin::name(currentExpression(now)) : moodName(currentMood(now));
 }
 
 // V2 uses CST3530, not V1's CST328. The bus and register layout are from the
@@ -64,12 +77,23 @@ int readTouch() {
 
 void reportInfo() {
   Serial.printf(
-    "{\"firmware\":\"otter-face-0.4.0\",\"board\":\"ESP32-S3-Touch-LCD-2.8-V2\","
+    "{\"firmware\":\"otter-face-0.5.0\",\"board\":\"ESP32-S3-Touch-LCD-2.8-V2\","
     "\"width\":240,\"height\":320,\"flash_bytes\":%lu,\"psram_bytes\":%lu,"
-    "\"touch_available\":%s,\"audio_available\":%s,\"touches\":%lu,\"mood\":\"%s\"}\n",
+    "\"touch_available\":%s,\"audio_available\":%s,\"skin\":\"%s\",\"faces\":%u,"
+    "\"decode_ms\":%lu,\"touches\":%lu,\"mood\":\"%s\"}\n",
     (unsigned long)ESP.getFlashChipSize(), (unsigned long)ESP.getPsramSize(),
     touchAvailable ? "true" : "false", audioAvailable ? "true" : "false",
-    (unsigned long)touches, moodName(currentMood(millis())));
+    skinOn ? "pixel_game" : "drawn", skinOn ? unsigned(skin::count()) : 5u,
+    (unsigned long)skin::lastDecodeMs(), (unsigned long)touches, currentFaceName(millis()));
+}
+void listFaces() {
+  Serial.print("{\"faces\":[");
+  if (skinOn) {
+    for (size_t i = 0; i < skin::count(); i++) Serial.printf(i ? ",\"%s\"" : "\"%s\"", skin::name(int(i)));
+  } else {
+    Serial.print("\"idle\",\"happy\",\"sleeping\",\"thinking\",\"speaking\"");
+  }
+  Serial.println("]}");
 }
 // Parses exactly `count` space-separated decimal numbers; anything else fails.
 bool parseNumbers(const char *text, long *values, int count) {
@@ -90,16 +114,23 @@ void handleCommand(const char *command) {
   } else if (strcmp(command, "BLINK") == 0) {
     blinkUntil = millis() + 180;
     Serial.println("OK BLINK");
+  } else if (strcmp(command, "FACE LIST") == 0) {
+    listFaces();
   } else if (strcmp(command, "FACE happy") == 0) {
-    happyUntil = millis() + happyDurationMs;
+    happyUntil = millis() + happyDurationMs;  // happy stays temporary, as before
     Serial.println("OK FACE happy");
   } else if (strncmp(command, "FACE ", 5) == 0) {
+    // Any expression in the pixel pack; without the pack, only the drawn moods.
     const char *name = command + 5;
-    if (strcmp(name, "idle") == 0) baseMood = Mood::Idle;
-    else if (strcmp(name, "sleeping") == 0) baseMood = Mood::Sleeping;
-    else if (strcmp(name, "thinking") == 0) baseMood = Mood::Thinking;
-    else if (strcmp(name, "speaking") == 0) baseMood = Mood::Speaking;
-    else { Serial.println("ERR unsupported face"); return; }
+    const int expression = skinOn ? skin::find(name) : -1;
+    Mood mood = Mood::Idle;
+    const bool drawn = moodFromName(name, mood);
+    if (expression < 0 && !drawn) {
+      Serial.println("ERR unsupported face");
+      return;
+    }
+    if (expression >= 0) baseExpression = expression;
+    baseMood = mood;  // the drawn fallback shows idle for pixel-only expressions
     happyUntil = 0;
     Serial.printf("OK FACE %s\n", name);
   } else if (strncmp(command, "SOUND ", 6) == 0) {
@@ -179,7 +210,7 @@ void handleCommand(const char *command) {
                     status.torque ? "true" : "false");
     }
   } else if (strcmp(command, "HELP") == 0) {
-    Serial.println("PING | INFO | BLINK | FACE idle/happy/sleeping/thinking/speaking | SOUND beep/chirp"
+    Serial.println("PING | INFO | BLINK | FACE <expression> | FACE LIST | SOUND beep/chirp"
                    " | SERVO SCAN | SERVO STATUS <id> | SERVO MOVE <id> <pos> | SERVO CENTER <id>"
                    " | SERVO RELEASE <id> | SERVO STOP | SERVO RAW <id> | SERVO PINS");
   } else if (command[0]) {
@@ -219,6 +250,12 @@ void setup() {
   screen::begin();
   drawFace(framebuffer, Mood::Idle, millis(), false);
   screen::present(framebuffer);
+  idleExpression = skin::begin() ? skin::find("idle") : -1;
+  skinOn = idleExpression >= 0;
+  if (skinOn) {
+    baseExpression = idleExpression;
+    happyExpression = skin::find("happy") >= 0 ? skin::find("happy") : idleExpression;
+  }
   initTouch();
   audioAvailable = sound::begin();
   servo::begin();
@@ -235,6 +272,7 @@ void loop() {
       if (contact && !wasTouched) {
         touches++;
         baseMood = Mood::Idle;
+        baseExpression = idleExpression;
         happyUntil = now + happyDurationMs;
         sound::play("chirp");  // Local reflex; if a clip is still playing, this tap stays quiet.
         Serial.printf("EVENT screen_touch %lu\n", (unsigned long)touches);
@@ -243,7 +281,25 @@ void loop() {
     }
   }
   servo::update(now, Serial);
-  if (framebuffer && now - lastFrame >= framePeriodMs) {
+  if (skinOn) {
+    // Decode only when the expression changes; push only when the frame changes.
+    const int expression = currentExpression(now);
+    if (expression != shownExpression) {
+      if (skin::select(expression)) {
+        shownExpression = expression;
+        expressionStarted = now;
+        shownFrame = nullptr;
+      } else {
+        skinOn = false;
+        Serial.printf("EVENT skin failed %s, using drawn face\n", skin::name(expression));
+      }
+    }
+    const uint16_t *frame = skinOn ? skin::frame(now - expressionStarted) : nullptr;
+    if (frame && frame != shownFrame) {
+      shownFrame = frame;
+      screen::present(frame);
+    }
+  } else if (framebuffer && now - lastFrame >= framePeriodMs) {
     lastFrame = now;
     drawFace(framebuffer, currentMood(now), now, pending(now, blinkUntil));
     screen::present(framebuffer);

@@ -1,6 +1,7 @@
 #include "face.h"
 #include "display.h"
 #include <cmath>
+#include <cstring>
 #include <algorithm>
 
 namespace {
@@ -51,6 +52,16 @@ const char *moodName(Mood mood) {
     case Mood::Speaking: return "speaking";
     default: return "idle";
   }
+}
+
+bool moodFromName(const char *name, Mood &mood) {
+  for (Mood candidate : {Mood::Idle, Mood::Happy, Mood::Sleeping, Mood::Thinking, Mood::Speaking}) {
+    if (strcmp(name, moodName(candidate)) == 0) {
+      mood = candidate;
+      return true;
+    }
+  }
+  return false;
 }
 
 void drawFace(uint16_t *pixels, Mood mood, uint32_t now, bool forcedBlink) {

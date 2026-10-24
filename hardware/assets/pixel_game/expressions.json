@@ -1,0 +1,35 @@
+{
+  "schema_version": 1,
+  "style_id": "pixel_game",
+  "style_numeric_id": 3,
+  "default_expression": "idle",
+  "groups": [
+    {"id":"pet","name":"宠物互动"},
+    {"id":"conversation","name":"聊天与语音"},
+    {"id":"assistant","name":"助手任务"},
+    {"id":"connection","name":"连接状态"}
+  ],
+  "expressions": [
+    {"id":"idle","name":"陪伴中","group":"pet","existing_mood":true,"atlas":"base","column":0,"caption":"我在这里，慢慢来。","trigger":"没有临时互动、工作或语音状态时。","source":"desktop/src/main.tsx · Pet() mood 回退；desktop/src/Otter.tsx · Mood"},
+    {"id":"happy","name":"摸头开心","group":"pet","existing_mood":true,"atlas":"base","column":1,"caption":"嘿嘿，再摸一下。","trigger":"pet 互动，开心约 2800ms。","source":"desktop/electron/pet-state.cjs · ACTIONS.pet"},
+    {"id":"sleeping","name":"睡着了","group":"pet","existing_mood":true,"atlas":"base","column":2,"caption":"嘘，抱着小石头歇一会。","trigger":"sleep 互动或 pet.asleep；保持到 wake。","source":"desktop/electron/pet-state.cjs · ACTIONS.sleep / snapshot"},
+    {"id":"listening","name":"认真听你说","group":"conversation","existing_mood":false,"atlas":"voice","column":0,"caption":"嗯，我在听。","trigger":"录音已实际开始，VoiceControls.phase === recording；申请权限时不能显示。","source":"desktop/src/VoiceControls.tsx · phase=recording；新增视觉状态"},
+    {"id":"thinking","name":"想一想","group":"conversation","existing_mood":false,"atlas":"voice","column":1,"caption":"让我把线索串起来。","trigger":"建议用于转写中、chatBusy 等待回复；当前桌面聊天忙碌统一显示 working。","source":"desktop/src/main.tsx · chatBusy；desktop/src/VoiceControls.tsx · transcribing；新增视觉状态"},
+    {"id":"speaking","name":"和你说话","group":"conversation","existing_mood":true,"atlas":"voice","column":2,"caption":"这件事，我们可以这样做。","trigger":"voice.activity.data.speaking 为 true，停止朗读时结束。","source":"desktop/src/main.tsx · speaking；desktop/electron/speech.cjs"},
+    {"id":"working","name":"整理简报","group":"conversation","existing_mood":true,"atlas":"task","column":0,"caption":"把今天的线索整理好。","trigger":"工作任务 job.status 为 queued / running；原 working 状态可直接复用。","source":"desktop/src/main.tsx · working / job.status"},
+    {"id":"focus","name":"安静陪你专注","group":"assistant","existing_mood":false,"atlas":"task","column":1,"caption":"你专心，我陪着。","trigger":"存在有效 focus 计时；结束后转提醒或伸懒腰。","source":"desktop/src/AssistantPane.tsx · state.focus；新增视觉状态"},
+    {"id":"awaiting_confirmation","name":"等你确认","group":"assistant","existing_mood":false,"atlas":"task","column":2,"caption":"先给你看看，由你决定。","trigger":"记忆提议、任务提议或交接请求等待用户批准；表情不能代替确认按钮。","source":"desktop/src/ChatPane.tsx；desktop/src/HandoffPane.tsx；新增视觉状态"},
+    {"id":"eating","name":"吃小鱼","group":"pet","existing_mood":true,"atlas":"pet_play","column":0,"caption":"啊呜！这条小鱼真香。","trigger":"feed 互动，沿用桌面 3800ms 效果和冷却。","source":"desktop/electron/pet-state.cjs · ACTIONS.feed"},
+    {"id":"playing","name":"玩小球","group":"pet","existing_mood":true,"atlas":"pet_play","column":1,"caption":"接住啦，轮到你！","trigger":"play 互动，沿用桌面 4200ms 效果。","source":"desktop/electron/pet-state.cjs · ACTIONS.play"},
+    {"id":"dancing","name":"跳水獭舞","group":"pet","existing_mood":true,"atlas":"pet_play","column":2,"caption":"工作间隙，晃一晃。","trigger":"dance 互动，沿用桌面 4500ms 效果。","source":"desktop/electron/pet-state.cjs · ACTIONS.dance"},
+    {"id":"waving","name":"打招呼","group":"pet","existing_mood":true,"atlas":"pet_affection","column":0,"caption":"嗨，今天也一起慢慢来。","trigger":"wave 互动，沿用桌面 2800ms 效果。","source":"desktop/electron/pet-state.cjs · ACTIONS.wave"},
+    {"id":"tickled","name":"被挠痒痒","group":"pet","existing_mood":true,"atlas":"pet_affection","column":1,"caption":"哈哈，投降啦！","trigger":"tickle 互动，沿用桌面 3000ms 效果。","source":"desktop/electron/pet-state.cjs · ACTIONS.tickle"},
+    {"id":"waking","name":"伸个懒腰","group":"pet","existing_mood":true,"atlas":"pet_affection","column":2,"caption":"我醒啦，又能一起玩了。","trigger":"wake 互动，沿用桌面 3000ms 效果。","source":"desktop/electron/pet-state.cjs · ACTIONS.wake"},
+    {"id":"held","name":"被提起来","group":"pet","existing_mood":true,"atlas":"status","column":0,"caption":"咦，要搬到哪里呀？","trigger":"拖动桌面宠物，held 为 true；松开后恢复。","source":"desktop/src/main.tsx · Pet() held"},
+    {"id":"offline","name":"暂时离线","group":"connection","existing_mood":true,"atlas":"status","column":1,"caption":"连接歇了一下，我还在。","trigger":"已有 offline Mood 素材位；需要显式连接事件接入，不能从 health 未加载推断离线。","source":"desktop/src/Otter.tsx · Mood.offline；desktop/src/main.tsx · connection"},
+    {"id":"error","name":"遇到小问题","group":"connection","existing_mood":false,"atlas":"status","column":2,"caption":"这里卡住了，我们看看原因。","trigger":"明确操作失败的短时反馈；保留原来的错误文字和重试入口。","source":"desktop/src/main.tsx · error；desktop/src/VoiceControls.tsx · error；新增视觉状态"},
+    {"id":"reminder","name":"提醒到点","group":"assistant","existing_mood":false,"atlas":"assistant","column":0,"caption":"叮，约好的时间到了。","trigger":"提醒或专注计时到点；仅收到新的到期事件时进入，确认后恢复。","source":"desktop/electron/assistant-store.cjs · 到期提醒；desktop/electron/ambient.cjs · focus；新增视觉状态"},
+    {"id":"remembering","name":"记在小本本","group":"assistant","existing_mood":false,"atlas":"assistant","column":1,"caption":"把你确认的这条收进小本本。","trigger":"用户已确认，实际保存记忆或项目快照的操作进行中；未确认提议使用 awaiting_confirmation。","source":"src/otter/companion/memory_ai.py · 不直接写记忆；desktop/src/MemoryPane.tsx；新增视觉状态"},
+    {"id":"success","name":"办好啦","group":"assistant","existing_mood":false,"atlas":"assistant","column":2,"caption":"这件事，办好啦。","trigger":"真实的创建、保存或生成操作成功之后短暂显示；请求发出不等于成功。","source":"desktop/electron/task-assistant.cjs；desktop/src/MemoryPane.tsx；新增视觉状态"}
+  ]
+}
