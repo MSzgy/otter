@@ -1,6 +1,6 @@
-// Lessons 2-5: the physical screen can blink, react to a screen tap, play short
-// built-in sounds, read the bus servos without moving them, and accept bounded
-// USB commands. No motor motion, Wi-Fi, credentials, or battery control.
+// Lessons 2-6: the physical screen can blink, react to a screen tap, play short
+// built-in sounds, read the bus servos and move them slowly within a software
+// range, and accept bounded USB commands. No Wi-Fi, credentials, or battery control.
 #include <Arduino.h>
 #include <Wire.h>
 #include <esp_heap_caps.h>
@@ -64,13 +64,24 @@ int readTouch() {
 
 void reportInfo() {
   Serial.printf(
-    "{\"firmware\":\"otter-face-0.3.0\",\"board\":\"ESP32-S3-Touch-LCD-2.8-V2\","
+    "{\"firmware\":\"otter-face-0.4.0\",\"board\":\"ESP32-S3-Touch-LCD-2.8-V2\","
     "\"width\":240,\"height\":320,\"flash_bytes\":%lu,\"psram_bytes\":%lu,"
     "\"touch_available\":%s,\"audio_available\":%s,\"touches\":%lu,\"mood\":\"%s\"}\n",
     (unsigned long)ESP.getFlashChipSize(), (unsigned long)ESP.getPsramSize(),
     touchAvailable ? "true" : "false", audioAvailable ? "true" : "false",
     (unsigned long)touches, moodName(currentMood(millis())));
 }
+// Parses exactly `count` space-separated decimal numbers; anything else fails.
+bool parseNumbers(const char *text, long *values, int count) {
+  for (int i = 0; i < count; i++) {
+    char *end = nullptr;
+    values[i] = strtol(text, &end, 10);
+    if (end == text || (*end && *end != ' ')) return false;
+    text = end;
+  }
+  return *text == '\0';
+}
+
 void handleCommand(const char *command) {
   if (strcmp(command, "PING") == 0) {
     Serial.println("PONG");
@@ -99,22 +110,54 @@ void handleCommand(const char *command) {
       case sound::Result::Unavailable: Serial.println("ERR sound unavailable"); break;
       default: Serial.println("ERR unsupported sound");
     }
+  } else if (strncmp(command, "SERVO MOVE ", 11) == 0 || strncmp(command, "SERVO CENTER ", 13) == 0) {
+    const bool toCenter = command[6] == 'C';
+    long values[2];
+    if (!parseNumbers(command + (toCenter ? 13 : 11), values, toCenter ? 1 : 2) || values[0] < 0 ||
+        values[0] > 253 || (!toCenter && (values[1] < 0 || values[1] > 1023))) {
+      Serial.println("ERR invalid servo command");
+      return;
+    }
+    switch (servo::move(uint8_t(values[0]), toCenter ? servo::center : uint16_t(values[1]))) {
+      case servo::MoveResult::Started: Serial.printf("OK %s\n", command); break;
+      case servo::MoveResult::UnknownServo: Serial.println("ERR unknown servo"); break;
+      case servo::MoveResult::OutOfRange:
+        Serial.printf("ERR servo target outside %u..%u\n", servo::softLow, servo::softHigh);
+        break;
+      case servo::MoveResult::NoReply: Serial.printf("ERR servo %ld no reply\n", values[0]); break;
+      case servo::MoveResult::Unsafe: Serial.printf("ERR servo %ld unsafe, released\n", values[0]); break;
+    }
+  } else if (strncmp(command, "SERVO RELEASE ", 14) == 0) {
+    long id;
+    if (!parseNumbers(command + 14, &id, 1) || id < 0 || id > 253) Serial.println("ERR invalid servo id");
+    else if (!servo::release(uint8_t(id))) Serial.printf("ERR servo %ld no reply\n", id);
+    else Serial.printf("OK %s\n", command);
+  } else if (strcmp(command, "SERVO STOP") == 0) {
+    servo::stopAll();
+    Serial.println("OK SERVO STOP");
   } else if (strcmp(command, "SERVO SCAN") == 0) {
-    // Blocks for about a second; the face pauses while it runs.
+    // Blocks for about a second, which would pause motion checks, so not while moving.
+    if (servo::moving()) {
+      Serial.println("ERR servo busy");
+      return;
+    }
     uint8_t ids[16];
     const size_t count = servo::scan(ids, sizeof(ids));
     Serial.print("{\"servos\":[");
     for (size_t i = 0; i < count; i++) Serial.printf(i ? ",%u" : "%u", ids[i]);
     Serial.println("]}");
   } else if (strcmp(command, "SERVO PINS") == 0) {
+    if (servo::holding()) {  // the probe detaches the UART for a moment
+      Serial.println("ERR servo busy");
+      return;
+    }
     int levels[4];
     servo::probePins(levels);
     Serial.printf("PINS gpio43 down=%d up=%d gpio44 down=%d up=%d\n", levels[0], levels[1],
                   levels[2], levels[3]);
   } else if (strncmp(command, "SERVO RAW ", 10) == 0) {
-    char *end = nullptr;
-    const long id = strtol(command + 10, &end, 10);
-    if (end == command + 10 || *end || id < 0 || id > 253) {
+    long id;
+    if (!parseNumbers(command + 10, &id, 1) || id < 0 || id > 253) {
       Serial.println("ERR invalid servo id");
     } else {
       uint8_t received[32];
@@ -124,10 +167,9 @@ void handleCommand(const char *command) {
       Serial.println();
     }
   } else if (strncmp(command, "SERVO STATUS ", 13) == 0) {
-    char *end = nullptr;
-    const long id = strtol(command + 13, &end, 10);
+    long id;
     servo::Status status;
-    if (end == command + 13 || *end || id < 0 || id > 253) {
+    if (!parseNumbers(command + 13, &id, 1) || id < 0 || id > 253) {
       Serial.println("ERR invalid servo id");
     } else if (!servo::readStatus(uint8_t(id), status)) {
       Serial.printf("ERR servo %ld no reply\n", id);
@@ -138,7 +180,8 @@ void handleCommand(const char *command) {
     }
   } else if (strcmp(command, "HELP") == 0) {
     Serial.println("PING | INFO | BLINK | FACE idle/happy/sleeping/thinking/speaking | SOUND beep/chirp"
-                   " | SERVO SCAN | SERVO STATUS <id> | SERVO RAW <id> | SERVO PINS");
+                   " | SERVO SCAN | SERVO STATUS <id> | SERVO MOVE <id> <pos> | SERVO CENTER <id>"
+                   " | SERVO RELEASE <id> | SERVO STOP | SERVO RAW <id> | SERVO PINS");
   } else if (command[0]) {
     Serial.println("ERR unknown command");
   }
@@ -199,6 +242,7 @@ void loop() {
       wasTouched = contact != 0;
     }
   }
+  servo::update(now, Serial);
   if (framebuffer && now - lastFrame >= framePeriodMs) {
     lastFrame = now;
     drawFace(framebuffer, currentMood(now), now, pending(now, blinkUntil));

@@ -8,9 +8,13 @@ import time
 import serial
 from serial.tools import list_ports
 
-FIRMWARE = "otter-face-0.3.0"
+FIRMWARE = "otter-face-0.4.0"
 COMMANDS = {
     "servos": "SERVO SCAN",  # then SERVO STATUS for each servo found; read-only
+    "move": "SERVO MOVE",  # id position, within the firmware's software range
+    "center": "SERVO CENTER",  # id
+    "release": "SERVO RELEASE",  # id
+    "stop": "SERVO STOP",
     "info": "INFO",
     "ping": "PING",
     "blink": "BLINK",
@@ -22,6 +26,7 @@ COMMANDS = {
     "beep": "SOUND beep",
     "chirp": "SOUND chirp",
 }
+ARGUMENTS = {"move": 2, "center": 1, "release": 1}
 
 
 def read_until(connection, predicate, timeout=6):
@@ -43,9 +48,21 @@ def show_servos(connection):
         print(reply, flush=True)
 
 
+def wait_for_motion(connection, servo_id):
+    # The firmware moves at 40 steps/s within a 300-step range, so 15 s is ample.
+    prefixes = (f"EVENT servo {servo_id} arrived", f"EVENT servo {servo_id} fault")
+    event = read_until(connection, lambda line: line.startswith(prefixes), timeout=15)
+    print(event, flush=True)
+    if " fault " in event:
+        raise RuntimeError("舵机停下并放松了扭力：" + event)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("action", choices=COMMANDS, nargs="?", default="info")
+    parser.add_argument(
+        "values", nargs="*", type=int, help="move 需要 编号 位置；center、release 需要 编号"
+    )
     parser.add_argument(
         "--port", help="例如 /dev/cu.usbmodem3101；省略时只接受唯一的 Espressif USB 设备"
     )
@@ -53,6 +70,8 @@ def main():
     args = parser.parse_args()
     if not 0 <= args.listen <= 30:
         parser.error("--listen 必须在 0～30 秒之间")
+    if len(args.values) != ARGUMENTS.get(args.action, 0):
+        parser.error(f"{args.action} 需要 {ARGUMENTS.get(args.action, 0)} 个数字参数")
     ports = [port.device for port in list_ports.comports() if port.vid == 0x303A]
     port = args.port
     if not port:
@@ -74,13 +93,15 @@ def main():
         elif args.action == "servos":
             show_servos(connection)
         else:
-            command = COMMANDS[args.action]
+            command = " ".join([COMMANDS[args.action], *map(str, args.values)])
             connection.write((command + "\n").encode())
             expected = "PONG" if args.action == "ping" else "OK " + command
             reply = read_until(connection, lambda line: line == expected or line.startswith("ERR "))
             if reply.startswith("ERR "):
                 raise RuntimeError("设备拒绝了指令：" + reply)
             print(reply, flush=True)
+            if args.action in ("move", "center"):
+                wait_for_motion(connection, args.values[0])
         if args.listen:
             print(f"正在监听 {args.listen} 秒，可以点一下屏幕。", flush=True)
             deadline = time.monotonic() + args.listen
