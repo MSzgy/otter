@@ -5,6 +5,7 @@ import { Otter, type Mood } from "./Otter";
 import type { Health, Job, Report, Prefs, Snapshot } from "./types";
 import "./style.css";
 import { AmbientSettings } from "./AmbientSettings";
+import { BodySettings } from "./BodySettings";
 import { ProjectsPane } from "./ProjectsPane";
 import { AssistantPane } from "./AssistantPane";
 import { QuickAccessCard } from "./QuickAccessCard";
@@ -713,6 +714,7 @@ function Panel() {
                 </p>
               </div>
               <AmbientSettings />
+              <BodySettings />
               <QuickAccessCard />
               <ModelSettings
                 key={prefs.config}

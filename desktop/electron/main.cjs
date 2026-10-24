@@ -73,6 +73,13 @@ let shortcutStatus = {
 let selectionPending = false;
 let contextError = "";
 const { PetState, ACTIONS } = require("./pet-state.cjs");
+// The physical otter is optional hardware: off by default, and body-serial loads the
+// serial library only when it is turned on. observe() never throws.
+const { BodyBridge } = require("./body.cjs");
+const body = new BodyBridge({
+  serial: require("./body-serial.cjs"),
+  log: (...args) => console.warn(...args),
+});
 let petState = new PetState(),
   petEffectTimer;
 let pet,
@@ -100,6 +107,7 @@ function save() {
   fs.renameSync(prefsPath() + ".tmp", prefsPath());
 }
 function broadcast(event) {
+  body.observe(event);
   for (const win of [pet, panel])
     if (win && !win.isDestroyed()) win.webContents.send("otter:event", event);
 }
@@ -210,6 +218,10 @@ async function connect() {
       if (backend !== child) return;
       if (event.type === "chat.changed") {
         chatState = event.data;
+        body.observe({
+          type: "chat.activity",
+          data: { status: chatState.status },
+        });
         // The pet only needs activity; do not send conversation text to its renderer.
         if (panel && !panel.isDestroyed())
           panel.webContents.send("otter:event", event);
@@ -454,6 +466,50 @@ function interactPet(action) {
     );
   return snapshot;
 }
+// A tap on the physical otter only does what the app already offers: "知道了" on
+// the earliest due reminder, otherwise a head pat (waking the pet first if asleep).
+function bodyTapped() {
+  const due = (assistantStore?.snapshot().reminders || [])
+    .filter((r) => r.status === "due")
+    .sort((a, b) => a.dueAt - b.dueAt)[0];
+  if (due) return assistantStore.change(due.id, "done");
+  interactPet(petState.snapshot().asleep ? "wake" : "pet");
+}
+// Gives the bridge the current state, which events alone would only cover later.
+function seedBody() {
+  body.observe({ type: "preferences", data: { quiet: !!preferences.quiet } });
+  body.observe({ type: "pet.changed", data: petState.snapshot() });
+  if (assistantStore)
+    body.observe({
+      type: "assistant.changed",
+      data: assistantStore.snapshot(),
+    });
+  body.observe({
+    type: "connection",
+    data: {
+      status: currentHealth
+        ? "online"
+        : offlineMessage
+          ? "offline"
+          : "connecting",
+    },
+  });
+  if (chatState)
+    body.observe({ type: "chat.activity", data: { status: chatState.status } });
+  if (lastJob) body.observe({ type: "job.changed", data: lastJob });
+}
+body.on("tap", () => {
+  try {
+    bodyTapped();
+  } catch {} // a pet cooldown or a busy store may refuse; the app is unaffected
+});
+body.on("changed", (snapshot) => {
+  if (panel && !panel.isDestroyed())
+    panel.webContents.send("otter:event", {
+      type: "body.changed",
+      data: snapshot,
+    });
+});
 function showPetInteractions() {
   activeView = "pet";
   showPanel();
@@ -807,6 +863,17 @@ ipcMain.handle("otter:action", async (event, name, value) => {
       return result;
     }
     throw new Error("不支持的陪伴设置。");
+  }
+  if (name.startsWith("body.")) {
+    if (event.sender !== panel.webContents) throw new Error("请在主面板操作。");
+    if (name === "body.get") return body.snapshot();
+    if (name === "body.configure") {
+      preferences.body = { enabled: value?.enabled === true };
+      save();
+      seedBody();
+      return body.configure(preferences.body);
+    }
+    throw new Error("不支持的实体水獭设置。");
   }
   if (name.startsWith("assistant.")) {
     if (event.sender !== panel.webContents) throw new Error("请在主面板操作。");
@@ -1216,6 +1283,7 @@ else {
         path.join(app.getPath("userData"), "assistant.json"),
         {
           emit: (state) => {
+            body.observe({ type: "assistant.changed", data: state });
             if (panel && !panel.isDestroyed())
               panel.webContents.send("otter:event", {
                 type: "assistant.changed",
@@ -1323,6 +1391,8 @@ else {
           fs.rmSync(path.join(audioTemp, name), { force: true });
       }
     registerShortcuts(preferences.shortcuts);
+    seedBody();
+    body.configure({ enabled: preferences.body?.enabled === true });
     await connect();
   });
   app.on("window-all-closed", () => {});
@@ -1336,6 +1406,7 @@ else {
     void handoff?.stop();
     assistantStore?.close();
     speechPlayer?.stop();
+    body.stop();
     globalShortcut.unregisterAll();
     (backend ? backend.stop() : Promise.resolve()).finally(() => app.quit());
   });
