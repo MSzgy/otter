@@ -23,8 +23,10 @@ void command(uint8_t value, const uint8_t *data = nullptr, size_t count = 0) {
 }
 
 struct Setting { uint8_t command, length, data[14]; };
+// RAMCTRL (0xB0) 0xE0 keeps pixels high byte first. The vendor example's 0xE8
+// sets its ENDIAN bit (low byte first) for LVGL's buffers, which swapped our colors.
 const Setting settings[] = {
-  {0x36, 1, {0x00}}, {0x3a, 1, {0x05}}, {0xb0, 2, {0x00, 0xe8}},
+  {0x36, 1, {0x00}}, {0x3a, 1, {0x05}}, {0xb0, 2, {0x00, 0xe0}},
   {0xb2, 5, {0x0c, 0x0c, 0x00, 0x33, 0x33}}, {0xb7, 1, {0x75}},
   {0xbb, 1, {0x1a}}, {0xc0, 1, {0x2c}}, {0xc2, 2, {0x01, 0xff}},
   {0xc3, 1, {0x13}}, {0xc4, 1, {0x20}}, {0xc6, 1, {0x0f}},
@@ -56,7 +58,7 @@ void begin() {
   ledcWrite(pinBacklight, 500);  // Start at approximately 50% brightness.
 }
 
-void present(uint16_t *pixels) {
+void present(const uint16_t *pixels) {
   const uint8_t columns[] = {0, 0, 0, width - 1};
   const uint8_t rows[] = {0, 0, (height - 1) >> 8, (height - 1) & 0xff};
   command(0x2a, columns, sizeof(columns));
@@ -65,7 +67,7 @@ void present(uint16_t *pixels) {
   bus.beginTransaction(SPISettings(40000000, MSBFIRST, SPI_MODE0));
   digitalWrite(pinCs, LOW);
   digitalWrite(pinDc, HIGH);
-  bus.writeBytes(reinterpret_cast<uint8_t *>(pixels), width * height * sizeof(uint16_t));
+  bus.writeBytes(reinterpret_cast<const uint8_t *>(pixels), width * height * sizeof(uint16_t));
   digitalWrite(pinCs, HIGH);
   bus.endTransaction();
 }

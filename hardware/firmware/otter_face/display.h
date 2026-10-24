@@ -5,7 +5,7 @@ namespace screen {
 constexpr int width = 240;
 constexpr int height = 320;
 void begin();
-void present(uint16_t *pixels);
+void present(const uint16_t *pixels);
 
 // Pixels are stored in SPI wire order (high byte first).
 constexpr uint16_t rgb(uint8_t r, uint8_t g, uint8_t b) {
