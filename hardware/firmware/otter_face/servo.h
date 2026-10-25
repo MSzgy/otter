@@ -9,11 +9,18 @@ struct Status {
   bool torque;
 };
 
-enum class MoveResult { Started, UnknownServo, OutOfRange, NoReply, Unsafe };
-
-// Software range for lesson 6, narrower than the servos' own 20..1003 until the
-// head mechanism is built and its real travel is measured.
+// Lesson 6's software range, narrower than the servos' own 20..1003. Every servo
+// starts with it; the head (lesson 9) swaps in the measured travel.
 constexpr uint16_t center = 511, softLow = center - 150, softHigh = center + 150;
+constexpr uint16_t defaultSpeed = 40;  // steps per second
+
+enum class MoveResult { Started, UnknownServo, OutOfRange, TooFar, NoReply, Unsafe };
+
+struct MoveOptions {
+  uint16_t speed = defaultSpeed;
+  uint8_t tolerance = 3;  // arrived when this close to the target
+  bool report = true;     // print EVENT ... arrived (faults are always printed)
+};
 
 // Starts UART1 to Bus Servo Adapter (A) at 1 Mbps.
 void begin();
@@ -23,8 +30,14 @@ bool readStatus(uint8_t id, Status &status);
 
 // Motion, for servos 1 and 2 only. move() returns at once; update() drives the
 // motion from loop(), checks safety, and prints EVENT lines when a move ends.
-MoveResult move(uint8_t id, uint16_t target);
+MoveResult move(uint8_t id, uint16_t target, const MoveOptions &options = {});
 bool release(uint8_t id);
+// Targets allowed for a servo, always also within its own limits. maxJump > 0 also
+// limits each move to that many steps from where the servo is now.
+void setRange(uint8_t id, uint16_t low, uint16_t high, uint16_t maxJump = 0);
+bool range(uint8_t id, uint16_t &low, uint16_t &high);
+bool settled(uint8_t id);   // torque on and the last move has ended
+uint32_t faults(uint8_t id);  // counts fault releases, so a caller can notice one
 void stopAll();     // hold every torqued servo where it is now
 bool moving();      // any servo still travelling
 bool holding();     // any servo with torque on

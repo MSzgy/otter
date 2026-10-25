@@ -8,7 +8,7 @@ import time
 import serial
 from serial.tools import list_ports
 
-FIRMWARE = "otter-face-0.6.0"
+FIRMWARE = "otter-face-0.7.0"
 COMMANDS = {
     "face": "FACE",  # any expression the board lists; see `faces`
     "say": "SAY",  # the voice line for an expression; replaces whatever is playing
@@ -19,6 +19,9 @@ COMMANDS = {
     "center": "SERVO CENTER",  # id
     "release": "SERVO RELEASE",  # id
     "stop": "SERVO STOP",
+    "motion": "MOTION",  # a head preset (nod, look_left, ...); needs head-calibrate.py first
+    "motions": "MOTION LIST",
+    "head": "HEAD",  # the stored head calibration
     "info": "INFO",
     "ping": "PING",
     "blink": "BLINK",
@@ -30,7 +33,7 @@ COMMANDS = {
     "beep": "SOUND beep",
     "chirp": "SOUND chirp",
 }
-ARGUMENTS = {"move": 2, "center": 1, "release": 1, "face": 1, "say": 1}
+ARGUMENTS = {"move": 2, "center": 1, "release": 1, "face": 1, "say": 1, "motion": 1}
 NUMERIC = {"move", "center", "release"}
 
 
@@ -62,11 +65,22 @@ def wait_for_motion(connection, servo_id):
         raise RuntimeError("舵机停下并放松了扭力：" + event)
 
 
+def wait_for_preset(connection, name):
+    # The longest preset glances for 1.2 s; travel at its speed takes about a second.
+    prefix = f"EVENT motion {name} "
+    event = read_until(connection, lambda line: line.startswith(prefix), timeout=15)
+    print(event, flush=True)
+    if not event.endswith(" done"):
+        raise RuntimeError("动作没有做完：" + event)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("action", choices=COMMANDS, nargs="?", default="info")
     parser.add_argument(
-        "values", nargs="*", help="move 需要 编号 位置；center、release 需要 编号；face 需要 表情名"
+        "values",
+        nargs="*",
+        help="move 需要 编号 位置；center、release 需要 编号；face、say 要表情名；motion 要动作名",
     )
     parser.add_argument(
         "--port", help="例如 /dev/cu.usbmodem3101；省略时只接受唯一的 Espressif USB 设备"
@@ -99,6 +113,10 @@ def main():
             print(json.dumps(info, ensure_ascii=False, indent=2), flush=True)
         elif args.action == "servos":
             show_servos(connection)
+        elif args.action in ("head", "motions"):
+            connection.write((COMMANDS[args.action] + "\n").encode())
+            prefix = '{"head":' if args.action == "head" else '{"motions":'
+            print(read_until(connection, lambda line: line.startswith(prefix)), flush=True)
         elif args.action == "faces":
             connection.write(b"FACE LIST\n")
             faces = json.loads(read_until(connection, lambda line: line.startswith('{"faces":')))
@@ -113,6 +131,8 @@ def main():
             print(reply, flush=True)
             if args.action in ("move", "center"):
                 wait_for_motion(connection, args.values[0])
+            elif args.action == "motion":
+                wait_for_preset(connection, args.values[0])
         if args.listen:
             print(f"正在监听 {args.listen} 秒，可以点一下屏幕。", flush=True)
             deadline = time.monotonic() + args.listen

@@ -1,7 +1,8 @@
-// Lessons 2-7: the physical screen shows the D pixel otter animations (or the
+// Lessons 2-9: the physical screen shows the D pixel otter animations (or the
 // procedural face if the pack is missing), reacts to a screen tap, plays short
-// built-in sounds, reads the bus servos and moves them slowly within a software
-// range, and accepts bounded USB commands. No Wi-Fi, credentials, or battery control.
+// sounds and voice lines, reads and moves the bus servos within a software range,
+// runs calibrated head presets (nod, look_left, ...), and accepts bounded USB
+// commands. No Wi-Fi, credentials, or battery control.
 #include <Arduino.h>
 #include <Wire.h>
 #include <esp_heap_caps.h>
@@ -9,6 +10,7 @@
 #include <cstring>
 #include "display.h"
 #include "face.h"
+#include "head.h"
 #include "pixel_skin.h"
 #include "servo.h"
 #include "sound.h"
@@ -77,14 +79,14 @@ int readTouch() {
 
 void reportInfo() {
   Serial.printf(
-    "{\"firmware\":\"otter-face-0.6.0\",\"board\":\"ESP32-S3-Touch-LCD-2.8-V2\","
+    "{\"firmware\":\"otter-face-0.7.0\",\"board\":\"ESP32-S3-Touch-LCD-2.8-V2\","
     "\"width\":240,\"height\":320,\"flash_bytes\":%lu,\"psram_bytes\":%lu,"
     "\"touch_available\":%s,\"audio_available\":%s,\"skin\":\"%s\",\"faces\":%u,"
-    "\"voices\":%u,\"decode_ms\":%lu,\"touches\":%lu,\"mood\":\"%s\"}\n",
+    "\"voices\":%u,\"head\":\"%s\",\"decode_ms\":%lu,\"touches\":%lu,\"mood\":\"%s\"}\n",
     (unsigned long)ESP.getFlashChipSize(), (unsigned long)ESP.getPsramSize(),
     touchAvailable ? "true" : "false", audioAvailable ? "true" : "false",
     skinOn ? "pixel_game" : "drawn", skinOn ? unsigned(skin::count()) : 5u,
-    unsigned(sound::voiceCount()), (unsigned long)skin::lastDecodeMs(), (unsigned long)touches,
+    unsigned(sound::voiceCount()), head::state(), (unsigned long)skin::lastDecodeMs(), (unsigned long)touches,
     currentFaceName(millis()));
 }
 void listVoices() {
@@ -161,6 +163,42 @@ void handleCommand(const char *command) {
       case sound::Result::Unavailable: Serial.println("ERR sound unavailable"); break;
       default: Serial.println("ERR unsupported sound");
     }
+  } else if (strcmp(command, "MOTION LIST") == 0) {
+    head::listMotions(Serial);
+  } else if (strcmp(command, "MOTION STOP") == 0) {
+    head::cancel(Serial);
+    servo::stopAll();
+    Serial.println("OK MOTION STOP");
+  } else if (strncmp(command, "MOTION ", 7) == 0) {
+    // Presets run on the board from the calibrated travel; the host never sends angles.
+    const char *name = command + 7;
+    switch (head::motion(name, Serial)) {
+      case head::Result::Started: Serial.printf("OK MOTION %s\n", name); break;
+      case head::Result::NotCalibrated: Serial.println("ERR head not calibrated"); break;
+      case head::Result::Calibrating: Serial.println("ERR head calibrating"); break;
+      case head::Result::ServoError: Serial.println("ERR motion servo error"); break;
+      default: Serial.println("ERR unsupported motion");
+    }
+  } else if (strcmp(command, "HEAD") == 0) {
+    head::report(Serial);
+  } else if (strcmp(command, "HEAD CALIBRATE") == 0) {
+    head::startCalibration(Serial);
+    Serial.println("OK HEAD CALIBRATE");
+  } else if (strncmp(command, "HEAD SAVE ", 10) == 0) {
+    long values[6];
+    if (!parseNumbers(command + 10, values, 6)) {
+      Serial.println("ERR invalid head command");
+    } else if (const char *problem = head::save(values)) {
+      Serial.printf("ERR head %s\n", problem);
+    } else {
+      Serial.println("OK HEAD SAVE");
+    }
+  } else if (strcmp(command, "HEAD CANCEL") == 0) {
+    head::cancelCalibration();
+    Serial.println("OK HEAD CANCEL");
+  } else if (strcmp(command, "HEAD FORGET") == 0) {
+    head::forget();
+    Serial.println("OK HEAD FORGET");
   } else if (strncmp(command, "SERVO MOVE ", 11) == 0 || strncmp(command, "SERVO CENTER ", 13) == 0) {
     const bool toCenter = command[6] == 'C';
     long values[2];
@@ -169,21 +207,32 @@ void handleCommand(const char *command) {
       Serial.println("ERR invalid servo command");
       return;
     }
+    head::cancel(Serial);  // a direct servo command overrides a running preset
+    uint16_t low = 0, high = 0;
     switch (servo::move(uint8_t(values[0]), toCenter ? servo::center : uint16_t(values[1]))) {
       case servo::MoveResult::Started: Serial.printf("OK %s\n", command); break;
       case servo::MoveResult::UnknownServo: Serial.println("ERR unknown servo"); break;
       case servo::MoveResult::OutOfRange:
-        Serial.printf("ERR servo target outside %u..%u\n", servo::softLow, servo::softHigh);
+        servo::range(uint8_t(values[0]), low, high);
+        Serial.printf("ERR servo target outside %u..%u\n", low, high);
+        break;
+      case servo::MoveResult::TooFar:
+        Serial.printf("ERR servo moves at most %u steps while calibrating\n", head::calibrationJump);
         break;
       case servo::MoveResult::NoReply: Serial.printf("ERR servo %ld no reply\n", values[0]); break;
       case servo::MoveResult::Unsafe: Serial.printf("ERR servo %ld unsafe, released\n", values[0]); break;
     }
   } else if (strncmp(command, "SERVO RELEASE ", 14) == 0) {
     long id;
-    if (!parseNumbers(command + 14, &id, 1) || id < 0 || id > 253) Serial.println("ERR invalid servo id");
-    else if (!servo::release(uint8_t(id))) Serial.printf("ERR servo %ld no reply\n", id);
+    if (!parseNumbers(command + 14, &id, 1) || id < 0 || id > 253) {
+      Serial.println("ERR invalid servo id");
+      return;
+    }
+    head::cancel(Serial);
+    if (!servo::release(uint8_t(id))) Serial.printf("ERR servo %ld no reply\n", id);
     else Serial.printf("OK %s\n", command);
   } else if (strcmp(command, "SERVO STOP") == 0) {
+    head::cancel(Serial);
     servo::stopAll();
     Serial.println("OK SERVO STOP");
   } else if (strcmp(command, "SERVO SCAN") == 0) {
@@ -232,6 +281,8 @@ void handleCommand(const char *command) {
   } else if (strcmp(command, "HELP") == 0) {
     Serial.println("PING | INFO | BLINK | FACE <expression> | FACE LIST | SOUND beep/chirp"
                    " | SAY <expression> | SAY STOP | SAY LIST"
+                   " | MOTION <preset> | MOTION STOP | MOTION LIST"
+                   " | HEAD | HEAD CALIBRATE | HEAD SAVE <6 positions> | HEAD CANCEL | HEAD FORGET"
                    " | SERVO SCAN | SERVO STATUS <id> | SERVO MOVE <id> <pos> | SERVO CENTER <id>"
                    " | SERVO RELEASE <id> | SERVO STOP | SERVO RAW <id> | SERVO PINS");
   } else if (command[0]) {
@@ -280,6 +331,7 @@ void setup() {
   initTouch();
   audioAvailable = sound::begin();
   servo::begin();
+  head::begin();
   Serial.println("OTTER FACE READY");
 }
 
@@ -305,6 +357,7 @@ void loop() {
     }
   }
   servo::update(now, Serial);
+  head::update(now, Serial);
   if (skinOn) {
     // Decode only when the expression changes; push only when the frame changes.
     const int expression = currentExpression(now);

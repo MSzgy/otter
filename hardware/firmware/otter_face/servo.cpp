@@ -14,13 +14,12 @@ constexpr uint8_t instrPing = 0x01, instrRead = 0x02, instrWrite = 0x03;
 constexpr uint8_t addrLimits = 9, addrTorque = 40, addrGoal = 42, addrStatus = 56;
 constexpr uint32_t scanWindowUs = 2000, readWindowUs = 5000;
 
-constexpr uint16_t moveSpeed = 40;           // steps per second, as on the Mac in lesson 4
 constexpr uint16_t stallLoad = 400;          // normal moves read 0..120
 constexpr uint8_t stallPolls = 3;            // sustained for 3 polls before releasing
-constexpr int arrivedSteps = 3, blockedSteps = 15;
+constexpr int blockedSteps = 15;
 constexpr uint32_t movePollMs = 50, holdPollMs = 500, idleReleaseMs = 20000;
-// Settled = moved at most 1 step in this long. At 40 steps/s a moving servo covers
-// 16 steps here; polls 50 ms apart can read the same position and misjudge it.
+// Settled = moved at most 1 step in this long. Even at lesson 6's 40 steps/s a moving
+// servo covers 16 steps here; polls 50 ms apart can read the same position.
 constexpr uint32_t settleMs = 400;
 constexpr float minVolts = 4.5f, maxVolts = 6.2f;
 constexpr uint8_t maxTemp = 50;
@@ -33,6 +32,9 @@ struct Motion {
   uint16_t target = 0, anchorPosition = 0;
   uint32_t sendAt = 0, deadlineMs = 0, lastPollMs = 0, idleSinceMs = 0, anchorMs = 0;
   uint8_t overloadPolls = 0;
+  MoveOptions options;
+  uint16_t low = softLow, high = softHigh, maxJump = 0;
+  uint32_t faults = 0;
 };
 Motion motions[] = {Motion(1), Motion(2)};
 
@@ -113,10 +115,10 @@ bool writeTorque(uint8_t id, bool on) {
   return write(id, params, sizeof(params));
 }
 
-bool writeGoal(uint8_t id, uint16_t position) {
+bool writeGoal(uint8_t id, uint16_t position, uint16_t speed) {
   // Goal position, time 0 (so speed governs), speed; all high byte first.
   const uint8_t params[] = {addrGoal, uint8_t(position >> 8), uint8_t(position), 0, 0,
-                            uint8_t(moveSpeed >> 8), uint8_t(moveSpeed)};
+                            uint8_t(speed >> 8), uint8_t(speed)};
   return write(id, params, sizeof(params));
 }
 
@@ -126,6 +128,7 @@ bool safe(const Status &s) {
 
 void fail(Motion &m, Print &out, const char *reason, const Status *s) {
   release(m.id);
+  m.faults++;
   if (s)
     out.printf("EVENT servo %u fault %s pos %u load %u %.1fV %uC\n", m.id, reason, s->position,
                s->load, s->volts, s->temperature);
@@ -137,7 +140,7 @@ void step(Motion &m, uint32_t now, Print &out) {
   if (!m.holding) return;
   if (m.active && !m.goalSent) {
     if (int32_t(now - m.sendAt) < 0) return;
-    if (!writeGoal(m.id, m.target)) return fail(m, out, "no-reply", nullptr);
+    if (!writeGoal(m.id, m.target, m.options.speed)) return fail(m, out, "no-reply", nullptr);
     m.goalSent = true;
     m.lastPollMs = m.anchorMs = now;
     return;
@@ -157,12 +160,12 @@ void step(Motion &m, uint32_t now, Print &out) {
       m.anchorMs = now;
     }
     const int diff = int(s.position) - int(m.target);
-    if (abs(diff) <= arrivedSteps || now - m.anchorMs >= settleMs) {
+    if (abs(diff) <= m.options.tolerance || now - m.anchorMs >= settleMs) {
       // A few steps short is normal: the last steps can't beat gear friction.
       if (abs(diff) > blockedSteps) return fail(m, out, "blocked", &s);
       m.active = false;
       m.idleSinceMs = now;
-      out.printf("EVENT servo %u arrived %u diff %+d\n", m.id, s.position, diff);
+      if (m.options.report) out.printf("EVENT servo %u arrived %u diff %+d\n", m.id, s.position, diff);
     } else if (int32_t(now - m.deadlineMs) > 0) {
       fail(m, out, "timeout", &s);
     }
@@ -235,10 +238,10 @@ bool readStatus(uint8_t id, Status &status) {
   return true;
 }
 
-MoveResult move(uint8_t id, uint16_t target) {
+MoveResult move(uint8_t id, uint16_t target, const MoveOptions &options) {
   Motion *m = find(id);
   if (!m) return MoveResult::UnknownServo;
-  if (target < softLow || target > softHigh) return MoveResult::OutOfRange;
+  if (target < m->low || target > m->high || options.speed == 0) return MoveResult::OutOfRange;
   uint8_t limits[4];
   if (!read(id, addrLimits, sizeof(limits), limits)) return MoveResult::NoReply;
   if (target < (limits[0] << 8 | limits[1]) || target > (limits[2] << 8 | limits[3]))
@@ -249,10 +252,11 @@ MoveResult move(uint8_t id, uint16_t target) {
     release(id);
     return MoveResult::Unsafe;
   }
+  if (m->maxJump && uint16_t(abs(int(target) - int(s.position))) > m->maxJump) return MoveResult::TooFar;
   const uint32_t now = millis();
   if (!s.torque) {
     // Goal = where it already is, so turning torque on cannot make it jump.
-    if (!writeGoal(id, s.position) || !writeTorque(id, true)) {
+    if (!writeGoal(id, s.position, options.speed) || !writeTorque(id, true)) {
       release(id);
       return MoveResult::NoReply;
     }
@@ -260,9 +264,10 @@ MoveResult move(uint8_t id, uint16_t target) {
   m->active = m->holding = true;
   m->goalSent = false;
   m->target = target;
+  m->options = options;
   m->anchorPosition = s.position;
   m->sendAt = now + (s.torque ? 0 : 100);  // the first goal right after torque-on was once ignored
-  m->deadlineMs = now + uint32_t(abs(int(target) - int(s.position))) * 1000 / moveSpeed + 2000;
+  m->deadlineMs = now + uint32_t(abs(int(target) - int(s.position))) * 1000 / options.speed + 2000;
   m->lastPollMs = m->anchorMs = now;
   m->overloadPolls = 0;
   return MoveResult::Started;
@@ -273,11 +278,37 @@ bool release(uint8_t id) {
   return writeTorque(id, false);
 }
 
+void setRange(uint8_t id, uint16_t low, uint16_t high, uint16_t maxJump) {
+  if (Motion *m = find(id)) {
+    m->low = low;
+    m->high = high;
+    m->maxJump = maxJump;
+  }
+}
+
+bool range(uint8_t id, uint16_t &low, uint16_t &high) {
+  const Motion *m = find(id);
+  if (!m) return false;
+  low = m->low;
+  high = m->high;
+  return true;
+}
+
+bool settled(uint8_t id) {
+  const Motion *m = find(id);
+  return m && m->holding && !m->active;
+}
+
+uint32_t faults(uint8_t id) {
+  const Motion *m = find(id);
+  return m ? m->faults : 0;
+}
+
 void stopAll() {
   for (Motion &m : motions) {
     if (!m.holding) continue;
     Status s;
-    if (!readStatus(m.id, s) || !writeGoal(m.id, s.position)) {
+    if (!readStatus(m.id, s) || !writeGoal(m.id, s.position, m.options.speed)) {
       release(m.id);
       continue;
     }
