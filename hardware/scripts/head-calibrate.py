@@ -18,7 +18,7 @@ from functools import partial
 import serial
 from serial.tools import list_ports
 
-FIRMWARE = "otter-face-0.7.0"
+FIRMWARE = "otter-face-0.8.0"
 PAN, TILT = 1, 2
 LOWEST, HIGHEST, MIN_SIDE = 20, 1003, 20
 DEGREES_PER_STEP = 300 / 1024

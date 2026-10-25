@@ -1,8 +1,9 @@
-// Lessons 2-9: the physical screen shows the D pixel otter animations (or the
+// Lessons 2-10: the physical screen shows the D pixel otter animations (or the
 // procedural face if the pack is missing), reacts to a screen tap, plays short
 // sounds and voice lines, reads and moves the bus servos within a software range,
-// runs calibrated head presets (nod, look_left, ...), and accepts bounded USB
-// commands. No Wi-Fi, credentials, or battery control.
+// runs calibrated head presets (nod, look_left, ...), lists nearby Wi-Fi on request,
+// and accepts bounded USB commands. It joins no network and stores no credentials;
+// the radio is off except during a scan. No battery control.
 #include <Arduino.h>
 #include <Wire.h>
 #include <esp_heap_caps.h>
@@ -12,6 +13,7 @@
 #include "face.h"
 #include "head.h"
 #include "pixel_skin.h"
+#include "radio.h"
 #include "servo.h"
 #include "sound.h"
 
@@ -79,7 +81,7 @@ int readTouch() {
 
 void reportInfo() {
   Serial.printf(
-    "{\"firmware\":\"otter-face-0.7.0\",\"board\":\"ESP32-S3-Touch-LCD-2.8-V2\","
+    "{\"firmware\":\"otter-face-0.8.0\",\"board\":\"ESP32-S3-Touch-LCD-2.8-V2\","
     "\"width\":240,\"height\":320,\"flash_bytes\":%lu,\"psram_bytes\":%lu,"
     "\"touch_available\":%s,\"audio_available\":%s,\"skin\":\"%s\",\"faces\":%u,"
     "\"voices\":%u,\"head\":\"%s\",\"decode_ms\":%lu,\"touches\":%lu,\"mood\":\"%s\"}\n",
@@ -163,6 +165,11 @@ void handleCommand(const char *command) {
       case sound::Result::Unavailable: Serial.println("ERR sound unavailable"); break;
       default: Serial.println("ERR unsupported sound");
     }
+  } else if (strcmp(command, "WIFI SCAN") == 0) {
+    // Non-blocking: the list arrives as {"wifi":[...]} a few seconds later.
+    if (radio::scanning()) Serial.println("ERR wifi busy");
+    else if (!radio::startScan()) Serial.println("ERR wifi unavailable");
+    else Serial.println("OK WIFI SCAN");
   } else if (strcmp(command, "MOTION LIST") == 0) {
     head::listMotions(Serial);
   } else if (strcmp(command, "MOTION STOP") == 0) {
@@ -281,7 +288,7 @@ void handleCommand(const char *command) {
   } else if (strcmp(command, "HELP") == 0) {
     Serial.println("PING | INFO | BLINK | FACE <expression> | FACE LIST | SOUND beep/chirp"
                    " | SAY <expression> | SAY STOP | SAY LIST"
-                   " | MOTION <preset> | MOTION STOP | MOTION LIST"
+                   " | MOTION <preset> | MOTION STOP | MOTION LIST | WIFI SCAN"
                    " | HEAD | HEAD CALIBRATE | HEAD SAVE <6 positions> | HEAD CANCEL | HEAD FORGET"
                    " | SERVO SCAN | SERVO STATUS <id> | SERVO MOVE <id> <pos> | SERVO CENTER <id>"
                    " | SERVO RELEASE <id> | SERVO STOP | SERVO RAW <id> | SERVO PINS");
@@ -358,6 +365,7 @@ void loop() {
   }
   servo::update(now, Serial);
   head::update(now, Serial);
+  radio::update(Serial);
   if (skinOn) {
     // Decode only when the expression changes; push only when the frame changes.
     const int expression = currentExpression(now);

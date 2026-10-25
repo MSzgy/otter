@@ -52,9 +52,10 @@ OTTER_LAB_PORT=4179 npm start
 | `docs/LESSON-07-PIXEL-SKIN.md` | 第七课：像素水獭 21 种动画上屏，以及屏幕颜色修正 |
 | `docs/LESSON-08-VOICE.md` | 第八课：21 条表情语音放进 Flash，板子边读边播 |
 | `docs/LESSON-09-HEAD.md` | 第九课：纸板两轴头部、标定可转范围、点头和左右看等预设动作 |
+| `docs/LESSON-10-WIFI-SCAN.md` | 第十课：只看不连，扫描附近的 Wi-Fi |
 | `assets/pixel_game/` | D 像素水獭素材：21 个 GIF、84 帧设备数据、21 条语音和清单 |
 | `firmware/serial_probe/serial_probe.ino` | Arduino 串口自检入门固件 |
-| `firmware/otter_face/` | 真实板卡固件：像素水獭动画（缺素材时退回代码画的脸）、屏幕触摸、声音和语音、舵机读取与转动、头部标定与预设动作和 USB 指令 |
+| `firmware/otter_face/` | 真实板卡固件：像素水獭动画（缺素材时退回代码画的脸）、屏幕触摸、声音和语音、舵机读取与转动、头部标定与预设动作、Wi-Fi 扫描和 USB 指令 |
 | `scripts/face-control.py` | 从 Mac 向真实板卡发送白名单指令 |
 | `scripts/head-calibrate.py` | 用方向键转动头部、标记正前方和四个极限，存进板子 |
 | `scripts/servo-bus.py` | 通过舵机控制板（跳线 B）扫描、读取、慢速转动舵机和修改编号 |

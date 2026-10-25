@@ -8,7 +8,7 @@ import time
 import serial
 from serial.tools import list_ports
 
-FIRMWARE = "otter-face-0.7.0"
+FIRMWARE = "otter-face-0.8.0"
 COMMANDS = {
     "face": "FACE",  # any expression the board lists; see `faces`
     "say": "SAY",  # the voice line for an expression; replaces whatever is playing
@@ -22,6 +22,7 @@ COMMANDS = {
     "motion": "MOTION",  # a head preset (nod, look_left, ...); needs head-calibrate.py first
     "motions": "MOTION LIST",
     "head": "HEAD",  # the stored head calibration
+    "wifi": "WIFI SCAN",  # nearby networks; joins nothing
     "info": "INFO",
     "ping": "PING",
     "blink": "BLINK",
@@ -74,6 +75,23 @@ def wait_for_preset(connection, name):
         raise RuntimeError("动作没有做完：" + event)
 
 
+def show_wifi(connection):
+    connection.write(b"WIFI SCAN\n")
+    reply = read_until(connection, lambda line: line == "OK WIFI SCAN" or line.startswith("ERR "))
+    if reply.startswith("ERR "):
+        raise RuntimeError("设备拒绝了指令：" + reply)
+    print("正在扫描附近的 Wi-Fi（只看不连）……", flush=True)
+    found = json.loads(read_until(connection, lambda line: line.startswith('{"wifi":'), timeout=20))
+    print(f"找到 {found['found']} 个，信号从强到弱：", flush=True)
+    for network in found["wifi"]:
+        rssi = network["rssi"]
+        bars = "▂▄▆█"[: 1 + (rssi > -80) + (rssi > -70) + (rssi > -60)]
+        lock = "加密" if network["secure"] else "开放"
+        name = network["ssid"] or "（隐藏网络）"
+        channel = network["channel"]
+        print(f"  {bars:<4} {rssi:>4} dBm  信道 {channel:>2}  {lock}  {name}", flush=True)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("action", choices=COMMANDS, nargs="?", default="info")
@@ -113,6 +131,8 @@ def main():
             print(json.dumps(info, ensure_ascii=False, indent=2), flush=True)
         elif args.action == "servos":
             show_servos(connection)
+        elif args.action == "wifi":
+            show_wifi(connection)
         elif args.action in ("head", "motions"):
             connection.write((COMMANDS[args.action] + "\n").encode())
             prefix = '{"head":' if args.action == "head" else '{"motions":'
