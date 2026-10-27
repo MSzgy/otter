@@ -53,6 +53,7 @@ OTTER_LAB_PORT=4179 npm start
 | `docs/LESSON-08-VOICE.md` | 第八课：21 条表情语音放进 Flash，板子边读边播 |
 | `docs/LESSON-09-HEAD.md` | 第九课：纸板两轴头部、标定可转范围、点头和左右看等预设动作 |
 | `docs/LESSON-10-WIFI-SCAN.md` | 第十课：只看不连，扫描附近的 Wi-Fi |
+| `cad/` | 3D 打印的两轴头部：OpenSCAD 模型、预览图、打印和组装说明 |
 | `assets/pixel_game/` | D 像素水獭素材：21 个 GIF、84 帧设备数据、21 条语音和清单 |
 | `firmware/serial_probe/serial_probe.ino` | Arduino 串口自检入门固件 |
 | `firmware/otter_face/` | 真实板卡固件：像素水獭动画（缺素材时退回代码画的脸）、屏幕触摸、声音和语音、舵机读取与转动、头部标定与预设动作、Wi-Fi 扫描和 USB 指令 |
