@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import Markdown from "react-markdown";
 import { Otter, onHead, type Mood } from "./Otter";
+import { useEvolution } from "./evolution-runtime";
 import type { Health, Job, Report, Prefs, Snapshot } from "./types";
 import "./style.css";
 import { AmbientSettings } from "./AmbientSettings";
@@ -97,6 +98,7 @@ function useRuntime() {
   };
 }
 function Pet() {
+  const { state: evolution } = useEvolution();
   const { health, job, prefs, chatBusy, speaking } = useRuntime();
   const { pet: petLocal, notice, interact } = usePetState();
   const [held, setHeld] = useState(false);
@@ -186,7 +188,14 @@ function Pet() {
           const rect = e.currentTarget
             .querySelector("canvas")
             ?.getBoundingClientRect();
-          head.current = !!rect && onHead((e.clientY - rect.top) / rect.height);
+          head.current =
+            !!rect &&
+            onHead(
+              (e.clientY - rect.top) / rect.height,
+              evolution?.settings.enabled && ["idle", "working"].includes(mood)
+                ? evolution.live.form
+                : "companion",
+            );
           moved.current = false;
           e.currentTarget.setPointerCapture(e.pointerId);
           void api.action("drag-start").catch(() => {});
@@ -217,6 +226,11 @@ function Pet() {
             ? "我在说给你听…"
             : notice ||
               petLocal.effect?.caption ||
+              (!petLocal.asleep &&
+              evolution?.settings.enabled &&
+              evolution.live.form !== "companion"
+                ? evolution.live.caption
+                : "") ||
               (petLocal.asleep
                 ? "点一下，叫醒我"
                 : working

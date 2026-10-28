@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Otter } from "./Otter";
+import { EvolutionWorkshop } from "./EvolutionWorkshop";
 import type { PetSnapshot, Snapshot } from "./types";
 export const initialPet: PetSnapshot = {
   asleep: false,
@@ -127,6 +128,7 @@ export function PetInteractions() {
           </button>
         ))}
       </div>
+      <EvolutionWorkshop />
       <div className="interaction-guide">
         <h2>在桌面上也能互动</h2>
         <ul>

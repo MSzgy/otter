@@ -1,8 +1,16 @@
 import { useEffect, useRef } from "react";
+import {
+  useEvolution,
+  formLabels,
+  phaseLabels,
+  type EvolutionState,
+  type EvolutionForm,
+  type EvolutionPhase,
+} from "./evolution-runtime";
 // One transparent GIF per mood, made from the ESP32 otter's pixel frames by
 // scripts/build_pet_gifs.py, so the desktop and physical otters look the same.
 // Inlined because the page runs from file:// under connect-src 'none', where
-// fetch cannot load assets.
+// fetch cannot load assets. The evolved forms' GIFs are in evolution-assets.ts.
 import dancing from "./assets/otter/dancing.gif?inline";
 import eating from "./assets/otter/eating.gif?inline";
 import happy from "./assets/otter/happy.gif?inline";
@@ -16,6 +24,7 @@ import tickled from "./assets/otter/tickled.gif?inline";
 import waking from "./assets/otter/waking.gif?inline";
 import waving from "./assets/otter/waving.gif?inline";
 import working from "./assets/otter/working.gif?inline";
+import type { EvolutionGifs } from "./evolution-assets";
 
 export type Mood =
   | "idle"
@@ -31,7 +40,6 @@ export type Mood =
   | "waking"
   | "held"
   | "speaking";
-
 const GIFS: Record<Mood, string> = {
   idle,
   working,
@@ -63,13 +71,38 @@ const LABELS: Record<Mood, string> = {
   speaking: "正在说话",
 };
 
-type Frame = { image: ImageBitmap; ms: number };
-const decoded = new Map<Mood, Promise<Frame[]>>();
+// About 2 MB, loaded the first time an evolved form is shown; see evolution-assets.ts.
+let evolutionGifs:
+  Promise<Record<"artisan" | "deep", EvolutionGifs>> | undefined;
+function loadEvolutionGifs() {
+  if (!evolutionGifs) {
+    evolutionGifs = import("./evolution-assets").then((m) => m.EVOLUTION);
+    evolutionGifs.catch(() => (evolutionGifs = undefined));
+  }
+  return evolutionGifs;
+}
+// Which of a form's GIFs shows a phase.
+function evolutionGif(
+  gifs: EvolutionGifs,
+  phase: EvolutionPhase,
+  style: EvolutionState["transitionStyle"],
+) {
+  if (phase === "evolving")
+    return style === "cinematic" ? gifs.cinematic : gifs.to;
+  if (phase === "returning") return gifs.from;
+  if (phase === "success") return gifs.success;
+  if (phase === "waiting" || phase === "error") return gifs.waiting;
+  return gifs.work;
+}
 
-// Decodes every frame once per mood; all Otter instances share the bitmaps.
-async function decode(mood: Mood): Promise<Frame[]> {
-  const base64 = GIFS[mood].slice(GIFS[mood].indexOf(",") + 1);
-  const bytes = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
+type Frame = { image: ImageBitmap; ms: number };
+const decoded = new Map<string, Promise<Frame[]>>();
+
+// Decodes every frame once per GIF; all Otter instances share the bitmaps.
+async function decode(url: string): Promise<Frame[]> {
+  const bytes = Uint8Array.from(atob(url.slice(url.indexOf(",") + 1)), (c) =>
+    c.charCodeAt(0),
+  );
   if (typeof ImageDecoder === "undefined")
     // Without WebCodecs the first frame still shows the right otter, just still.
     return [
@@ -97,85 +130,153 @@ async function decode(mood: Mood): Promise<Frame[]> {
     decoder.close();
   }
 }
-function framesFor(mood: Mood) {
-  let pending = decoded.get(mood);
+function framesFor(key: string, url: string) {
+  let pending = decoded.get(key);
   if (!pending) {
-    pending = decode(mood);
-    decoded.set(mood, pending);
-    pending.catch(() => decoded.delete(mood));
+    pending = decode(url);
+    decoded.set(key, pending);
+    pending.catch(() => decoded.delete(key));
   }
   return pending;
 }
 
 // The pixel art fills its GIF edge to edge. Drawn at this share of the canvas and
-// sitting low, it is about the size the earlier drawn otter was.
-const ART = { scale: 0.68, bottom: 0.92 };
+// sitting low, the companion is about the size the earlier drawn otter was; the
+// evolved forms carry more gear and are drawn larger.
+const ART = {
+  companion: { scale: 0.68, bottom: 0.92 },
+  artisan: { scale: 0.82, bottom: 0.94 },
+  deep: { scale: 0.92, bottom: 0.94 },
+};
 // For hit areas: is a canvas-relative y (0 top, 1 bottom) on the otter's head?
 // The top 35% of the otter (ears, forehead, eyes) is for head pats, as with the
 // earlier drawn otter; below it a click opens chat, including at the centre.
-export function onHead(y: number) {
-  return (y - (ART.bottom - ART.scale)) / ART.scale < 0.35;
+export function onHead(y: number, form: EvolutionForm = "companion") {
+  const art = ART[form];
+  return (y - (art.bottom - art.scale)) / art.scale < 0.35;
 }
 
 // A replaceable 2D desktop body. Business code sends moods, never drawing
 // coordinates. Each mood loops its own frames at the GIF's own timing; the canvas
 // keeps transparent pixels, which the pet window uses to let clicks pass through.
+// While evolution is on and the otter is idle or working, the evolved form's GIF
+// for the current phase replaces the mood's.
 export function Otter({
   mood = "idle",
   size = 220,
+  evolution,
 }: {
   mood?: Mood;
   size?: number;
+  evolution?: EvolutionState | null;
 }) {
   const canvas = useRef<HTMLCanvasElement>(null);
+  const { state } = useEvolution();
+  const candidate =
+    evolution === undefined
+      ? state?.settings.enabled
+        ? state.live
+        : null
+      : evolution;
+  const evolved =
+    candidate &&
+    candidate.form !== "companion" &&
+    ["idle", "working"].includes(mood)
+      ? candidate
+      : null;
+  const form: EvolutionForm = evolved?.form || "companion";
+  const phase = evolved?.phase || "idle";
+  const style = evolved?.transitionStyle;
+  const key =
+    form !== "companion"
+      ? form +
+        ":" +
+        phase +
+        (phase === "evolving" ? ":" + (style || "quick") : "")
+      : "companion:" + mood;
+  // Transitions play once and stop on their last frame.
+  const loop =
+    form === "companion" || !["evolving", "returning"].includes(phase);
+  const transitionInstance = loop
+    ? ""
+    : `${evolved?.task?.id || ""}:${evolved?.changedAt || 0}`;
   useEffect(() => {
-    const el = canvas.current!;
-    const ctx = el.getContext("2d")!;
-    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const el = canvas.current!,
+      ctx = el.getContext("2d")!,
+      dpr = Math.min(window.devicePixelRatio || 1, 2);
     el.width = size * dpr;
     el.height = size * dpr;
-    ctx.imageSmoothingQuality = "high";
     const reduced = window.matchMedia("(prefers-reduced-motion: reduce)");
-    let frames: Frame[] = [];
-    let index = 0;
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    let stopped = false;
+    let frames: Frame[] = [],
+      index = 0,
+      timer: ReturnType<typeof setTimeout> | undefined,
+      stopped = false;
     function draw() {
       if (stopped || !frames.length) return;
       ctx.clearRect(0, 0, el.width, el.height);
-      const side = el.width * ART.scale;
-      const top = el.height * ART.bottom - side;
-      ctx.drawImage(
-        frames[index].image,
-        (el.width - side) / 2,
-        top,
-        side,
-        side,
-      );
+      const art = ART[form],
+        image = frames[index].image;
+      // Pixel art stays crisp only when every source pixel covers the same whole
+      // number of canvas pixels. Near such a size, snap to it and draw unsmoothed;
+      // otherwise smooth, which is softer but keeps every pixel the same width.
+      let side = el.width * art.scale;
+      const whole = Math.round(side / image.width);
+      const crisp = whole >= 1 && Math.abs(side / image.width - whole) <= 0.05;
+      if (crisp) side = whole * image.width;
+      ctx.imageSmoothingEnabled = !crisp;
+      ctx.imageSmoothingQuality = "high";
+      const top = el.height * art.bottom - side;
+      ctx.drawImage(image, (el.width - side) / 2, top, side, side);
     }
     function schedule() {
       clearTimeout(timer);
-      if (stopped || reduced.matches || document.hidden || frames.length < 2)
+      if (
+        stopped ||
+        reduced.matches ||
+        document.hidden ||
+        frames.length < 2 ||
+        (!loop && index === frames.length - 1)
+      )
         return;
       timer = setTimeout(() => {
-        index = (index + 1) % frames.length;
+        index = loop
+          ? (index + 1) % frames.length
+          : Math.min(index + 1, frames.length - 1);
         draw();
         schedule();
       }, frames[index].ms);
     }
     const resume = () => {
-      if (reduced.matches) index = 0;
+      if (reduced.matches) index = loop ? 0 : Math.max(0, frames.length - 1);
       draw();
       schedule();
     };
-    framesFor(mood)
+    const gif =
+      form === "companion"
+        ? Promise.resolve(GIFS[mood])
+        : loadEvolutionGifs().then((gifs) =>
+            evolutionGif(gifs[form], phase, style),
+          );
+    gif
+      .then((url) => framesFor(key, url))
       .then((result) => {
         if (stopped) return;
         frames = result;
         index = 0;
         resume();
       })
-      .catch(() => {});
+      .catch(() => {
+        if (!stopped)
+          framesFor("companion:idle", idle)
+            .then((result) => {
+              if (!stopped) {
+                frames = result;
+                index = 0;
+                draw();
+              }
+            })
+            .catch(() => {});
+      });
     document.addEventListener("visibilitychange", resume);
     reduced.addEventListener("change", resume);
     return () => {
@@ -184,13 +285,19 @@ export function Otter({
       document.removeEventListener("visibilitychange", resume);
       reduced.removeEventListener("change", resume);
     };
-  }, [mood, size]);
+  }, [key, size, form, loop, transitionInstance]);
   return (
     <canvas
       ref={canvas}
       style={{ width: size, height: size }}
       role="img"
-      aria-label={`水獭：${LABELS[mood]}`}
+      data-evolution-form={form}
+      data-evolution-phase={phase}
+      aria-label={
+        evolved
+          ? `水獭：${formLabels[form]}，${phaseLabels[phase]}`
+          : `水獭：${LABELS[mood]}`
+      }
     />
   );
 }

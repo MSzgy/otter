@@ -106,8 +106,30 @@ function save() {
   });
   fs.renameSync(prefsPath() + ".tmp", prefsPath());
 }
+const { EvolutionController } = require("./evolution.cjs");
+const evolution = new EvolutionController({
+  persist: (value) => {
+    const previous = preferences.evolution;
+    preferences.evolution = value;
+    try {
+      save();
+    } catch (error) {
+      preferences.evolution = previous;
+      throw error;
+    }
+  },
+  changed: (snapshot) => {
+    for (const win of [pet, panel])
+      if (win && !win.isDestroyed())
+        win.webContents.send("otter:event", {
+          type: "evolution.changed",
+          data: snapshot,
+        });
+  },
+});
 function broadcast(event) {
   body.observe(event);
+  evolution.observe(event);
   for (const win of [pet, panel])
     if (win && !win.isDestroyed()) win.webContents.send("otter:event", event);
 }
@@ -157,6 +179,7 @@ async function connect() {
   if (switching) return;
   if (taskAssistant?.executing) throw new Error("请等待当前操作完成。");
   taskAssistant?.invalidate();
+  evolution.reset();
   switching = true;
   try {
     if (backend) {
@@ -221,6 +244,15 @@ async function connect() {
         body.observe({
           type: "chat.activity",
           data: { status: chatState.status },
+        });
+        evolution.observe({
+          type: "chat.activity",
+          data: {
+            id: chatState.id,
+            status: chatState.status,
+            effort: chatState.effort,
+            plannedSteps: chatState.plannedSteps,
+          },
         });
         // The pet only needs activity; do not send conversation text to its renderer.
         if (panel && !panel.isDestroyed())
@@ -744,6 +776,7 @@ ipcMain.handle("otter:action", async (event, name, value) => {
     if (!taskAssistant) throw new Error(assistantError);
     if (name === "tasks.cancel") {
       taskAssistant.cancel(value?.requestId);
+      evolution.cancel("task", value?.requestId);
       return;
     }
     if (!backend || backend.closed || switching)
@@ -752,9 +785,38 @@ ipcMain.handle("otter:action", async (event, name, value) => {
       throw new Error("请等待当前回复结束。");
     if (name === "tasks.plan") {
       if (preferences.tasks?.enabled === false) return { kind: "chat" };
-      return taskAssistant.plan(value || {});
+      const id = value?.requestId;
+      evolution.begin("task", { id });
+      try {
+        const result = await taskAssistant.plan(value || {});
+        if (result.kind === "proposal") evolution.wait("task", id);
+        else evolution.cancel("task", id);
+        return result;
+      } catch (error) {
+        evolution.finish("task", id, { ok: false });
+        throw error;
+      }
     }
-    if (name === "tasks.confirm") return taskAssistant.confirm(value || {});
+    if (name === "tasks.confirm") {
+      // Planner proposal IDs differ from the renderer's request ID. A cached
+      // receipt for an older proposal must not complete a newer visual task.
+      const id =
+        taskAssistant.pending && taskAssistant.pending.id === value?.id
+          ? taskAssistant.pending.requestId
+          : null;
+      evolution.resume("task", id);
+      try {
+        const result = await taskAssistant.confirm(value || {});
+        evolution.finish("task", id, {
+          ok: result.ok === true,
+          verified: result.ok === true,
+        });
+        return result;
+      } catch (error) {
+        evolution.finish("task", id, { ok: false });
+        throw error;
+      }
+    }
     throw new Error("不支持的办事操作。");
   }
   if (name === "snapshot")
@@ -863,6 +925,22 @@ ipcMain.handle("otter:action", async (event, name, value) => {
       return result;
     }
     throw new Error("不支持的陪伴设置。");
+  }
+  if (name.startsWith("evolution.")) {
+    if (name === "evolution.get") return evolution.snapshot();
+    if (event.sender !== panel.webContents)
+      throw new Error("请在主面板设置任务进化。");
+    if (name === "evolution.configure") return evolution.configure(value);
+    if (name === "evolution.demo.start")
+      return evolution.startDemo(value?.form);
+    if (name === "evolution.demo.continue") return evolution.continueDemo();
+    if (name === "evolution.demo.fail") return evolution.failDemo();
+    if (name === "evolution.demo.stop") return evolution.stopDemo();
+    if (name === "evolution.skip") return evolution.skipLive();
+    if (name === "evolution.demo.skip") return evolution.skipDemo();
+    if (name === "evolution.milestone")
+      return evolution.recordMilestone(value?.id);
+    throw new Error("不支持的进化操作。");
   }
   if (name.startsWith("body.")) {
     if (event.sender !== panel.webContents) throw new Error("请在主面板操作。");
@@ -1183,6 +1261,7 @@ else {
     } catch {
       preferences = {};
     }
+    evolution.restore(preferences.evolution);
     appContentReader = new AppContentReader(
       app.isPackaged
         ? path.join(process.resourcesPath, "native/otter-app-content")
@@ -1361,6 +1440,14 @@ else {
       timezone: () => currentHealth?.timezone,
     });
     handoff.on("changed", () => {
+      evolution.observe({
+        type: "handoff.changed",
+        data: {
+          pending: (handoff.snapshot().pending || []).map((request) => ({
+            id: request.id,
+          })),
+        },
+      });
       if (panel && !panel.isDestroyed())
         panel.webContents.send("otter:event", {
           type: "handoff.changed",
@@ -1407,6 +1494,7 @@ else {
     assistantStore?.close();
     speechPlayer?.stop();
     body.stop();
+    evolution.close();
     globalShortcut.unregisterAll();
     (backend ? backend.stop() : Promise.resolve()).finally(() => app.quit());
   });

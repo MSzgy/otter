@@ -1,0 +1,222 @@
+.evolution-workshop {
+  margin-top: 32px;
+  padding-top: 30px;
+  border-top: 1px solid var(--line, #dce3d7);
+}
+.evolution-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+}
+.evolution-heading h2 {
+  font-size: 23px;
+  margin: 6px 0;
+}
+.evolution-count {
+  font-size: 12px;
+  color: #7d8c71;
+  white-space: nowrap;
+}
+.evolution-settings {
+  display: flex;
+  align-items: center;
+  gap: 26px;
+  flex-wrap: wrap;
+  margin: 22px 0 10px;
+}
+.evolution-settings label {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-size: 13px;
+}
+.evolution-settings select {
+  padding: 7px 10px;
+  margin-left: 6px;
+  border: 1px solid #d9e0d0;
+  border-radius: 8px;
+  color: inherit;
+  background: #fffef6;
+}
+.evolution-boundary {
+  font-size: 11px;
+  color: #87927c;
+  line-height: 1.8;
+  margin-bottom: 23px;
+}
+.evolution-forms {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+.evolution-forms article {
+  display: flex;
+  align-items: center;
+  flex-direction: column;
+  padding: 12px 8px 17px;
+  background: #f1f2e9;
+  border: 1px solid transparent;
+  border-radius: 14px;
+}
+.evolution-forms article.active {
+  border-color: #9fb48d;
+  background: #e9efdf;
+}
+.evolution-forms strong {
+  font-size: 14px;
+  margin-top: 4px;
+}
+.evolution-forms p {
+  font-size: 11px;
+  color: #7a8a6d;
+  line-height: 1.7;
+  margin: 7px 0 0;
+  text-align: center;
+}
+.evolution-live {
+  margin-top: 20px;
+  padding: 15px 18px;
+  border-left: 3px solid #9bad88;
+  background: #f3f4eb;
+  border-radius: 0 10px 10px 0;
+}
+.evolution-live > span {
+  display: block;
+  font-size: 10px;
+  color: #8a977c;
+  margin-bottom: 7px;
+}
+.evolution-live strong {
+  font-size: 14px;
+  font-weight: 500;
+}
+.evolution-live p {
+  margin: 8px 0 0;
+  font-size: 12px;
+  color: #75886b;
+  line-height: 1.7;
+}
+.evolution-live small {
+  display: block;
+  margin-top: 8px;
+  color: #9a957b;
+  font-size: 10px;
+  line-height: 1.7;
+}
+.evolution-demo {
+  margin-top: 25px;
+  border: 1px solid #dce3d4;
+  border-radius: 14px;
+  padding: 20px;
+  background: #fbfbf5;
+}
+.evolution-demo-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.evolution-demo h3,
+.evolution-growth h3 {
+  font-size: 16px;
+  margin: 0;
+}
+.evolution-demo-heading > span {
+  font-size: 10px;
+  padding: 4px 8px;
+  border-radius: 12px;
+  background: #e5eadb;
+  color: #738168;
+}
+.evolution-demo > p,
+.evolution-growth > p {
+  font-size: 12px;
+  color: #809175;
+  line-height: 1.8;
+}
+.evolution-demo .button-row {
+  margin-top: 15px;
+  flex-wrap: wrap;
+}
+.evolution-demo-stage {
+  display: grid;
+  grid-template-columns: 230px 1fr;
+  align-items: center;
+  gap: 20px;
+  margin-top: 10px;
+}
+.evolution-demo-stage strong {
+  font-size: 17px;
+  font-weight: 500;
+}
+.evolution-demo-stage p {
+  font-size: 12px;
+  color: #7b8e70;
+  line-height: 1.9;
+  margin: 12px 0;
+}
+.evolution-demo-stage button {
+  margin: 6px 7px 0 0;
+}
+.evolution-growth {
+  margin-top: 26px;
+}
+.evolution-milestone-action {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 15px;
+  border-radius: 10px;
+  padding: 13px;
+  background: #eef2e6;
+  font-size: 12px;
+}
+.evolution-growth ul {
+  padding: 0;
+  list-style: none;
+}
+.evolution-growth li {
+  display: flex;
+  justify-content: space-between;
+  padding: 11px 0;
+  border-bottom: 1px solid #e5eadf;
+  font-size: 12px;
+}
+.evolution-growth time {
+  color: #98a08e;
+  font-size: 10px;
+}
+@media (max-width: 760px) {
+  .evolution-heading {
+    display: block;
+  }
+  .evolution-count {
+    display: inline-block;
+    margin-top: 8px;
+  }
+  .evolution-forms {
+    gap: 8px;
+  }
+  .evolution-forms canvas {
+    max-width: 100%;
+    height: auto !important;
+  }
+  .evolution-forms p {
+    font-size: 10px;
+  }
+  .evolution-demo-stage {
+    grid-template-columns: 1fr;
+    justify-items: center;
+    text-align: center;
+    gap: 5px;
+  }
+  .evolution-demo-stage > div {
+    width: 100%;
+  }
+  .evolution-settings {
+    gap: 15px;
+  }
+  .evolution-heading h2 {
+    font-size: 20px;
+  }
+}
