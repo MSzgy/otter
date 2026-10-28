@@ -12,9 +12,10 @@
 // Export one part:  openscad -D 'part="yoke"' -o yoke.stl otter_head.scad
 // part = "assembly" | "base" | "yoke" | "head" | "clip" | "layout" (preview of all four)
 
-part = "assembly";
-tilt = 0;  // preview only: head tilt in degrees
-pan = 0;   // preview only: yoke turn in degrees
+/* [View] */
+part = "assembly";  // [assembly, base, yoke, head, clip, layout]
+tilt = 0;  // [-35:1:35] preview only: head tilt in degrees
+pan = 0;   // [-90:1:90] preview only: yoke turn in degrees
 
 /* [Measured: SC09 servo] */
 servo_len = 23.2;          // body length (Waveshare spec)
