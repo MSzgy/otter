@@ -499,3 +499,115 @@ test("the bridge's voice rules match the voice pack's manifest", () => {
     );
   }
 });
+
+// --- Evolved forms (firmware 0.9.0+) ---
+const EVOLVED_FACES = [
+  "to_artisan",
+  "to_artisan_cinematic",
+  "artisan_work",
+  "artisan_waiting",
+  "artisan_success",
+  "from_artisan",
+  "to_deep",
+  "to_deep_cinematic",
+  "deep_work",
+  "deep_waiting",
+  "deep_success",
+  "from_deep",
+];
+const EVOLVING = {
+  info: {
+    firmware: "otter-face-0.9.0",
+    skin: "pixel_game",
+    voices: 21,
+    evolution: 12,
+  },
+  faces: [...PIXEL_FACES, ...EVOLVED_FACES],
+  voices: [...PIXEL_FACES, "awaiting_confirmation", "success"],
+};
+const online = { type: "connection", data: { status: "online" } };
+const job = (status) => ({ type: "job.changed", data: { status } });
+const evolution = (live, enabled = true) => ({
+  type: "evolution.changed",
+  data: { settings: { enabled }, live },
+});
+
+test("evolved form and phase map to the board's clip names", () => {
+  const { evolutionExpression } = require("./body.cjs");
+  assert.equal(evolutionExpression(null), null);
+  assert.equal(evolutionExpression({ form: "companion", phase: "idle" }), null);
+  const deep = (phase, transitionStyle) =>
+    evolutionExpression({ form: "deep", phase, transitionStyle });
+  assert.equal(deep("evolving", "quick"), "to_deep");
+  assert.equal(deep("evolving", "cinematic"), "to_deep_cinematic");
+  assert.equal(deep("working"), "deep_work");
+  assert.equal(deep("waiting"), "deep_waiting");
+  assert.equal(deep("error"), "deep_waiting");
+  assert.equal(deep("success"), "deep_success");
+  assert.equal(deep("returning", "cinematic"), "from_deep");
+});
+
+test("the board follows a task's evolution; evolved faces speak the plain lines", async () => {
+  const { bridge, device, time } = await connected(EVOLVING);
+  device.written.length = 0;
+  bridge.observe(online);
+  bridge.observe(job("running"));
+  const cinematic = { transitionStyle: "cinematic" };
+  bridge.observe(
+    evolution({ form: "artisan", phase: "evolving", ...cinematic }),
+  );
+  time.now += 2400;
+  bridge.observe(evolution({ form: "artisan", phase: "working" }));
+  time.now += 20000;
+  bridge.observe(evolution({ form: "deep", phase: "working" }));
+  bridge.observe(job("finished"));
+  bridge.observe(evolution({ form: "deep", phase: "success" }));
+  time.now += 1400;
+  bridge.observe(evolution({ form: "deep", phase: "returning", ...cinematic }));
+  bridge.observe(evolution({ form: "companion", phase: "idle" }));
+  assert.deepEqual(device.written, [
+    "FACE working",
+    "SAY working",
+    "FACE to_artisan_cinematic", // transitions are silent
+    "FACE artisan_work", // "working" is still cooling down
+    "FACE deep_work",
+    "SAY working",
+    "FACE deep_success",
+    "SAY success",
+    "FACE from_deep",
+    "FACE idle",
+  ]);
+});
+
+test("firmware without the evolution bank keeps showing the plain state", async () => {
+  const { bridge, device } = await connected(VOICED);
+  device.written.length = 0;
+  bridge.observe(online);
+  bridge.observe(job("running"));
+  bridge.observe(evolution({ form: "artisan", phase: "working" }));
+  bridge.observe(evolution({ form: "artisan", phase: "waiting" }));
+  assert.deepEqual(device.written, ["FACE working", "SAY working"]);
+});
+
+test("speaking and sleep still win over the evolved form; turning evolution off ends it", async () => {
+  const { bridge, device } = await connected(EVOLVING);
+  device.written.length = 0;
+  bridge.observe(online);
+  bridge.observe(evolution({ form: "artisan", phase: "waiting" }));
+  bridge.observe({ type: "voice.activity", data: { speaking: true } });
+  bridge.observe({ type: "voice.activity", data: { speaking: false } });
+  bridge.observe({ type: "pet.changed", data: { asleep: true } });
+  bridge.observe({ type: "pet.changed", data: { asleep: false } });
+  bridge.observe(evolution({ form: "artisan", phase: "waiting" }, false));
+  assert.deepEqual(device.written, [
+    "FACE artisan_waiting",
+    "SAY awaiting_confirmation",
+    "FACE speaking",
+    "SAY STOP",
+    "FACE artisan_waiting",
+    "FACE sleeping",
+    "SAY sleeping",
+    "FACE artisan_waiting",
+    "FACE idle",
+  ]);
+});

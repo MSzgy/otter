@@ -8,7 +8,7 @@ import time
 import serial
 from serial.tools import list_ports
 
-FIRMWARE = "otter-face-0.8.0"
+FIRMWARE = "otter-face-0.9.0"
 COMMANDS = {
     "face": "FACE",  # any expression the board lists; see `faces`
     "say": "SAY",  # the voice line for an expression; replaces whatever is playing

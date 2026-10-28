@@ -20,6 +20,7 @@ import sys
 from pathlib import Path
 
 MAGIC, VERSION, NAME_BYTES, SAMPLE_RATE = b"OTVO", 1, 24, 16000
+ROOM = 0x100000  # the evolution bank starts 3 MiB in (build-evolution-pack.py)
 HEADER = struct.Struct("<4sHHII")
 ENTRY = struct.Struct(f"<{NAME_BYTES}sII")
 
@@ -41,6 +42,8 @@ def main():
         entries.append(ENTRY.pack(name.encode(), data_start + len(data), len(pcm)))
         data += pcm
     blob = HEADER.pack(MAGIC, VERSION, len(entries), SAMPLE_RATE, 0) + b"".join(entries) + data
+    if len(blob) > ROOM:
+        sys.exit(f"{len(blob)} bytes would overwrite the evolution bank")
     Path(sys.argv[2]).write_bytes(blob)
     seconds = len(data) / 2 / SAMPLE_RATE
     print(f"{len(entries)} clips verified, {seconds:.1f} s of audio, {len(blob)} bytes")

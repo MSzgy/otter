@@ -119,6 +119,7 @@ const evolution = new EvolutionController({
     }
   },
   changed: (snapshot) => {
+    body.observe({ type: "evolution.changed", data: snapshot });
     for (const win of [pet, panel])
       if (win && !win.isDestroyed())
         win.webContents.send("otter:event", {

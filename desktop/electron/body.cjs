@@ -35,6 +35,35 @@ function resolveExpression(s, now = Date.now()) {
   return "idle";
 }
 
+// While a task has evolved the desktop otter (evolution.cjs), the board shows the
+// same form and phase from its second animation bank (firmware 0.9.0+; names as in
+// hardware/assets/evolution/manifest.json). Like the desktop pet, only in place of
+// the calm states: speaking, pet effects, reminders, sleep and offline still win.
+const EVOLVABLE = ["idle", "working", "thinking", "focus"];
+function evolutionExpression(live) {
+  if (!live || !["artisan", "deep"].includes(live.form)) return null;
+  const form = live.form;
+  if (live.phase === "evolving")
+    return live.transitionStyle === "cinematic"
+      ? `to_${form}_cinematic`
+      : `to_${form}`;
+  if (live.phase === "returning") return `from_${form}`;
+  if (live.phase === "success") return `${form}_success`;
+  if (["waiting", "error"].includes(live.phase)) return `${form}_waiting`;
+  return `${form}_work`;
+}
+// Evolved faces have no lines of their own; they speak the plain state's line.
+// Transitions stay silent.
+const EVOLVED_LINES = {
+  work: "working",
+  waiting: "awaiting_confirmation",
+  success: "success",
+};
+function lineFor(face) {
+  const phase = /^(?:artisan|deep)_(work|waiting|success)$/.exec(face)?.[1];
+  return phase ? EVOLVED_LINES[phase] : face;
+}
+
 class BodyBridge extends EventEmitter {
   constructor({
     serial,
@@ -140,6 +169,8 @@ class BodyBridge extends EventEmitter {
           this.send("SOUND chirp");
       } else if (event.type === "preferences") {
         s.quiet = !!d.quiet;
+      } else if (event.type === "evolution.changed") {
+        s.evolution = d.settings?.enabled ? d.live : null;
       } else {
         return;
       }
@@ -152,6 +183,10 @@ class BodyBridge extends EventEmitter {
   sync() {
     if (this.status !== "connected") return;
     let face = resolveExpression(this.state, this.now());
+    const evolved = evolutionExpression(this.state.evolution);
+    // Firmware without the evolution bank keeps showing the plain state.
+    if (evolved && EVOLVABLE.includes(face) && this.faces.has(evolved))
+      face = evolved;
     if (!this.faces.has(face)) face = "idle";
     if (face === this.sent) return;
     // The first face after (re)connecting only catches up; it is not an entry.
@@ -161,7 +196,7 @@ class BodyBridge extends EventEmitter {
     if (!entered || !this.voices.size) return;
     if (face === "speaking")
       this.send("SAY STOP"); // the Mac reads aloud; don't talk over it
-    else this.say(face);
+    else this.say(lineFor(face));
   }
 
   // Plays an expression's voice line if the pack's rules allow it now.
@@ -328,6 +363,7 @@ class BodyBridge extends EventEmitter {
 module.exports = {
   BodyBridge,
   resolveExpression,
+  evolutionExpression,
   DEVICE_VID,
   VOICE_NEVER_AUTO,
   VOICE_COOLDOWN_MS,

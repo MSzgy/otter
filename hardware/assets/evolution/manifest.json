@@ -1,0 +1,1003 @@
+{
+  "schema_version": 2,
+  "width": 240,
+  "height": 320,
+  "desktop_size": 320,
+  "forms": [
+    "companion",
+    "artisan",
+    "deep"
+  ],
+  "transition_ms": 2400,
+  "clips": {
+    "artisan_work": {
+      "id": "artisan_work",
+      "form": "artisan",
+      "phase": "work",
+      "runtime": "runtime/artisan_work.gif",
+      "screen": "screen/artisan_work.gif",
+      "frames": [
+        {
+          "index": 0,
+          "png": "frames/artisan_work/0.png",
+          "gzip": "device/artisan_work/0.565.gz",
+          "raw_bytes": 153600,
+          "raw_sha256": "d5f6a5d10a5e636094a125ce4c3cba87ab15009456722fb056760d641e8b26a3",
+          "gzip_bytes": 31080,
+          "delay_ms": 600
+        },
+        {
+          "index": 1,
+          "png": "frames/artisan_work/1.png",
+          "gzip": "device/artisan_work/1.565.gz",
+          "raw_bytes": 153600,
+          "raw_sha256": "827a359e2af9a17712af4c138ebd0a5538dfff32f2179b338aaa78404b59f4f7",
+          "gzip_bytes": 31416,
+          "delay_ms": 300
+        },
+        {
+          "index": 2,
+          "png": "frames/artisan_work/2.png",
+          "gzip": "device/artisan_work/2.565.gz",
+          "raw_bytes": 153600,
+          "raw_sha256": "d70d48506431ef230ff89c08e7d0ce82460385bcdae1e1b42e066523ac7b6da7",
+          "gzip_bytes": 29591,
+          "delay_ms": 150
+        },
+        {
+          "index": 3,
+          "png": "frames/artisan_work/3.png",
+          "gzip": "device/artisan_work/3.565.gz",
+          "raw_bytes": 153600,
+          "raw_sha256": "63d9a06ecf3716602b0049f885c2a802c31ec3e4bdd272e3d715ab0b2082bb93",
+          "gzip_bytes": 30956,
+          "delay_ms": 300
+        }
+      ],
+      "frame_count": 4,
+      "delay_ms": [
+        600,
+        300,
+        150,
+        300
+      ],
+      "loop": true,
+      "source": "sources/artisan/work.png",
+      "source_sha256": "e6bae6dd7a6918d9778b6e090848dad36ce0c8b5670add36694c95aac09c73df",
+      "registration": {
+        "scale": 0.4268292682926829,
+        "axis_x": 120,
+        "baseline_y": 296
+      },
+      "sha256": "60414f6b62f9875c8639c4695ffc1a27da14e226ac3b3e70770aa9cfa1ebe483",
+      "bytes": 102899,
+      "poster": "posters/artisan_work.png",
+      "screen_poster": "posters/artisan_work-screen.png"
+    },
+    "artisan_waiting": {
+      "id": "artisan_waiting",
+      "form": "artisan",
+      "phase": "waiting",
+      "runtime": "runtime/artisan_waiting.gif",
+      "screen": "screen/artisan_waiting.gif",
+      "frames": [
+        {
+          "index": 0,
+          "png": "frames/artisan_waiting/0.png",
+          "gzip": "device/artisan_waiting/0.565.gz",
+          "raw_bytes": 153600,
+          "raw_sha256": "8819f9ed391d4728345dd38ea4d3ce4487ac15ef45cfc31f927b8c7895ae3012",
+          "gzip_bytes": 27447,
+          "delay_ms": 1200
+        },
+        {
+          "index": 1,
+          "png": "frames/artisan_waiting/1.png",
+          "gzip": "device/artisan_waiting/1.565.gz",
+          "raw_bytes": 153600,
+          "raw_sha256": "fc99ac64e33f3f63290620a0c19acafca035df36bfd0fa840ab8ca402c08871d",
+          "gzip_bytes": 26984,
+          "delay_ms": 150
+        },
+        {
+          "index": 2,
+          "png": "frames/artisan_waiting/2.png",
+          "gzip": "device/artisan_waiting/2.565.gz",
+          "raw_bytes": 153600,
+          "raw_sha256": "cb25a75d7d9511c7399cb2eceda7a9087c9d1652ae951255fd7aa8bfbde169ad",
+          "gzip_bytes": 26639,
+          "delay_ms": 150
+        },
+        {
+          "index": 3,
+          "png": "frames/artisan_waiting/3.png",
+          "gzip": "device/artisan_waiting/3.565.gz",
+          "raw_bytes": 153600,
+          "raw_sha256": "574fd1f498d30e3cabe7210a78dc803cc6f3499aeb77ce6a4d8b4b3a28a1c79f",
+          "gzip_bytes": 27546,
+          "delay_ms": 200
+        }
+      ],
+      "frame_count": 4,
+      "delay_ms": [
+        1200,
+        150,
+        150,
+        200
+      ],
+      "loop": true,
+      "source": "sources/artisan/waiting.png",
+      "source_sha256": "c378eb6835920a0f331327a12bf956dcb03d056c7ebb016bb9e013edbeea79fd",
+      "registration": {
+        "scale": 0.4268292682926829,
+        "axis_x": 120,
+        "baseline_y": 296
+      },
+      "sha256": "4ce18b6f9c3a2fff41b5bc85b258c6c2d69b2a3c7e9dbe6a48229619908ac8f7",
+      "bytes": 88756,
+      "poster": "posters/artisan_waiting.png",
+      "screen_poster": "posters/artisan_waiting-screen.png"
+    },
+    "artisan_success": {
+      "id": "artisan_success",
+      "form": "artisan",
+      "phase": "success",
+      "runtime": "runtime/artisan_success.gif",
+      "screen": "screen/artisan_success.gif",
+      "frames": [
+        {
+          "index": 0,
+          "png": "frames/artisan_success/0.png",
+          "gzip": "device/artisan_success/0.565.gz",
+          "raw_bytes": 153600,
+          "raw_sha256": "51931fee313df4e5af3092d44634d4d57f9a554980312e5bf9d7f743a53b8d5d",
+          "gzip_bytes": 29756,
+          "delay_ms": 500
+        },
+        {
+          "index": 1,
+          "png": "frames/artisan_success/1.png",
+          "gzip": "device/artisan_success/1.565.gz",
+          "raw_bytes": 153600,
+          "raw_sha256": "18385343ab95c4d825acf0461eeb1951b773ceb7b501284e6ef2986e37d12305",
+          "gzip_bytes": 29195,
+          "delay_ms": 200
+        },
+        {
+          "index": 2,
+          "png": "frames/artisan_success/2.png",
+          "gzip": "device/artisan_success/2.565.gz",
+          "raw_bytes": 153600,
+          "raw_sha256": "92a93c29546fe8b6fae4cd9af1e1fc97835a9bbb28a73e160ae36940957bac79",
+          "gzip_bytes": 28579,
+          "delay_ms": 200
+        },
+        {
+          "index": 3,
+          "png": "frames/artisan_success/3.png",
+          "gzip": "device/artisan_success/3.565.gz",
+          "raw_bytes": 153600,
+          "raw_sha256": "23bc6fcb111f1cc47630170f6774be693143d6a89589cff8eeb12912a4a3e7cc",
+          "gzip_bytes": 30025,
+          "delay_ms": 300
+        }
+      ],
+      "frame_count": 4,
+      "delay_ms": [
+        500,
+        200,
+        200,
+        300
+      ],
+      "loop": true,
+      "source": "sources/artisan/success.png",
+      "source_sha256": "376de044c4883ac602052bfe3992758004759ce95784e91e91c292271f4b5ef2",
+      "registration": {
+        "scale": 0.4268292682926829,
+        "axis_x": 120,
+        "baseline_y": 296
+      },
+      "sha256": "d910edbc5e9ae7a1d169a91c77442ac2a61c1137c9a9e99836fdff5181f354eb",
+      "bytes": 99303,
+      "poster": "posters/artisan_success.png",
+      "screen_poster": "posters/artisan_success-screen.png"
+    },
+    "to_artisan": {
+      "id": "to_artisan",
+      "form": "artisan",
+      "phase": "evolve",
+      "runtime": "runtime/to_artisan.gif",
+      "screen": "screen/to_artisan.gif",
+      "frames": [
+        {
+          "index": 0,
+          "png": "frames/to_artisan/0.png",
+          "gzip": "device/to_artisan/0.565.gz",
+          "raw_bytes": 153600,
+          "raw_sha256": "e40faf3152a921f3170dcd5f9e0ddafd07b0bd324253794ba5ab04ffe46b7ca4",
+          "gzip_bytes": 21330,
+          "delay_ms": 160
+        },
+        {
+          "index": 1,
+          "png": "frames/to_artisan/1.png",
+          "gzip": "device/to_artisan/1.565.gz",
+          "raw_bytes": 153600,
+          "raw_sha256": "b7f251866d10386d8ab182e1f782fe49b9524a31c0b495395ae097affc09cdeb",
+          "gzip_bytes": 24808,
+          "delay_ms": 160
+        },
+        {
+          "index": 2,
+          "png": "frames/to_artisan/2.png",
+          "gzip": "device/to_artisan/2.565.gz",
+          "raw_bytes": 153600,
+          "raw_sha256": "cdeaf9b0305a84ac4c2657a0ca8f0328598f43c0be42cf62f6ac44264faf175c",
+          "gzip_bytes": 31909,
+          "delay_ms": 160
+        },
+        {
+          "index": 3,
+          "png": "frames/to_artisan/3.png",
+          "gzip": "device/to_artisan/3.565.gz",
+          "raw_bytes": 153600,
+          "raw_sha256": "ebf400664987130615e8112e4164d325afc17efe6deb785beb68f11172ed8105",
+          "gzip_bytes": 32098,
+          "delay_ms": 160
+        }
+      ],
+      "frame_count": 4,
+      "delay_ms": [
+        160,
+        160,
+        160,
+        160
+      ],
+      "loop": false,
+      "source": "sources/transitions/to_artisan.png",
+      "source_sha256": "d792dd40398ba48adfbcf42d220784c96144e52d33d5f461c860fd4ed3984a84",
+      "registration": {
+        "scale": 0.4268292682926829,
+        "axis_x": 120,
+        "baseline_y": 296
+      },
+      "sha256": "ecb7ec7a5cfa732534225006f834f878ae1f85f25595916a15c0ce8f7fb3659d",
+      "bytes": 91449,
+      "poster": "posters/to_artisan.png",
+      "screen_poster": "posters/to_artisan-screen.png"
+    },
+    "from_artisan": {
+      "id": "from_artisan",
+      "form": "artisan",
+      "phase": "returning",
+      "runtime": "runtime/from_artisan.gif",
+      "screen": "screen/from_artisan.gif",
+      "frame_count": 4,
+      "delay_ms": [
+        160,
+        160,
+        160,
+        160
+      ],
+      "loop": false,
+      "reverse_of": "to_artisan",
+      "sha256": "b928ce6e690f5d292623894ea093e6681ec384dfeeef93183d4d154a50743f08",
+      "bytes": 91449,
+      "poster": "posters/from_artisan.png",
+      "screen_poster": "posters/from_artisan-screen.png"
+    },
+    "deep_work": {
+      "id": "deep_work",
+      "form": "deep",
+      "phase": "work",
+      "runtime": "runtime/deep_work.gif",
+      "screen": "screen/deep_work.gif",
+      "frames": [
+        {
+          "index": 0,
+          "png": "frames/deep_work/0.png",
+          "gzip": "device/deep_work/0.565.gz",
+          "raw_bytes": 153600,
+          "raw_sha256": "b23f993400f3c3fc345a2c88fa70a3e8939517b1dddbb038210932076871206d",
+          "gzip_bytes": 22995,
+          "delay_ms": 600
+        },
+        {
+          "index": 1,
+          "png": "frames/deep_work/1.png",
+          "gzip": "device/deep_work/1.565.gz",
+          "raw_bytes": 153600,
+          "raw_sha256": "45bbc066250f0ceb03429b6e540aca2815344ef29d71538488a64ff0d27e09e6",
+          "gzip_bytes": 22935,
+          "delay_ms": 300
+        },
+        {
+          "index": 2,
+          "png": "frames/deep_work/2.png",
+          "gzip": "device/deep_work/2.565.gz",
+          "raw_bytes": 153600,
+          "raw_sha256": "589adc79cef110b2a8c38d4da96e72a838337808419f8c9dc9dd0e21571b5db7",
+          "gzip_bytes": 22306,
+          "delay_ms": 150
+        },
+        {
+          "index": 3,
+          "png": "frames/deep_work/3.png",
+          "gzip": "device/deep_work/3.565.gz",
+          "raw_bytes": 153600,
+          "raw_sha256": "219e8653dfe60ef9b0580ed54a8ff844effc92280ecbe0ef6b40161dbf47f6c9",
+          "gzip_bytes": 22674,
+          "delay_ms": 300
+        }
+      ],
+      "frame_count": 4,
+      "delay_ms": [
+        600,
+        300,
+        150,
+        300
+      ],
+      "loop": true,
+      "source": "sources/deep-alpha/work.png",
+      "source_sha256": "d4b701453e779ccfe9646cc0d4c2118ebe74d305fdc540e8556de801c3a08d05",
+      "registration": {
+        "scale": 0.43243243243243246,
+        "axis_x": 120,
+        "baseline_y": 296
+      },
+      "sha256": "3f120de602f3e46dfd819d929bbb01c43b2cb50a3ec16e748324785deaca82ab",
+      "bytes": 73711,
+      "poster": "posters/deep_work.png",
+      "screen_poster": "posters/deep_work-screen.png"
+    },
+    "deep_waiting": {
+      "id": "deep_waiting",
+      "form": "deep",
+      "phase": "waiting",
+      "runtime": "runtime/deep_waiting.gif",
+      "screen": "screen/deep_waiting.gif",
+      "frames": [
+        {
+          "index": 0,
+          "png": "frames/deep_waiting/0.png",
+          "gzip": "device/deep_waiting/0.565.gz",
+          "raw_bytes": 153600,
+          "raw_sha256": "837dd4e6f866318d018ac588cc7671a05c8fe769e3911ee136ffc81348060769",
+          "gzip_bytes": 26257,
+          "delay_ms": 1200
+        },
+        {
+          "index": 1,
+          "png": "frames/deep_waiting/1.png",
+          "gzip": "device/deep_waiting/1.565.gz",
+          "raw_bytes": 153600,
+          "raw_sha256": "b0fc99f3a67ed4412adc6cf504b66e461900d82851996761a54c86819d0be3f8",
+          "gzip_bytes": 25909,
+          "delay_ms": 150
+        },
+        {
+          "index": 2,
+          "png": "frames/deep_waiting/2.png",
+          "gzip": "device/deep_waiting/2.565.gz",
+          "raw_bytes": 153600,
+          "raw_sha256": "dadd0708c3bb893c93867c84f40e5523146bca7f24d54b927e70db798d11f340",
+          "gzip_bytes": 25221,
+          "delay_ms": 150
+        },
+        {
+          "index": 3,
+          "png": "frames/deep_waiting/3.png",
+          "gzip": "device/deep_waiting/3.565.gz",
+          "raw_bytes": 153600,
+          "raw_sha256": "601f2d6dfad17b55560d4bf0dd14f08704b920be997be806716beeebeacfe758",
+          "gzip_bytes": 26056,
+          "delay_ms": 200
+        }
+      ],
+      "frame_count": 4,
+      "delay_ms": [
+        1200,
+        150,
+        150,
+        200
+      ],
+      "loop": true,
+      "source": "sources/deep-alpha/waiting.png",
+      "source_sha256": "ea2dd8f458b6a080092a40287c254a62df065f2dd6ae7fae7b37d91409f6de53",
+      "registration": {
+        "scale": 0.43243243243243246,
+        "axis_x": 120,
+        "baseline_y": 296
+      },
+      "sha256": "558848862450a6557a488855de7605406f2298ba9da7e3ef8e07186c47c4a926",
+      "bytes": 85686,
+      "poster": "posters/deep_waiting.png",
+      "screen_poster": "posters/deep_waiting-screen.png"
+    },
+    "deep_success": {
+      "id": "deep_success",
+      "form": "deep",
+      "phase": "success",
+      "runtime": "runtime/deep_success.gif",
+      "screen": "screen/deep_success.gif",
+      "frames": [
+        {
+          "index": 0,
+          "png": "frames/deep_success/0.png",
+          "gzip": "device/deep_success/0.565.gz",
+          "raw_bytes": 153600,
+          "raw_sha256": "d5d0f499b428c8c026df5aca966a6389bb364cdb18f16d72541283c16acf0492",
+          "gzip_bytes": 22451,
+          "delay_ms": 500
+        },
+        {
+          "index": 1,
+          "png": "frames/deep_success/1.png",
+          "gzip": "device/deep_success/1.565.gz",
+          "raw_bytes": 153600,
+          "raw_sha256": "3bc7d2640bcd7ba61bf2510018ef568b86fc102c4579966fb7c95b9fb7b84335",
+          "gzip_bytes": 22597,
+          "delay_ms": 200
+        },
+        {
+          "index": 2,
+          "png": "frames/deep_success/2.png",
+          "gzip": "device/deep_success/2.565.gz",
+          "raw_bytes": 153600,
+          "raw_sha256": "a23c1e6a32cb81d1f3b990130464ec8799090568ebeca66cdd8c4de8f291105d",
+          "gzip_bytes": 22929,
+          "delay_ms": 200
+        },
+        {
+          "index": 3,
+          "png": "frames/deep_success/3.png",
+          "gzip": "device/deep_success/3.565.gz",
+          "raw_bytes": 153600,
+          "raw_sha256": "bfaf31a79dc3df05becc322c968afe2040152e6c17c705db8237361212c2ed03",
+          "gzip_bytes": 22777,
+          "delay_ms": 300
+        }
+      ],
+      "frame_count": 4,
+      "delay_ms": [
+        500,
+        200,
+        200,
+        300
+      ],
+      "loop": true,
+      "source": "sources/deep-alpha/success.png",
+      "source_sha256": "a045a414d2322b0c5a2b6f5bd3b20fdee5d58e44d027f9df409f25c545911222",
+      "registration": {
+        "scale": 0.43243243243243246,
+        "axis_x": 120,
+        "baseline_y": 296
+      },
+      "sha256": "fe55a6588ead6443358384e571a1e4ad395e5b78f4439981ac7c8723ed32ff16",
+      "bytes": 73039,
+      "poster": "posters/deep_success.png",
+      "screen_poster": "posters/deep_success-screen.png"
+    },
+    "to_deep": {
+      "id": "to_deep",
+      "form": "deep",
+      "phase": "evolve",
+      "runtime": "runtime/to_deep.gif",
+      "screen": "screen/to_deep.gif",
+      "frames": [
+        {
+          "index": 0,
+          "png": "frames/to_deep/0.png",
+          "gzip": "device/to_deep/0.565.gz",
+          "raw_bytes": 153600,
+          "raw_sha256": "6dff27ff77cb47a988b9ea9708bdd75fee41d5ae0ee563e80c32b610918075e1",
+          "gzip_bytes": 14395,
+          "delay_ms": 160
+        },
+        {
+          "index": 1,
+          "png": "frames/to_deep/1.png",
+          "gzip": "device/to_deep/1.565.gz",
+          "raw_bytes": 153600,
+          "raw_sha256": "b26e535749d225e1661e00a59871f556ae9b6d31a450cb44b91e5cd9f64bf832",
+          "gzip_bytes": 16687,
+          "delay_ms": 160
+        },
+        {
+          "index": 2,
+          "png": "frames/to_deep/2.png",
+          "gzip": "device/to_deep/2.565.gz",
+          "raw_bytes": 153600,
+          "raw_sha256": "6aa36cc5039b84f43cbde3ee69b88d9689352c644a56bd798bbe52fb77b3e62e",
+          "gzip_bytes": 20562,
+          "delay_ms": 160
+        },
+        {
+          "index": 3,
+          "png": "frames/to_deep/3.png",
+          "gzip": "device/to_deep/3.565.gz",
+          "raw_bytes": 153600,
+          "raw_sha256": "9ba2c50058f5a216f68672940df5d9a8e0ed31827793d8bdc469d9ebadb2943e",
+          "gzip_bytes": 20618,
+          "delay_ms": 160
+        }
+      ],
+      "frame_count": 4,
+      "delay_ms": [
+        160,
+        160,
+        160,
+        160
+      ],
+      "loop": false,
+      "source": "sources/transitions-alpha/to_deep.png",
+      "source_sha256": "835ed7bc8342445fb81f2af70306f2ded824f7bbd6194c5d25cfac7d4fcde7a4",
+      "registration": {
+        "scale": 0.43243243243243246,
+        "axis_x": 120,
+        "baseline_y": 296
+      },
+      "sha256": "01a2aaa5982b691c54a77c592dbc0ecebccfe7dfed3ef3db5b1afb1bde98955b",
+      "bytes": 58389,
+      "poster": "posters/to_deep.png",
+      "screen_poster": "posters/to_deep-screen.png"
+    },
+    "from_deep": {
+      "id": "from_deep",
+      "form": "deep",
+      "phase": "returning",
+      "runtime": "runtime/from_deep.gif",
+      "screen": "screen/from_deep.gif",
+      "frame_count": 4,
+      "delay_ms": [
+        160,
+        160,
+        160,
+        160
+      ],
+      "loop": false,
+      "reverse_of": "to_deep",
+      "sha256": "cbfcc622bbe262896e415c1bc9a5fdc4af79346bf850c783a01dc0e714649776",
+      "bytes": 58389,
+      "poster": "posters/from_deep.png",
+      "screen_poster": "posters/from_deep-screen.png"
+    }
+  },
+  "integrated_hardware": false,
+  "device_gzip_bytes": 816728,
+  "cinematic": {
+    "duration_ms": 2400,
+    "desktop_frame_count": 40,
+    "desktop_delay_ms": 60,
+    "device_frame_count": 20,
+    "device_delay_ms": 120,
+    "description": "聚光、像素光环、成长剪影、轮廓扫描、新形态亮相",
+    "forms": {
+      "artisan": {
+        "runtime": "cinematic/runtime/artisan.gif",
+        "screen": "cinematic/screen/artisan.gif",
+        "poster": "cinematic/posters/artisan.png",
+        "screen_poster": "cinematic/posters/artisan-screen.png",
+        "frame_count": 40,
+        "delay_ms": 60,
+        "duration_ms": 2400,
+        "loop": false,
+        "sha256": "6f414e0dc4d2a8c4a8ebc416d1979b11bfba725558535c98eb4b66029fbfadcb",
+        "bytes": 733267,
+        "device_frames": [
+          {
+            "index": 0,
+            "gzip": "cinematic/device/artisan/00.565.gz",
+            "png": "cinematic/frames/artisan/00.png",
+            "raw_bytes": 153600,
+            "raw_sha256": "cd428f48ed0f20ac9c3cd789132a7576428fad0753ea2ef221cf536054d7572c",
+            "gzip_bytes": 20182,
+            "delay_ms": 120
+          },
+          {
+            "index": 1,
+            "gzip": "cinematic/device/artisan/01.565.gz",
+            "png": "cinematic/frames/artisan/01.png",
+            "raw_bytes": 153600,
+            "raw_sha256": "cd428f48ed0f20ac9c3cd789132a7576428fad0753ea2ef221cf536054d7572c",
+            "gzip_bytes": 20182,
+            "delay_ms": 120
+          },
+          {
+            "index": 2,
+            "gzip": "cinematic/device/artisan/02.565.gz",
+            "png": "cinematic/frames/artisan/02.png",
+            "raw_bytes": 153600,
+            "raw_sha256": "1ef08fb984fcc70ab1f722fbc9523c6242979e186e49c3deb3b9b1827380f743",
+            "gzip_bytes": 21025,
+            "delay_ms": 120
+          },
+          {
+            "index": 3,
+            "gzip": "cinematic/device/artisan/03.565.gz",
+            "png": "cinematic/frames/artisan/03.png",
+            "raw_bytes": 153600,
+            "raw_sha256": "dd14c69f14a2d3edae7b6f40fb7d74806591b68f3f410f8de29dbb1740bee83f",
+            "gzip_bytes": 24001,
+            "delay_ms": 120
+          },
+          {
+            "index": 4,
+            "gzip": "cinematic/device/artisan/04.565.gz",
+            "png": "cinematic/frames/artisan/04.png",
+            "raw_bytes": 153600,
+            "raw_sha256": "f0491bade59a84369da73d072749f659b952fa16ca823f450690822a4c11f6b7",
+            "gzip_bytes": 24248,
+            "delay_ms": 120
+          },
+          {
+            "index": 5,
+            "gzip": "cinematic/device/artisan/05.565.gz",
+            "png": "cinematic/frames/artisan/05.png",
+            "raw_bytes": 153600,
+            "raw_sha256": "98a283a1650c2e75ffb364778a0eb99948f0c07d453cec55bb265feffcd81fe8",
+            "gzip_bytes": 24610,
+            "delay_ms": 120
+          },
+          {
+            "index": 6,
+            "gzip": "cinematic/device/artisan/06.565.gz",
+            "png": "cinematic/frames/artisan/06.png",
+            "raw_bytes": 153600,
+            "raw_sha256": "dbbc84c52ba9d7a8d011b307b7bdd0147d5b198d151bf221cf67fe575f3070b2",
+            "gzip_bytes": 24684,
+            "delay_ms": 120
+          },
+          {
+            "index": 7,
+            "gzip": "cinematic/device/artisan/07.565.gz",
+            "png": "cinematic/frames/artisan/07.png",
+            "raw_bytes": 153600,
+            "raw_sha256": "bf933a09033495344114134bb68aead6d00ada6087b847648e39dbbbfe1d9ab3",
+            "gzip_bytes": 23599,
+            "delay_ms": 120
+          },
+          {
+            "index": 8,
+            "gzip": "cinematic/device/artisan/08.565.gz",
+            "png": "cinematic/frames/artisan/08.png",
+            "raw_bytes": 153600,
+            "raw_sha256": "f2644909bc26e98ec81336a2b7522ffce65f00203628a04d87bda2e67c685222",
+            "gzip_bytes": 14133,
+            "delay_ms": 120
+          },
+          {
+            "index": 9,
+            "gzip": "cinematic/device/artisan/09.565.gz",
+            "png": "cinematic/frames/artisan/09.png",
+            "raw_bytes": 153600,
+            "raw_sha256": "50dd72c773da1ff729b4e222610fdd21cdd3d651594a6979601e417dfa5f8277",
+            "gzip_bytes": 9376,
+            "delay_ms": 120
+          },
+          {
+            "index": 10,
+            "gzip": "cinematic/device/artisan/10.565.gz",
+            "png": "cinematic/frames/artisan/10.png",
+            "raw_bytes": 153600,
+            "raw_sha256": "0410721cf5048ac8731b38e1c38dba19a88fb591cf28d9658d7ca3a8e815311c",
+            "gzip_bytes": 11049,
+            "delay_ms": 120
+          },
+          {
+            "index": 11,
+            "gzip": "cinematic/device/artisan/11.565.gz",
+            "png": "cinematic/frames/artisan/11.png",
+            "raw_bytes": 153600,
+            "raw_sha256": "b8e8e720746eb147b01289d25c726d9b0b163eaad5aee85032744136bba9a16d",
+            "gzip_bytes": 10963,
+            "delay_ms": 120
+          },
+          {
+            "index": 12,
+            "gzip": "cinematic/device/artisan/12.565.gz",
+            "png": "cinematic/frames/artisan/12.png",
+            "raw_bytes": 153600,
+            "raw_sha256": "91bda864c7d821e353a9589671a117ff4fd230dff8243223bf8861c8984f4813",
+            "gzip_bytes": 11051,
+            "delay_ms": 120
+          },
+          {
+            "index": 13,
+            "gzip": "cinematic/device/artisan/13.565.gz",
+            "png": "cinematic/frames/artisan/13.png",
+            "raw_bytes": 153600,
+            "raw_sha256": "de3d7804d867003134e6780b52a177561c34d0abce9f3cd2e7aafb3006c667d1",
+            "gzip_bytes": 10568,
+            "delay_ms": 120
+          },
+          {
+            "index": 14,
+            "gzip": "cinematic/device/artisan/14.565.gz",
+            "png": "cinematic/frames/artisan/14.png",
+            "raw_bytes": 153600,
+            "raw_sha256": "3211c578dc11cfbb627d55620e449d48fab13f16992f65dad95b3a5e99f96dc0",
+            "gzip_bytes": 15710,
+            "delay_ms": 120
+          },
+          {
+            "index": 15,
+            "gzip": "cinematic/device/artisan/15.565.gz",
+            "png": "cinematic/frames/artisan/15.png",
+            "raw_bytes": 153600,
+            "raw_sha256": "ac2b637d6d4dc8d83ceff3f31ca60bb060174acebcf4bf70fcc52d58dcfa77b8",
+            "gzip_bytes": 27107,
+            "delay_ms": 120
+          },
+          {
+            "index": 16,
+            "gzip": "cinematic/device/artisan/16.565.gz",
+            "png": "cinematic/frames/artisan/16.png",
+            "raw_bytes": 153600,
+            "raw_sha256": "df2d81e7c5c18a5bd462f51431764c9c11fc0ea58591aeb66c620e390d97089d",
+            "gzip_bytes": 30361,
+            "delay_ms": 120
+          },
+          {
+            "index": 17,
+            "gzip": "cinematic/device/artisan/17.565.gz",
+            "png": "cinematic/frames/artisan/17.png",
+            "raw_bytes": 153600,
+            "raw_sha256": "8648fd89331c89730ddff459eed8ffa81f6a6e04c593b8bcd89ad17b71f422f6",
+            "gzip_bytes": 32232,
+            "delay_ms": 120
+          },
+          {
+            "index": 18,
+            "gzip": "cinematic/device/artisan/18.565.gz",
+            "png": "cinematic/frames/artisan/18.png",
+            "raw_bytes": 153600,
+            "raw_sha256": "9ff8a7be82370ee17b0966b915c54eda8dbcbd784c4bf64de9c74742596aac7c",
+            "gzip_bytes": 31751,
+            "delay_ms": 120
+          },
+          {
+            "index": 19,
+            "gzip": "cinematic/device/artisan/19.565.gz",
+            "png": "cinematic/frames/artisan/19.png",
+            "raw_bytes": 153600,
+            "raw_sha256": "14a7abb046fb0d2eef26d9c0370ae6bc08e0403d6506936a60a38a10c5d87c38",
+            "gzip_bytes": 30769,
+            "delay_ms": 120
+          }
+        ],
+        "device_gzip_bytes": 417601,
+        "source": "sources/artisan/keyposes.png",
+        "source_sha256": "d751d38a2f78f7bfbfb3e88c5b4c620ffa859c49c61797c7516a81033b5c86b3",
+        "source_row_boundaries": [
+          [
+            0,
+            529,
+            986,
+            1536
+          ],
+          [
+            0,
+            529,
+            986,
+            1536
+          ]
+        ],
+        "pose_scale": 0.5436893203883495
+      },
+      "deep": {
+        "runtime": "cinematic/runtime/deep.gif",
+        "screen": "cinematic/screen/deep.gif",
+        "poster": "cinematic/posters/deep.png",
+        "screen_poster": "cinematic/posters/deep-screen.png",
+        "frame_count": 40,
+        "delay_ms": 60,
+        "duration_ms": 2400,
+        "loop": false,
+        "sha256": "14e48edc8a9c5170d33ecf55eacffdc6e2a1a999aa1bd1b6d571f5b9a56afe89",
+        "bytes": 593277,
+        "device_frames": [
+          {
+            "index": 0,
+            "gzip": "cinematic/device/deep/00.565.gz",
+            "png": "cinematic/frames/deep/00.png",
+            "raw_bytes": 153600,
+            "raw_sha256": "950217a3bfb3b76f19ae9ace804278d19719e1034b88a210f0ed410a46db6553",
+            "gzip_bytes": 13725,
+            "delay_ms": 120
+          },
+          {
+            "index": 1,
+            "gzip": "cinematic/device/deep/01.565.gz",
+            "png": "cinematic/frames/deep/01.png",
+            "raw_bytes": 153600,
+            "raw_sha256": "950217a3bfb3b76f19ae9ace804278d19719e1034b88a210f0ed410a46db6553",
+            "gzip_bytes": 13725,
+            "delay_ms": 120
+          },
+          {
+            "index": 2,
+            "gzip": "cinematic/device/deep/02.565.gz",
+            "png": "cinematic/frames/deep/02.png",
+            "raw_bytes": 153600,
+            "raw_sha256": "f4205f5f45b6a07818647d41dde92522836905c47fa2444860f980850030bc93",
+            "gzip_bytes": 14858,
+            "delay_ms": 120
+          },
+          {
+            "index": 3,
+            "gzip": "cinematic/device/deep/03.565.gz",
+            "png": "cinematic/frames/deep/03.png",
+            "raw_bytes": 153600,
+            "raw_sha256": "798d21e969fd74d9bd787b711e117dd463dd4f0e60b677ca5eae81e905e57af2",
+            "gzip_bytes": 18513,
+            "delay_ms": 120
+          },
+          {
+            "index": 4,
+            "gzip": "cinematic/device/deep/04.565.gz",
+            "png": "cinematic/frames/deep/04.png",
+            "raw_bytes": 153600,
+            "raw_sha256": "0b48b8b42b932ce94580af5d65c0193855a3c3feea2c606110e3c2a6359aaa81",
+            "gzip_bytes": 19122,
+            "delay_ms": 120
+          },
+          {
+            "index": 5,
+            "gzip": "cinematic/device/deep/05.565.gz",
+            "png": "cinematic/frames/deep/05.png",
+            "raw_bytes": 153600,
+            "raw_sha256": "5084cca2288f498fcce108bbe1e10c7f151ee2abd78b7670a2c8a445555ea288",
+            "gzip_bytes": 19702,
+            "delay_ms": 120
+          },
+          {
+            "index": 6,
+            "gzip": "cinematic/device/deep/06.565.gz",
+            "png": "cinematic/frames/deep/06.png",
+            "raw_bytes": 153600,
+            "raw_sha256": "10b0f38540470943e5253622f402c4e4e115ed93402d19121b808cabc36bdbab",
+            "gzip_bytes": 21104,
+            "delay_ms": 120
+          },
+          {
+            "index": 7,
+            "gzip": "cinematic/device/deep/07.565.gz",
+            "png": "cinematic/frames/deep/07.png",
+            "raw_bytes": 153600,
+            "raw_sha256": "522984543b200f642fa9654fddcef4941899e050047f1648ea65cb894cbd666c",
+            "gzip_bytes": 20526,
+            "delay_ms": 120
+          },
+          {
+            "index": 8,
+            "gzip": "cinematic/device/deep/08.565.gz",
+            "png": "cinematic/frames/deep/08.png",
+            "raw_bytes": 153600,
+            "raw_sha256": "82d5fa76d10a30b3a541fb840e74cb50b48d4856ed6d905b45cbc965bda92036",
+            "gzip_bytes": 14250,
+            "delay_ms": 120
+          },
+          {
+            "index": 9,
+            "gzip": "cinematic/device/deep/09.565.gz",
+            "png": "cinematic/frames/deep/09.png",
+            "raw_bytes": 153600,
+            "raw_sha256": "765727add524fbf4ad92f8d0db5621f789b02857357b532ddb2b94ecd3e32a1e",
+            "gzip_bytes": 10003,
+            "delay_ms": 120
+          },
+          {
+            "index": 10,
+            "gzip": "cinematic/device/deep/10.565.gz",
+            "png": "cinematic/frames/deep/10.png",
+            "raw_bytes": 153600,
+            "raw_sha256": "4d439817cc76e46fe0ebe8725c57660897743ed8be31e172994c7c7b45702042",
+            "gzip_bytes": 11050,
+            "delay_ms": 120
+          },
+          {
+            "index": 11,
+            "gzip": "cinematic/device/deep/11.565.gz",
+            "png": "cinematic/frames/deep/11.png",
+            "raw_bytes": 153600,
+            "raw_sha256": "7e885841b9be3e3a23b87e490c9ffb9463bda1aeb8c84e9dd4baad5a0c0626bf",
+            "gzip_bytes": 11075,
+            "delay_ms": 120
+          },
+          {
+            "index": 12,
+            "gzip": "cinematic/device/deep/12.565.gz",
+            "png": "cinematic/frames/deep/12.png",
+            "raw_bytes": 153600,
+            "raw_sha256": "e507f6f107c488aeb2b0d4f44fc1178dc5c611dfee9f715be07cbc25e99a5505",
+            "gzip_bytes": 10914,
+            "delay_ms": 120
+          },
+          {
+            "index": 13,
+            "gzip": "cinematic/device/deep/13.565.gz",
+            "png": "cinematic/frames/deep/13.png",
+            "raw_bytes": 153600,
+            "raw_sha256": "91a67361ff4e403aef7275c8de0e3a576ecaddd10f5ccc08ad298a60dd433a12",
+            "gzip_bytes": 11072,
+            "delay_ms": 120
+          },
+          {
+            "index": 14,
+            "gzip": "cinematic/device/deep/14.565.gz",
+            "png": "cinematic/frames/deep/14.png",
+            "raw_bytes": 153600,
+            "raw_sha256": "beaeff92f492d136b368f93399452c716dc3c83e798e69547e75b57cd0ef481c",
+            "gzip_bytes": 15398,
+            "delay_ms": 120
+          },
+          {
+            "index": 15,
+            "gzip": "cinematic/device/deep/15.565.gz",
+            "png": "cinematic/frames/deep/15.png",
+            "raw_bytes": 153600,
+            "raw_sha256": "53617cb69d78157bc1eb97c71f57256dc9b9a274ee66b6adb19c9fcc7160eda8",
+            "gzip_bytes": 24400,
+            "delay_ms": 120
+          },
+          {
+            "index": 16,
+            "gzip": "cinematic/device/deep/16.565.gz",
+            "png": "cinematic/frames/deep/16.png",
+            "raw_bytes": 153600,
+            "raw_sha256": "e17b1a201b023269158bd5a3529137ad6e30168badba1a5cc816137e166a6633",
+            "gzip_bytes": 25241,
+            "delay_ms": 120
+          },
+          {
+            "index": 17,
+            "gzip": "cinematic/device/deep/17.565.gz",
+            "png": "cinematic/frames/deep/17.png",
+            "raw_bytes": 153600,
+            "raw_sha256": "0da65e1e84d4ce410b4e35abe86b3872878732b0010d2001152ccdb72340adf0",
+            "gzip_bytes": 26836,
+            "delay_ms": 120
+          },
+          {
+            "index": 18,
+            "gzip": "cinematic/device/deep/18.565.gz",
+            "png": "cinematic/frames/deep/18.png",
+            "raw_bytes": 153600,
+            "raw_sha256": "eefb04652425f2e1f9e84b2ba2c0751da0c48f927262869c038c857097f5d5ab",
+            "gzip_bytes": 25808,
+            "delay_ms": 120
+          },
+          {
+            "index": 19,
+            "gzip": "cinematic/device/deep/19.565.gz",
+            "png": "cinematic/frames/deep/19.png",
+            "raw_bytes": 153600,
+            "raw_sha256": "ac8ea3f64edefd190804396c719c7caad27dc604b35b3737bb925a0c9aab3ce5",
+            "gzip_bytes": 23793,
+            "delay_ms": 120
+          }
+        ],
+        "device_gzip_bytes": 351115,
+        "source": "sources/deep/keyposes.png",
+        "source_sha256": "35d1d5aaff9329787e259719727f7c2bf4bf564aab290d39236edd61aa3cad0e",
+        "source_row_boundaries": [
+          [
+            0,
+            512,
+            994,
+            1536
+          ],
+          [
+            0,
+            512,
+            994,
+            1536
+          ]
+        ],
+        "pose_scale": 0.5067873303167421
+      }
+    },
+    "device_gzip_bytes": 768716
+  }
+}

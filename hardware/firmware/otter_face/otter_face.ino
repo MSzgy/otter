@@ -1,5 +1,6 @@
-// Lessons 2-10: the physical screen shows the D pixel otter animations (or the
-// procedural face if the pack is missing), reacts to a screen tap, plays short
+// Lessons 2-11: the physical screen shows the D pixel otter animations and the
+// evolved forms (or the procedural face if the pack is missing), reacts to a screen
+// tap, plays short
 // sounds and voice lines, reads and moves the bus servos within a software range,
 // runs calibrated head presets (nod, look_left, ...), lists nearby Wi-Fi on request,
 // and accepts bounded USB commands. It joins no network and stores no credentials;
@@ -28,7 +29,7 @@ bool touchAvailable = false, wasTouched = false, audioAvailable = false;
 bool skinOn = false;
 int idleExpression = -1, baseExpression = -1, happyExpression = -1, shownExpression = -1;
 uint32_t expressionStarted = 0;
-const uint16_t *shownFrame = nullptr;
+int shownIndex = -1;  // frame of the current clip on screen
 char commandBuffer[96];
 size_t commandLength = 0;
 bool discardCommand = false;
@@ -81,14 +82,14 @@ int readTouch() {
 
 void reportInfo() {
   Serial.printf(
-    "{\"firmware\":\"otter-face-0.8.0\",\"board\":\"ESP32-S3-Touch-LCD-2.8-V2\","
+    "{\"firmware\":\"otter-face-0.9.0\",\"board\":\"ESP32-S3-Touch-LCD-2.8-V2\","
     "\"width\":240,\"height\":320,\"flash_bytes\":%lu,\"psram_bytes\":%lu,"
     "\"touch_available\":%s,\"audio_available\":%s,\"skin\":\"%s\",\"faces\":%u,"
-    "\"voices\":%u,\"head\":\"%s\",\"decode_ms\":%lu,\"touches\":%lu,\"mood\":\"%s\"}\n",
+    "\"evolution\":%u,\"voices\":%u,\"head\":\"%s\",\"decode_ms\":%lu,\"touches\":%lu,\"mood\":\"%s\"}\n",
     (unsigned long)ESP.getFlashChipSize(), (unsigned long)ESP.getPsramSize(),
     touchAvailable ? "true" : "false", audioAvailable ? "true" : "false",
     skinOn ? "pixel_game" : "drawn", skinOn ? unsigned(skin::count()) : 5u,
-    unsigned(sound::voiceCount()), head::state(), (unsigned long)skin::lastDecodeMs(), (unsigned long)touches,
+    unsigned(skin::evolutionCount()), unsigned(sound::voiceCount()), head::state(), (unsigned long)skin::lastDecodeMs(), (unsigned long)touches,
     currentFaceName(millis()));
 }
 void listVoices() {
@@ -367,22 +368,28 @@ void loop() {
   head::update(now, Serial);
   radio::update(Serial);
   if (skinOn) {
-    // Decode only when the expression changes; push only when the frame changes.
+    // Restart the clip when the expression changes; decode and push a frame only
+    // when the frame changes (about 17 ms to decode, so long clips stream fine).
     const int expression = currentExpression(now);
     if (expression != shownExpression) {
       if (skin::select(expression)) {
         shownExpression = expression;
         expressionStarted = now;
-        shownFrame = nullptr;
+        shownIndex = -1;
       } else {
         skinOn = false;
         Serial.printf("EVENT skin failed %s, using drawn face\n", skin::name(expression));
       }
     }
-    const uint16_t *frame = skinOn ? skin::frame(now - expressionStarted) : nullptr;
-    if (frame && frame != shownFrame) {
-      shownFrame = frame;
-      screen::present(frame);
+    const int index = skinOn ? skin::frameAt(now - expressionStarted) : -1;
+    if (index >= 0 && index != shownIndex) {
+      if (const uint16_t *frame = skin::pixels(index)) {
+        shownIndex = index;
+        screen::present(frame);
+      } else {
+        skinOn = false;
+        Serial.printf("EVENT skin failed %s, using drawn face\n", skin::name(expression));
+      }
     }
   } else if (framebuffer && now - lastFrame >= framePeriodMs) {
     lastFrame = now;
