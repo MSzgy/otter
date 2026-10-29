@@ -121,10 +121,7 @@ export function ModelSettings({
         <h2>模型配置</h2>
         <span>OpenAI 兼容接口</span>
       </div>
-      <p>
-        使用 Chat Completions
-        协议。设置仅应用于当前桌面工作空间，原配置文件保持不变。
-      </p>
+      <p>填 OpenAI 兼容服务的地址、模型和密钥，只用于这个桌面工作空间。</p>
       <fieldset disabled={disabled}>
         <label>
           API Base URL
@@ -138,10 +135,7 @@ export function ModelSettings({
             spellCheck={false}
           />
         </label>
-        <small>
-          填写服务商提供的基础地址（通常以 /v1 结尾），无需重复添加
-          /chat/completions。
-        </small>
+        <small>通常以 /v1 结尾，不用加 /chat/completions。</small>
         <label>
           模型名称
           <input
@@ -188,8 +182,8 @@ export function ModelSettings({
         )}
         <small>
           {useKey
-            ? "密钥存入 macOS 钥匙串，不在配置文件中明文保存，也不回显。"
-            : "不发送 Authorization 头，适用于无需认证的本机服务。"}
+            ? "密钥存在 macOS 钥匙串里，不会明文保存。"
+            : "不发送认证信息，适合本机服务。"}
         </small>
         <details>
           <summary>高级参数</summary>
@@ -253,7 +247,7 @@ export function ModelSettings({
         )}
       </div>
       <p className="model-hint">
-        测试会发送一条固定短消息，可能产生少量费用，不包含你的工作记录。通过后请点击保存并启用。
+        测试会发一条很短的固定消息，可能产生少量费用。
       </p>
       {notice && (
         <div className="model-success" role="status">

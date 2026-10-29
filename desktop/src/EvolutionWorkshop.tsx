@@ -44,17 +44,11 @@ export function EvolutionWorkshop() {
   return (
     <section className="evolution-workshop" aria-label="任务进化">
       <div className="evolution-heading">
-        <div>
-          <p className="eyebrow">一起认真，一起长大</p>
-          <h2>遇到难题，换个工作形态。</h2>
-        </div>
+        <h2>工作形态</h2>
         <span className="evolution-count">
-          已留下 {state.milestones.length} 个里程碑
+          {state.milestones.length} 个里程碑
         </span>
       </div>
-      <p className="muted">
-        进化表达当前工作强度。任务结束后，它会收好工具，回到你身边。
-      </p>
       <div className="evolution-settings">
         <label>
           <input
@@ -108,8 +102,7 @@ export function EvolutionWorkshop() {
         </label>
       </div>
       <p className="evolution-boundary">
-        仅影响外观，不更换模型或计算预算。自动模式下普通聊天保留陪伴，简报和确认任务用工匠；
-        工匠工作超过 20 秒会潜入深潜，等你确认的时间不算。
+        只换外观。聊天时陪伴，整理简报和办事时换上工匠，干满 20 秒潜入深潜。
       </p>
       <div className="evolution-forms">
         {(["companion", "artisan", "deep"] as EvolutionForm[]).map((form) => (
@@ -151,12 +144,9 @@ export function EvolutionWorkshop() {
           </small>
         )}
       </div>
-      <section className="evolution-demo" aria-label="进化流程演示">
-        <div className="evolution-demo-heading">
-          <h3>先看它认真工作一次</h3>
-          <span>本地演示</span>
-        </div>
-        <p>演示不会请求模型、执行任务、批准交接或计入成长。</p>
+      <details className="evolution-demo" aria-label="进化流程演示">
+        <summary>看一次演示</summary>
+        <p>只在本机演示，不调用模型，也不会执行任何事。</p>
         <div className="button-row">
           <button
             disabled={pending}
@@ -226,13 +216,10 @@ export function EvolutionWorkshop() {
             )}
           </div>
         </div>
-      </section>
+      </details>
       <section className="evolution-growth" aria-label="共同成长">
-        <h3>留下完成过的事</h3>
-        <p>
-          真实简报生成、确认操作完成后，由你决定是否记为里程碑。成长不按 token
-          消耗或在线时长累积，也不限制功能。
-        </p>
+        <h3>里程碑</h3>
+        <p>真正整理完一份简报、或完成一次确认操作后，可以把它记下来。</p>
         {completed ? (
           <div className="evolution-milestone-action">
             <span>{completed.title}</span>
@@ -246,9 +233,7 @@ export function EvolutionWorkshop() {
             </button>
           </div>
         ) : (
-          <p className="muted">
-            还没有可记录的真实完成事件；演示不会解锁里程碑。
-          </p>
+          <p className="muted">还没有可以记下的事。</p>
         )}
         {!!state.milestones.length && (
           <ul>

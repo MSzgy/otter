@@ -1,5 +1,6 @@
 const assert = require("node:assert/strict");
 const path = require("node:path");
+const { go } = require("./smoke-nav.cjs");
 function projectModelReply(purpose, payload) {
   if (purpose === "[Otter project snapshot]") {
     const source = payload.sources.find((s) =>
@@ -79,10 +80,8 @@ async function verifyProjects({
     await panel.waitForFunction(() => !document.querySelector(".chat-cursor"));
     return request;
   };
-  const chat = () =>
-    panel.getByRole("button", { name: "与水獭聊天", exact: false }).click();
-  const projects = () =>
-    panel.getByRole("button", { name: "项目与进度", exact: false }).click();
+  const chat = () => go(panel, "与水獭聊天");
+  const projects = () => go(panel, "项目与进度");
   const getProject = (id) =>
     panel.evaluate(
       (id) => window.otter.call("projects.get", { project_id: id }),

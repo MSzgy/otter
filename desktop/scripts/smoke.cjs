@@ -7,6 +7,7 @@ const assert = require("node:assert/strict");
 const http = require("node:http");
 const { projectModelReply, verifyProjects } = require("./project-smoke.cjs");
 const { verifyHandoff } = require("./handoff-smoke.cjs");
+const { go, openScenes, openTools } = require("./smoke-nav.cjs");
 const { extractPage } = require("../electron/page-reader.cjs");
 const { nativeRead } = require("../electron/awareness.cjs");
 const { execFileSync } = require("node:child_process");
@@ -298,7 +299,7 @@ const { execFileSync } = require("node:child_process");
         semantic: false,
       }),
     );
-    await panel.getByRole("button", { name: "应用感知", exact: false }).click();
+    await go(panel, "应用感知");
     await panel
       .getByRole("heading", { name: "感知已关闭", exact: true })
       .waitFor();
@@ -410,7 +411,7 @@ const { execFileSync } = require("node:child_process");
     await panel
       .getByRole("textbox", { name: "附带上下文", exact: true })
       .waitFor({ state: "detached" });
-    await panel.getByRole("button", { name: "应用感知", exact: false }).click();
+    await go(panel, "应用感知");
     await panel
       .getByRole("checkbox", { name: "开启应用感知", exact: true })
       .click();
@@ -506,8 +507,8 @@ const { execFileSync } = require("node:child_process");
     });
     await publishAwareness(disabledAwareness);
 
-    await panel.getByRole("button", { name: "陪伴互动", exact: false }).click();
-    await panel.getByRole("heading", { name: "和小水獭玩一会儿。" }).waitFor();
+    await go(panel, "陪伴互动");
+    await panel.getByRole("heading", { name: "我的水獭" }).waitFor();
     const beforeRequests = requests.length;
     const labels = ["摸摸头", "喂小鱼", "玩小球", "跳个舞", "打招呼", "挠痒痒"];
     const moods = ["开心", "吃小鱼", "玩小球", "跳舞", "打招呼", "被挠痒痒"];
@@ -611,7 +612,7 @@ const { execFileSync } = require("node:child_process");
       ),
       false,
     );
-    await panel.getByRole("button", { name: "工作简报" }).click();
+    await go(panel, "工作简报");
     await panel.getByRole("button", { name: "生成简报", exact: true }).click();
     await panel
       .getByRole("heading", { name: "欢迎来到 Otter" })
@@ -623,7 +624,7 @@ const { execFileSync } = require("node:child_process");
     });
     const count = await panel.locator(".report-list button").count();
     assert.equal(count, 1);
-    await panel.getByRole("button", { name: "偏好设置" }).click();
+    await go(panel, "偏好设置");
     await panel.getByRole("checkbox", { name: "安静模式" }).check();
     assert.equal(
       await panel.getByRole("checkbox", { name: "安静模式" }).isChecked(),
@@ -634,11 +635,11 @@ const { execFileSync } = require("node:child_process");
     await panel
       .getByText("离线演示模式", { exact: true })
       .waitFor({ timeout: 30000 });
-    await panel.getByRole("button", { name: "工作简报" }).click();
+    await go(panel, "工作简报");
     await panel
       .getByRole("heading", { name: "欢迎来到 Otter" })
       .waitFor({ timeout: 30000 });
-    await panel.getByRole("button", { name: "偏好设置" }).click();
+    await go(panel, "偏好设置");
     await panel
       .getByRole("textbox", { name: "API Base URL", exact: true })
       .fill(apiUrl);
@@ -677,15 +678,13 @@ const { execFileSync } = require("node:child_process");
         document.querySelector('[aria-label="模型名称"]')?.value ===
         "fixture-model",
     );
-    await panel.getByRole("button", { name: "工作简报" }).click();
+    await go(panel, "工作简报");
     await panel.getByRole("button", { name: "生成简报", exact: true }).click();
     await panel
       .getByRole("heading", { name: "OpenAI 兼容接口测试成功", exact: true })
       .waitFor({ timeout: 30000 });
-    await panel
-      .getByRole("button", { name: "与水獭聊天", exact: false })
-      .click();
-    await panel.getByRole("button", { name: "应用感知", exact: false }).click();
+    await go(panel, "与水獭聊天");
+    await go(panel, "应用感知");
     await panel
       .getByRole("checkbox", { name: "开启应用感知", exact: true })
       .click();
@@ -771,7 +770,7 @@ const { execFileSync } = require("node:child_process");
       0,
     );
     await panel.screenshot({ path: path.join(output, "otter-chat.png") });
-    await panel.getByRole("button", { name: "偏好设置" }).click();
+    await go(panel, "偏好设置");
     await pet.getByRole("button", { name: "与水獭聊天", exact: true }).click();
     await panel.getByRole("textbox", { name: "聊天输入" }).waitFor();
     await panel.getByRole("textbox", { name: "聊天输入" }).fill("慢慢回答");
@@ -851,9 +850,7 @@ const { execFileSync } = require("node:child_process");
       .click();
     await panel.getByText("相处方式已保存。", { exact: true }).waitFor();
     await panel.screenshot({ path: path.join(output, "otter-memory.png") });
-    await panel
-      .getByRole("button", { name: "与水獭聊天", exact: false })
-      .click();
+    await go(panel, "与水獭聊天");
     await panel
       .getByText("已存入记忆：我正在做桌面机器人", { exact: false })
       .waitFor();
@@ -867,10 +864,11 @@ const { execFileSync } = require("node:child_process");
       .getByText("已从记忆删除：我正在做桌面机器人", { exact: false })
       .waitFor();
     assert.equal(requests.length, beforeMemory + 2);
-    await panel
-      .getByRole("button", { name: "记忆与个性", exact: false })
-      .click();
+    await go(panel, "记忆与个性");
     await panel.getByText("还没有记忆。", { exact: false }).waitFor();
+    await panel
+      .getByRole("button", { name: "告诉它一件事", exact: false })
+      .click();
     await panel
       .getByRole("textbox", { name: "记忆标题", exact: true })
       .fill("回答风格");
@@ -904,9 +902,7 @@ const { execFileSync } = require("node:child_process");
       .getByRole("button", { name: "保存增强设置", exact: true })
       .click();
     await panel.getByText("增强记忆设置已保存。", { exact: true }).waitFor();
-    await panel
-      .getByRole("button", { name: "与水獭聊天", exact: false })
-      .click();
+    await go(panel, "与水獭聊天");
     await panel.getByRole("button", { name: "新对话", exact: true }).click();
     await panel
       .getByRole("heading", { name: "我在这里，慢慢说。", exact: true })
@@ -1014,9 +1010,7 @@ const { execFileSync } = require("node:child_process");
       output,
     });
     await verifyHandoff({ panel, pet, userData, output });
-    await panel
-      .getByRole("button", { name: "与水獭聊天", exact: false })
-      .click();
+    await go(panel, "与水獭聊天");
     await panel.getByRole("button", { name: "新对话", exact: true }).click();
     await panel
       .getByRole("heading", { name: "我在这里，慢慢说。", exact: true })
@@ -1152,10 +1146,8 @@ const { execFileSync } = require("node:child_process");
       .getByRole("button", { name: "停止回复", exact: true })
       .waitFor({ state: "detached" });
     assert.equal(taskRequests.length, analyses);
-    await panel.getByRole("button", { name: "生活助手", exact: false }).click();
-    await panel
-      .getByRole("button", { name: "与水獭聊天", exact: false })
-      .click();
+    await go(panel, "生活助手");
+    await go(panel, "与水獭聊天");
     await panel.waitForFunction(
       async () => !(await window.otter.action("tasks.settings")).enabled,
     );
@@ -1209,12 +1201,12 @@ const { execFileSync } = require("node:child_process");
     await panel
       .getByRole("checkbox", { name: "理解办事请求", exact: true })
       .check();
-    await panel.getByRole("button", { name: "偏好设置" }).click();
+    await go(panel, "偏好设置");
     await panel
       .getByRole("button", { name: "恢复原模型", exact: true })
       .click();
     await panel.getByText("离线演示模式", { exact: true }).waitFor();
-    await panel.getByRole("button", { name: "生活助手", exact: false }).click();
+    await go(panel, "生活助手");
     await panel
       .getByRole("button", { name: "开始 25 分钟专注", exact: true })
       .click();
@@ -1230,6 +1222,7 @@ const { execFileSync } = require("node:child_process");
       .fill("测试待办");
     await panel.getByRole("button", { name: "添加待办", exact: true }).click();
     await panel.getByText("测试待办", { exact: true }).waitFor();
+    await openScenes(panel);
     await panel
       .getByRole("textbox", { name: "现场名称", exact: true })
       .fill("测试工作现场");
@@ -1277,13 +1270,14 @@ const { execFileSync } = require("node:child_process");
         (r) => r.title === "测试计时" && r.status === "due",
       ),
     );
-    await panel.getByRole("button", { name: "生活助手", exact: false }).click();
+    await go(panel, "生活助手");
     await panel.getByRole("button", { name: "知道了", exact: true }).click();
     await panel
       .getByText("测试计时", { exact: true })
       .waitFor({ state: "detached" });
     await panel.locator("main").evaluate((element) => (element.scrollTop = 0));
     await panel.screenshot({ path: path.join(output, "otter-assistant.png") });
+    await openScenes(panel);
     await panel.getByRole("button", { name: "删除现场", exact: true }).click();
     await panel
       .getByRole("button", { name: "确认删除现场", exact: true })
@@ -1294,6 +1288,7 @@ const { execFileSync } = require("node:child_process");
       0,
     );
     if (process.env.OTTER_TEST_OS_ACTIONS === "1") {
+      await openTools(panel);
       await panel
         .getByRole("combobox", { name: "操作类型", exact: true })
         .selectOption("open_url");
@@ -1352,7 +1347,7 @@ const { execFileSync } = require("node:child_process");
           'ObjC.import("AppKit");var a=$.NSRunningApplication.runningApplicationsWithBundleIdentifier("com.apple.calculator");for(var i=0;i<a.count;i++)a.objectAtIndex(i).terminate;',
         ]);
     }
-    await panel.getByRole("button", { name: "偏好设置" }).click();
+    await go(panel, "偏好设置");
     await panel
       .getByRole("checkbox", { name: "安静模式", exact: true })
       .uncheck();
@@ -1363,12 +1358,12 @@ const { execFileSync } = require("node:child_process");
       .getByRole("button", { name: "保存陪伴设置", exact: true })
       .click();
     await panel.getByText("陪伴设置已保存。", { exact: true }).waitFor();
-    await panel.getByRole("button", { name: "工作简报" }).click();
+    await go(panel, "工作简报");
     await panel.getByRole("button", { name: "生成简报", exact: true }).click();
     await panel.waitForFunction(
       async () => (await window.otter.action("ambient.get")).state.count === 1,
     );
-    await panel.getByRole("button", { name: "偏好设置" }).click();
+    await go(panel, "偏好设置");
     await panel
       .getByRole("checkbox", { name: "开启主动陪伴", exact: true })
       .uncheck();
@@ -1376,9 +1371,7 @@ const { execFileSync } = require("node:child_process");
       .getByRole("button", { name: "保存陪伴设置", exact: true })
       .click();
     if (process.env.OTTER_TEST_SPEECH === "1") {
-      await panel
-        .getByRole("button", { name: "与水獭聊天", exact: false })
-        .click();
+      await go(panel, "与水獭聊天");
       await panel.evaluate(() =>
         window.otter.action(
           "voice.speak",
@@ -1399,6 +1392,24 @@ const { execFileSync } = require("node:child_process");
         false,
       );
     }
+    // 今天's ask bar hands its text to chat, which sends it once it is ready.
+    await go(panel, "生活助手");
+    await panel
+      .getByRole("textbox", { name: "跟水獭说", exact: true })
+      .fill("从今天页发来的一句话");
+    await panel.getByRole("button", { name: "发给水獭", exact: true }).click();
+    await panel
+      .locator(".chat-message.user")
+      .filter({ hasText: "从今天页发来的一句话" })
+      .waitFor();
+    assert.equal(
+      await panel
+        .getByRole("textbox", { name: "聊天输入", exact: true })
+        .inputValue(),
+      "",
+      "The handed-over text is sent, not left in the box",
+    );
+    console.log("PASS: 今天's ask bar opens chat and sends the text.");
     // Exercise privileged boundary with a non-allowlisted method.
     const denied = await panel.evaluate(async () => {
       try {

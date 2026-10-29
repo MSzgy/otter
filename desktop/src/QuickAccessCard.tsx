@@ -58,33 +58,37 @@ export function QuickAccessCard() {
       setBusy(false);
     }
   }
+  const ready = status === "ready";
   return (
-    <section className="settings-section quick-access">
-      <h2>快捷呼出与选区提问</h2>
-      <p>
-        先在其他应用选中文字，再按选区快捷键。内容只进入可编辑预览，点击发送后才交给模型。
-      </p>
-      <label className="check">
+    <section className="settings-section">
+      <div className="setting-row">
+        <div>
+          <h2>快捷键</h2>
+          <p>在任何应用里呼出聊天，或选中文字直接提问。</p>
+        </div>
         <input
           aria-label="开启全局快捷键"
           type="checkbox"
+          className="toggle"
           checked={keys.enabled}
           onChange={(e) =>
             setKeys((k) => ({ ...k, enabled: e.target.checked }))
           }
         />
-        开启全局快捷键
-      </label>
-      <label>
-        呼出聊天
+      </div>
+      <label className="setting-line">
+        <span>呼出聊天</span>
         <input
           aria-label="聊天快捷键"
           value={keys.chat}
           onChange={(e) => setKeys((k) => ({ ...k, chat: e.target.value }))}
         />
       </label>
-      <label>
-        选中文字提问
+      <label className="setting-line">
+        <span>
+          选中文字提问
+          <small>文字先进预览，你点发送才交给模型</small>
+        </span>
         <input
           aria-label="选区快捷键"
           value={keys.selection}
@@ -93,30 +97,34 @@ export function QuickAccessCard() {
           }
         />
       </label>
-      <p>
-        Mac 上 CommandOrControl 表示 ⌘；默认分别是 ⌘⇧Space 和
-        ⌘⇧E。快捷键冲突时可以更换。
-      </p>
-      <div className="button-row">
+      <div className="setting-line">
+        <span>
+          读取选中文字
+          <small>
+            {ready
+              ? "权限可用；受保护的输入框不会读取"
+              : status === "permission_required"
+                ? "需要在系统设置里允许辅助功能"
+                : status === "unavailable"
+                  ? "原生助手不可用，请重新构建或更新安装包"
+                  : "检查中…"}
+          </small>
+        </span>
+        {!ready && (
+          <span className="button-row">
+            <button onClick={() => window.otter.action("context.permissions")}>
+              打开辅助功能权限
+            </button>
+            <button onClick={check}>重新检查权限</button>
+          </span>
+        )}
+      </div>
+      <div className="section-foot">
         <button onClick={save} disabled={busy}>
           保存快捷键
         </button>
-        <button onClick={() => window.otter.action("context.permissions")}>
-          打开辅助功能权限
-        </button>
-        <button onClick={check}>重新检查权限</button>
+        <small>CommandOrControl 就是 ⌘；和别的应用冲突时换一个组合。</small>
       </div>
-      <p>
-        选区读取：
-        {status === "ready"
-          ? "权限可用"
-          : status === "permission_required"
-            ? "需要系统辅助功能权限"
-            : status === "unavailable"
-              ? "原生助手不可用，请重新构建或更新安装包"
-              : "检查中…"}
-        。部分应用不提供可读选区，受保护输入框不会读取。
-      </p>
       {notice && <p role="status">{notice}</p>}
     </section>
   );

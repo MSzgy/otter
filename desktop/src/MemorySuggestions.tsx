@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Icon } from "./icons";
 import "./types";
 type Candidate = {
   id: string;
@@ -51,54 +52,63 @@ function CandidateCard({
       className="memory-candidate"
       aria-label={`待确认记忆：${candidate.title}`}
     >
-      <small>建议 · {labels[draft.category]}</small>
-      {editing ? (
-        <>
-          <label>
-            标题
-            <input
-              aria-label="建议标题"
-              value={draft.title}
-              maxLength={80}
-              onChange={(e) => setDraft({ ...draft, title: e.target.value })}
-            />
-          </label>
-          <label>
-            内容
-            <textarea
-              aria-label="建议内容"
-              value={draft.content}
-              maxLength={1200}
-              onChange={(e) => setDraft({ ...draft, content: e.target.value })}
-            />
-          </label>
-          <label>
-            分类
-            <select
-              aria-label="建议分类"
-              value={draft.category}
-              onChange={(e) => setDraft({ ...draft, category: e.target.value })}
-            >
-              {Object.entries(labels).map(([k, v]) => (
-                <option key={k} value={k}>
-                  {v}
-                </option>
-              ))}
-            </select>
-          </label>
-        </>
-      ) : (
-        <>
-          <h3>{draft.title}</h3>
-          <p>{draft.content}</p>
-        </>
-      )}
-      <details>
-        <summary>来自你说的这句话</summary>
-        <blockquote>{candidate.evidence}</blockquote>
-      </details>
-      {error && <p role="alert">{error}</p>}
-      <div className="button-row">
+      <span className="candidate-icon">
+        <Icon name="memory" />
+      </span>
+      <div className="candidate-body">
+        <small>要记住这件事吗？ · {labels[draft.category]}</small>
+        {editing ? (
+          <>
+            <label>
+              标题
+              <input
+                aria-label="建议标题"
+                value={draft.title}
+                maxLength={80}
+                onChange={(e) => setDraft({ ...draft, title: e.target.value })}
+              />
+            </label>
+            <label>
+              内容
+              <textarea
+                aria-label="建议内容"
+                value={draft.content}
+                maxLength={1200}
+                onChange={(e) =>
+                  setDraft({ ...draft, content: e.target.value })
+                }
+              />
+            </label>
+            <label>
+              分类
+              <select
+                aria-label="建议分类"
+                value={draft.category}
+                onChange={(e) =>
+                  setDraft({ ...draft, category: e.target.value })
+                }
+              >
+                {Object.entries(labels).map(([k, v]) => (
+                  <option key={k} value={k}>
+                    {v}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </>
+        ) : (
+          <p>
+            <strong>{draft.title}</strong>
+            {draft.content}
+          </p>
+        )}
+        <details>
+          <summary>来自你说的这句话</summary>
+          <blockquote>{candidate.evidence}</blockquote>
+        </details>
+        {error && <p role="alert">{error}</p>}
+      </div>
+      <div className="candidate-actions">
         <button
           className="primary"
           disabled={busy || !draft.title.trim() || !draft.content.trim()}
@@ -163,15 +173,16 @@ export function MemorySuggestions({ sessionId }: { sessionId?: string }) {
   }
   if (!items.length && !notice) return null;
   return (
-    <section className="memory-suggestions" aria-label="待确认的记忆建议">
-      <div className="section-title">
-        <h2>这件事值得记住吗？</h2>
-      </div>
-      <p className="muted">
-        水獭提出的候选，确认前不会用于聊天。可以修改或拒绝；未处理的建议保留 7
-        天。
-      </p>
-      {notice && <p role="status">{notice}</p>}
+    <section
+      className="memory-suggestions"
+      aria-label="待确认的记忆建议"
+      title="水獭提的建议，你确认前不会用于聊天；不处理的话 7 天后消失。"
+    >
+      {notice && (
+        <p className="suggestion-notice" role="status">
+          {notice}
+        </p>
+      )}
       {items.map((c) => (
         <CandidateCard key={c.id} candidate={c} onDone={reload} />
       ))}

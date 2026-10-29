@@ -65,7 +65,11 @@ const { randomUUID } = require("node:crypto");
   }
   try {
     let { panel, pet } = await launch();
-    await panel.getByRole("button", { name: "陪伴互动", exact: false }).click();
+    await panel.getByRole("button", { name: "我的水獭", exact: true }).click();
+    // The demo sits in a collapsed "看一次演示" on the otter page.
+    await panel.locator("details.evolution-demo").evaluate((d) => {
+      d.open = true;
+    });
     await panel
       .getByRole("button", { name: "演示深潜流程", exact: true })
       .click();

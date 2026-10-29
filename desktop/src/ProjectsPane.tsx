@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
+import { Icon } from "./icons";
 import { ProjectCapture } from "./ProjectCapture";
+import { WorkScenes } from "./WorkTools";
 import type { Project, ProjectInfo, ProjectSnapshot } from "./types";
 const api = window.otter;
 export function ProjectsPane({ focusId }: { focusId?: string | null }) {
@@ -15,6 +17,9 @@ export function ProjectsPane({ focusId }: { focusId?: string | null }) {
   const [capture, setCapture] = useState<"chat" | "manual" | null>(null);
   const [todos, setTodos] = useState<
     { id: string; title: string; done: boolean; projectId?: string }[]
+  >([]);
+  const [scenes, setScenes] = useState<
+    Parameters<typeof WorkScenes>[0]["sessions"]
   >([]);
   const [error, setError] = useState(""),
     [notice, setNotice] = useState(""),
@@ -44,14 +49,22 @@ export function ProjectsPane({ focusId }: { focusId?: string | null }) {
       setProject(
         await api.call<Project>("projects.get", { project_id: target }),
       );
-    setTodos(
-      (await api.action<{ todos: typeof todos }>("assistant.get")).todos,
-    );
+    await loadAssistant();
+  }
+  async function loadAssistant() {
+    const state = await api.action<{
+      todos: typeof todos;
+      sessions?: typeof scenes;
+    }>("assistant.get");
+    setTodos(state.todos);
+    setScenes(state.sessions || []);
   }
   useEffect(() => {
     void load(focusId || undefined).catch(fail);
     const off = api.subscribe((e) => {
-      if (e.type === "assistant.changed") setTodos(e.data.todos);
+      if (e.type !== "assistant.changed") return;
+      setTodos(e.data.todos);
+      if (e.data.sessions) setScenes(e.data.sessions);
     });
     return off;
   }, [focusId]);
@@ -85,119 +98,134 @@ export function ProjectsPane({ focusId }: { focusId?: string | null }) {
   }
   function snapshotView(snapshot: ProjectSnapshot, latest: boolean) {
     return (
-      <article className="project-snapshot" key={snapshot.id}>
-        <div className="section-title">
-          <strong>{latest ? "最近确认的进度" : "历史进度"}</strong>
+      <article className="today-card project-snapshot" key={snapshot.id}>
+        <div className="card-head">
+          <h2>{latest ? "最近的进度" : "历史进度"}</h2>
           <small>{new Date(snapshot.created * 1000).toLocaleString()}</small>
-        </div>
-        {(
-          [
-            ["completed", "已完成"],
-            ["blocker", "当前卡点"],
-            ["next", "下一步"],
-          ] as const
-        ).map(([kind, label]) => (
-          <section key={kind}>
-            <h3>{label}</h3>
-            {snapshot.items.filter((i) => i.kind === kind).length ? (
-              snapshot.items
-                .filter((i) => i.kind === kind)
-                .map((item) => (
-                  <div className="project-fact" key={item.id}>
-                    <p className="project-text">{item.content}</p>
-                    {item.source_ids.length ? (
-                      <details>
-                        <summary>
-                          {item.edited
-                            ? "已由你修改确认 · 查看原始来源"
-                            : "查看来源"}
-                        </summary>
-                        {item.source_ids.map((id) => {
-                          const source = snapshot.sources.find(
-                            (s) => s.id === id,
-                          );
-                          return (
-                            source && (
-                              <div key={id}>
-                                <small>
-                                  {source.label} ·{" "}
-                                  {new Date(
-                                    source.created * 1000,
-                                  ).toLocaleString()}
-                                  {source.truncated ? " · 摘录" : ""}
-                                </small>
-                                <p className="project-text">{source.content}</p>
-                              </div>
-                            )
-                          );
-                        })}
-                      </details>
-                    ) : (
-                      <small>手动记录</small>
-                    )}
-                    {latest && kind === "next" && !project?.archived && (
-                      <button
-                        disabled={busy}
-                        onClick={() =>
-                          run(async () => {
-                            const result = await api.action<{ done: boolean }>(
-                              "projects.todo",
-                              { projectId: project!.id, itemId: item.id },
-                            );
-                            setNotice(
-                              result.done
-                                ? "这条下一步已经完成，无需重复添加。"
-                                : "已加入本项目待办，同一条下一步不会重复添加。",
-                            );
-                            await load(project!.id);
-                          })
-                        }
-                      >
-                        加入待办
-                      </button>
-                    )}
-                  </div>
-                ))
-            ) : (
-              <p className="muted">尚未记录</p>
-            )}
-          </section>
-        ))}
-        {remove === snapshot.id ? (
-          <div className="button-row">
-            <span>删除这份快照？项目和待办会保留。</span>
+          {remove === snapshot.id ? (
+            <span className="snapshot-remove">
+              删除这份进度？项目和待办会保留。
+              <button
+                disabled={busy}
+                onClick={() =>
+                  run(async () => {
+                    await api.call("projects.delete-snapshot", {
+                      project_id: project!.id,
+                      snapshot_id: snapshot.id,
+                      confirm: true,
+                    });
+                    setRemove(null);
+                    await load(project!.id);
+                  })
+                }
+              >
+                确认删除快照
+              </button>
+              <button onClick={() => setRemove(null)}>保留</button>
+            </span>
+          ) : (
             <button
+              className="chat-link"
               disabled={busy}
-              onClick={() =>
-                run(async () => {
-                  await api.call("projects.delete-snapshot", {
-                    project_id: project!.id,
-                    snapshot_id: snapshot.id,
-                    confirm: true,
-                  });
-                  setRemove(null);
-                  await load(project!.id);
-                })
-              }
+              onClick={() => setRemove(snapshot.id)}
             >
-              确认删除快照
+              删除快照
             </button>
-            <button onClick={() => setRemove(null)}>保留</button>
-          </div>
-        ) : (
-          <button disabled={busy} onClick={() => setRemove(snapshot.id)}>
-            删除快照
-          </button>
-        )}
+          )}
+        </div>
+        <div className="snapshot-cols">
+          {(
+            [
+              ["completed", "已完成"],
+              ["blocker", "卡在哪"],
+              ["next", "下一步"],
+            ] as const
+          ).map(([kind, label]) => {
+            const items = snapshot.items.filter((i) => i.kind === kind);
+            return (
+              <section key={kind} className={`snapshot-col ${kind}`}>
+                <h3>{label}</h3>
+                {items.length ? (
+                  items.map((item) => (
+                    <div className="project-fact" key={item.id}>
+                      <p className="project-text">{item.content}</p>
+                      <div className="fact-meta">
+                        {item.source_ids.length ? (
+                          <details>
+                            <summary>
+                              {item.edited ? "你改过 · 来源" : "来源"}
+                            </summary>
+                            {item.source_ids.map((id) => {
+                              const source = snapshot.sources.find(
+                                (s) => s.id === id,
+                              );
+                              return (
+                                source && (
+                                  <div key={id}>
+                                    <small>
+                                      {source.label} ·{" "}
+                                      {new Date(
+                                        source.created * 1000,
+                                      ).toLocaleString()}
+                                      {source.truncated ? " · 摘录" : ""}
+                                    </small>
+                                    <p className="project-text">
+                                      {source.content}
+                                    </p>
+                                  </div>
+                                )
+                              );
+                            })}
+                          </details>
+                        ) : null}
+                        {latest && kind === "next" && !project?.archived && (
+                          <button
+                            disabled={busy}
+                            onClick={() =>
+                              run(async () => {
+                                const result = await api.action<{
+                                  done: boolean;
+                                }>("projects.todo", {
+                                  projectId: project!.id,
+                                  itemId: item.id,
+                                });
+                                setNotice(
+                                  result.done
+                                    ? "这条下一步已经完成，无需重复添加。"
+                                    : "已加入本项目待办，同一条下一步不会重复添加。",
+                                );
+                                await load(project!.id);
+                              })
+                            }
+                          >
+                            加入待办
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <p className="card-empty">—</p>
+                )}
+              </section>
+            );
+          })}
+        </div>
       </article>
     );
   }
   return (
     <section className="projects-pane">
-      <div className="heading">
-        <p className="eyebrow">接上昨天的思路</p>
-        <h1>每个项目，都有下一步。</h1>
-        <p className="muted">保存你确认的进度，再从这里继续工作。</p>
+      <div className="page-head">
+        <h1>项目</h1>
+        <button
+          className="chat-new"
+          disabled={busy || !!capture}
+          onClick={() => edit()}
+        >
+          <Icon name="plus" />
+          新建项目
+        </button>
       </div>
       {error && (
         <div className="alert" role="alert">
@@ -209,47 +237,38 @@ export function ProjectsPane({ focusId }: { focusId?: string | null }) {
           {notice}
         </div>
       )}
-      <div className="section-title">
-        <h2>我的项目</h2>
-        <button disabled={busy || !!capture} onClick={() => edit()}>
-          新建项目
-        </button>
-      </div>
-      <div className="project-cards">
-        {projects.map((p) => (
-          <button
-            key={p.id}
-            className={project?.id === p.id && !creating ? "selected" : ""}
-            aria-label={`选择项目 ${p.name}`}
-            disabled={busy || !!capture}
-            onClick={() =>
-              run(async () => {
-                setEditing(false);
-                setCreating(false);
-                setOperation(null);
-                await load(p.id);
-              })
-            }
-          >
-            <strong>
+      {projects.length > 0 && (
+        <div className="project-tabs">
+          {projects.map((p) => (
+            <button
+              key={p.id}
+              className={project?.id === p.id && !creating ? "selected" : ""}
+              aria-label={`选择项目 ${p.name}`}
+              disabled={busy || !!capture}
+              onClick={() =>
+                run(async () => {
+                  setEditing(false);
+                  setCreating(false);
+                  setOperation(null);
+                  await load(p.id);
+                })
+              }
+            >
               {p.name}
-              {p.archived ? " · 已归档" : ""}
-            </strong>
-            <span>{p.goal || "还没有填写目标"}</span>
-            <small>
-              更新于 {new Date(p.updated * 1000).toLocaleDateString()}
-            </small>
-          </button>
-        ))}
-      </div>
+              {!!p.archived && <small>已归档</small>}
+            </button>
+          ))}
+        </div>
+      )}
       {!projects.length && !editing && (
-        <p className="empty">
-          先创建一个项目，例如“桌面机器人”，把目标和进度放在一起。
-        </p>
+        <div className="today-card project-empty">
+          <h2>还没有项目</h2>
+          <p>建一个，比如“桌面机器人”。目标和进度放在一起，下次直接接着做。</p>
+        </div>
       )}
       {editing && (
         <form
-          className="project-form"
+          className="today-card project-form"
           onSubmit={(e) => {
             e.preventDefault();
             void run(async () => {
@@ -265,7 +284,7 @@ export function ProjectsPane({ focusId }: { focusId?: string | null }) {
             });
           }}
         >
-          <h2>{creating ? "创建项目" : "编辑项目"}</h2>
+          <h2>{creating ? "新项目" : "编辑项目"}</h2>
           <label>
             项目名称
             <input
@@ -366,18 +385,20 @@ export function ProjectsPane({ focusId }: { focusId?: string | null }) {
       )}
       {project && !creating && !editing && (
         <>
-          <section className="project-overview">
-            <div className="section-title">
+          <section className="today-card project-hero">
+            <div className="card-head">
               <h2>{project.name}</h2>
-              <button
-                disabled={busy || !!capture}
-                onClick={() => edit(project)}
-              >
-                编辑项目
-              </button>
+              {!!project.archived && <span className="tag">已归档</span>}
+              <small>
+                更新于 {new Date(project.updated * 1000).toLocaleDateString()}
+              </small>
             </div>
-            <p className="project-text">{project.goal || "还没有填写目标。"}</p>
-            <div className="button-row">
+            {project.goal ? (
+              <p className="project-text project-goal">{project.goal}</p>
+            ) : (
+              <p className="card-empty">还没有写目标。</p>
+            )}
+            <div className="project-actions">
               <button
                 className="primary"
                 disabled={busy || !!capture || !!project.archived}
@@ -403,7 +424,16 @@ export function ProjectsPane({ focusId }: { focusId?: string | null }) {
               >
                 手动记录进度
               </button>
+              <span className="chat-bar-gap" />
               <button
+                className="chat-link"
+                disabled={busy || !!capture}
+                onClick={() => edit(project)}
+              >
+                编辑项目
+              </button>
+              <button
+                className="chat-link"
                 disabled={busy || !!capture}
                 onClick={() =>
                   run(async () => {
@@ -435,106 +465,118 @@ export function ProjectsPane({ focusId }: { focusId?: string | null }) {
           {project.snapshots[0] ? (
             snapshotView(project.snapshots[0], true)
           ) : (
-            <p className="empty">
-              还没有进度快照。先记录一次，水獭就能帮你接续工作。
-            </p>
+            <div className="today-card project-empty">
+              <p>还没记过进度。记一次，水獭下次就能帮你接着做。</p>
+            </div>
           )}
-          <section className="project-resources">
-            <h2>项目资料</h2>
-            {project.links.length ? (
-              project.links.map((link) => (
-                <div key={link.id}>
-                  <strong>{link.label}</strong>
-                  <span>{link.url}</span>
-                  <button
-                    disabled={busy || !!operation}
-                    onClick={() =>
-                      run(async () =>
-                        setOperation(
-                          await api.action("actions.prepare", {
-                            kind: "open_url",
-                            target: link.url,
-                          }),
-                        ),
-                      )
-                    }
-                  >
-                    打开资料
-                  </button>
-                </div>
-              ))
-            ) : (
-              <p className="muted">编辑项目后可以添加资料链接。</p>
-            )}
-            {operation && (
-              <div className="context-preview">
-                <strong>确认打开资料</strong>
-                <p>{operation.description}</p>
-                <div className="button-row">
-                  <button
-                    disabled={busy}
-                    onClick={() =>
-                      run(async () => {
-                        const result = await api.action<{ message: string }>(
-                          "actions.confirm",
-                          operation.id,
-                        );
-                        setNotice(result.message);
-                        setOperation(null);
-                      })
-                    }
-                  >
-                    确认打开资料
-                  </button>
-                  <button
-                    disabled={busy}
-                    onClick={() => {
-                      void api.action("actions.cancel", operation.id);
-                      setOperation(null);
-                    }}
-                  >
-                    取消打开
-                  </button>
-                </div>
+          <div className="project-side">
+            <section className="today-card">
+              <div className="card-head">
+                <h2>本项目待办</h2>
               </div>
-            )}
-          </section>
-          <section>
-            <h2>本项目待办</h2>
-            {todos
-              .filter((t) => t.projectId === project.id)
-              .map((todo) => (
-                <label className="project-todo" key={todo.id}>
-                  <input
-                    type="checkbox"
-                    checked={todo.done}
-                    disabled={busy}
-                    onChange={() =>
-                      run(async () => {
-                        await api.action("assistant.todo-toggle", todo.id);
-                        await load(project.id);
-                      })
-                    }
-                  />
-                  {todo.title}
-                </label>
-              ))}
-            {!todos.some((t) => t.projectId === project.id) && (
-              <p className="muted">可以将下面的“下一步”加入待办。</p>
-            )}
-          </section>
+              {todos
+                .filter((t) => t.projectId === project.id)
+                .map((todo) => (
+                  <label className="project-todo" key={todo.id}>
+                    <input
+                      type="checkbox"
+                      checked={todo.done}
+                      disabled={busy}
+                      onChange={() =>
+                        run(async () => {
+                          await api.action("assistant.todo-toggle", todo.id);
+                          await load(project.id);
+                        })
+                      }
+                    />
+                    {todo.title}
+                  </label>
+                ))}
+              {!todos.some((t) => t.projectId === project.id) && (
+                <p className="card-empty">
+                  把“下一步”加入待办，就会出现在这里。
+                </p>
+              )}
+            </section>
+            <section className="today-card project-resources">
+              <div className="card-head">
+                <h2>资料</h2>
+              </div>
+              {project.links.length ? (
+                project.links.map((link) => (
+                  <div key={link.id} className="resource-row">
+                    <strong>{link.label}</strong>
+                    <span>{link.url}</span>
+                    <button
+                      disabled={busy || !!operation}
+                      onClick={() =>
+                        run(async () =>
+                          setOperation(
+                            await api.action("actions.prepare", {
+                              kind: "open_url",
+                              target: link.url,
+                            }),
+                          ),
+                        )
+                      }
+                    >
+                      打开资料
+                    </button>
+                  </div>
+                ))
+              ) : (
+                <p className="card-empty">编辑项目时可以添加资料链接。</p>
+              )}
+              {operation && (
+                <div className="context-preview">
+                  <strong>确认打开资料</strong>
+                  <p>{operation.description}</p>
+                  <div className="button-row">
+                    <button
+                      disabled={busy}
+                      onClick={() =>
+                        run(async () => {
+                          const result = await api.action<{
+                            message: string;
+                          }>("actions.confirm", operation.id);
+                          setNotice(result.message);
+                          setOperation(null);
+                        })
+                      }
+                    >
+                      确认打开资料
+                    </button>
+                    <button
+                      disabled={busy}
+                      onClick={() => {
+                        void api.action("actions.cancel", operation.id);
+                        setOperation(null);
+                      }}
+                    >
+                      取消打开
+                    </button>
+                  </div>
+                </div>
+              )}
+            </section>
+          </div>
           {project.snapshots.length > 1 && (
-            <details>
-              <summary>
-                查看历史快照（最近 {project.snapshots.length - 1} 份）
-              </summary>
+            <details className="today-more project-history">
+              <summary>更早的进度 · {project.snapshots.length - 1}</summary>
               {project.snapshots.slice(1).map((s) => snapshotView(s, false))}
             </details>
           )}
         </>
       )}
-      <p className="chat-privacy">
-        项目与快照保存在当前工作空间。选择关联项目后，其目标和最近确认的进度会用于后续聊天；可以在聊天页取消关联。保存的来源摘录会随快照保留，删除原对话不会删除这些摘录。
+      <details className="today-more project-scenes">
+        <summary>工作现场{scenes.length ? ` · ${scenes.length}` : ""}</summary>
+        <WorkScenes
+          sessions={scenes}
+          onChanged={() => void loadAssistant().catch(fail)}
+        />
+      </details>
+      <p className="otter-tip">
+        项目和进度存在当前工作空间。关联到聊天后，水獭会参考目标和最近确认的进度；进度里的来源摘录不随原对话删除。
       </p>
     </section>
   );

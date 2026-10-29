@@ -118,9 +118,8 @@ export function ApplicationContent({
         </button>
       </div>
       <p className="awareness-hint">
-        选择应用读取窗口文字；对于自绘界面、PDF 或图片，尝试窗口
-        OCR。不同应用公开文字的程度不同；例如图片、视频、自绘界面可能只能通过
-        OCR 识别。所有结果先在本机显示。
+        选一个应用读取窗口文字；图片、PDF 这类读不到的，试试窗口
+        OCR。结果先只在本机显示。
       </p>
       <div className="content-permissions">
         <span>
@@ -254,8 +253,7 @@ export function ApplicationContent({
         ))}
       </div>
       <p className="awareness-hint">
-        OCR
-        会临时截取所选应用的窗口并在本机识别，不保存截图。窗口文字读取会跳过系统标记的受保护字段；未加载的内容、受保护画面或应用未公开的内容不一定能读取。
+        OCR 临时截取所选窗口、在本机识别，不保存截图；受保护的内容不会读取。
       </p>
     </section>
   );

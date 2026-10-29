@@ -3,6 +3,7 @@
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
+const { go } = require("./smoke-nav.cjs");
 const { spawn } = require("node:child_process");
 
 function mcpClient({ command, args, env = {} }) {
@@ -38,8 +39,7 @@ function mcpClient({ command, args, env = {} }) {
 }
 
 async function verifyHandoff({ panel, pet, userData, output }) {
-  const open = () =>
-    panel.getByRole("button", { name: "AI 交接", exact: false }).click();
+  const open = () => go(panel, "AI 交接");
   const getProject = async (name) => {
     const list = await panel.evaluate(() => window.otter.call("projects.list"));
     const project = list.find((p) => p.name === name && !p.archived);
@@ -49,9 +49,11 @@ async function verifyHandoff({ panel, pet, userData, output }) {
     );
   };
   await open();
-  await panel
-    .getByRole("heading", { name: "AI 交接。", exact: true })
-    .waitFor();
+  await panel.getByRole("heading", { name: "AI 交接", exact: true }).waitFor();
+  // The client snippets sit in a collapsed "接入 AI 工具".
+  await panel.locator("details.handoff-clients").evaluate((d) => {
+    d.open = true;
+  });
   const config = JSON.parse(
     await panel.locator(".handoff-setup pre").nth(2).innerText(),
   ).mcpServers.otter;
@@ -92,7 +94,10 @@ async function verifyHandoff({ panel, pet, userData, output }) {
       name: "smoke-agent 的读取请求",
     });
     await card.waitFor();
-    await panel.getByLabel("1 个待批准").waitFor();
+    await panel
+      .getByRole("navigation", { name: "设置分组" })
+      .getByLabel("1 个待批准")
+      .waitFor();
     await card.getByText("它给出的理由：继续实现舵机驱动").waitFor();
     const preview = card.getByLabel("将发送的内容");
     await preview.waitFor();

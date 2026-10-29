@@ -1,5 +1,14 @@
 import { useEffect, useRef, useState } from "react";
+import { Icon } from "./icons";
 import "./types";
+
+const PHASE: Record<string, string> = {
+  recording: "正在录音，松开转写",
+  permission: "正在打开麦克风…",
+  transcribing: "正在转写…",
+};
+
+// Hold-to-talk for the composer: a round mic that names its phase while busy.
 export function VoiceControls({
   enabled,
   onText,
@@ -10,10 +19,6 @@ export function VoiceControls({
   const [phase, setPhase] = useState("idle");
   const [error, setError] = useState("");
   const [speaking, setSpeaking] = useState(false);
-  const [config, setConfig] = useState({
-    model: "whisper-1",
-    autoSpeak: false,
-  });
   const wanted = useRef(false),
     discard = useRef(false),
     alive = useRef(true);
@@ -28,7 +33,6 @@ export function VoiceControls({
         if (e.data.error) setError(e.data.error);
       }
     });
-    void window.otter.action<typeof config>("voice.settings").then(setConfig);
     return () => {
       alive.current = false;
       wanted.current = false;
@@ -123,95 +127,110 @@ export function VoiceControls({
       }
     }
   }
-  async function save() {
-    try {
-      await window.otter.action("voice.configure", config);
-      setError("语音设置已保存。");
-    } catch (e) {
-      setError(String(e));
-    }
-  }
   return (
     <div className="voice-controls">
-      <div className="button-row">
-        <button
-          type="button"
-          aria-label="按住说话"
-          disabled={!enabled || phase === "transcribing"}
-          onPointerDown={(e) => {
-            if (e.button !== 0) return;
-            e.currentTarget.setPointerCapture(e.pointerId);
+      <button
+        type="button"
+        className={`voice-button ${phase}`}
+        aria-label="按住说话"
+        title="按住说话，最多 30 秒；松开后转成文字，改好再发。第一次要先允许麦克风。"
+        disabled={!enabled || phase === "transcribing"}
+        onPointerDown={(e) => {
+          if (e.button !== 0) return;
+          e.currentTarget.setPointerCapture(e.pointerId);
+          void start();
+        }}
+        onPointerUp={release}
+        onPointerCancel={() => {
+          discard.current = true;
+          release();
+          setPhase("idle");
+        }}
+        onKeyDown={(e) => {
+          if (e.code === "Space" && !e.repeat) {
+            e.preventDefault();
             void start();
-          }}
-          onPointerUp={release}
-          onPointerCancel={() => {
-            discard.current = true;
+          }
+        }}
+        onKeyUp={(e) => {
+          if (e.code === "Space") {
+            e.preventDefault();
             release();
-            setPhase("idle");
-          }}
-          onKeyDown={(e) => {
-            if (e.code === "Space" && !e.repeat) {
-              e.preventDefault();
-              void start();
-            }
-          }}
-          onKeyUp={(e) => {
-            if (e.code === "Space") {
-              e.preventDefault();
-              release();
-            }
-          }}
-        >
-          {phase === "recording"
-            ? "正在录音，松开转写"
-            : phase === "permission"
-              ? "正在打开麦克风…"
-              : phase === "transcribing"
-                ? "正在转写…"
-                : "按住说话"}
-        </button>
+          }
+        }}
+      >
+        <Icon name="mic" />
+        {PHASE[phase] && <span>{PHASE[phase]}</span>}
+      </button>
+      {speaking && (
         <button
           type="button"
-          disabled={!speaking}
+          className="voice-stop"
           onClick={() => window.otter.action("voice.stop")}
         >
           停止朗读
         </button>
-      </div>
-      <small>最多 30 秒，转写后可编辑再发送。首次授权后请重新按住录音。</small>
-      <details>
-        <summary>语音设置</summary>
-        <label>
+      )}
+      {error && <small role="status">{error}</small>}
+    </div>
+  );
+}
+
+// Transcription model and read-aloud, kept in settings.
+export function VoiceSettings() {
+  const [config, setConfig] = useState({
+    model: "whisper-1",
+    autoSpeak: false,
+  });
+  const [note, setNote] = useState("");
+  useEffect(() => {
+    void window.otter
+      .action<typeof config>("voice.settings")
+      .then(setConfig)
+      .catch(() => {});
+  }, []);
+  async function save() {
+    try {
+      await window.otter.action("voice.configure", config);
+      setNote("语音设置已保存。");
+    } catch (e) {
+      setNote(e instanceof Error ? e.message : String(e));
+    }
+  }
+  return (
+    <div className="voice-settings">
+      <h2>语音</h2>
+      <p>按住麦克风说话，或者让它把回复读出来。</p>
+      <label className="setting-line">
+        <span>
           转写模型
-          <input
-            aria-label="语音转写模型"
-            value={config.model}
-            onChange={(e) =>
-              setConfig((c) => ({ ...c, model: e.target.value }))
-            }
-          />
-        </label>
-        <label>
-          <input
-            aria-label="自动朗读回复"
-            type="checkbox"
-            checked={config.autoSpeak}
-            onChange={(e) =>
-              setConfig((c) => ({ ...c, autoSpeak: e.target.checked }))
-            }
-          />
+          <small>录音交给当前模型服务转成文字，可能收费</small>
+        </span>
+        <input
+          aria-label="语音转写模型"
+          value={config.model}
+          onChange={(e) => setConfig((c) => ({ ...c, model: e.target.value }))}
+        />
+      </label>
+      <label className="setting-line">
+        <span>
           自动朗读新回复
-        </label>
-        <button type="button" onClick={save}>
-          保存语音设置
-        </button>
-        <p>
-          录音发送到当前 OpenAI
-          兼容服务的音频转写接口，可能收费；服务需支持所填转写模型。朗读使用
-          macOS 系统声音。
-        </p>
-      </details>
-      {error && <p role="status">{error}</p>}
+          <small>用 macOS 系统声音</small>
+        </span>
+        <input
+          type="checkbox"
+          className="toggle"
+          aria-label="自动朗读回复"
+          checked={config.autoSpeak}
+          onChange={(e) =>
+            setConfig((c) => ({ ...c, autoSpeak: e.target.checked }))
+          }
+        />
+      </label>
+      <button type="button" onClick={save}>
+        保存语音设置
+      </button>
+      {note && <p role="status">{note}</p>}
     </div>
   );
 }

@@ -169,8 +169,7 @@ export function ProjectCapture({
       ) : !draft ? (
         <>
           <p className="muted">
-            仅将勾选的内容发送给当前模型。最近 30 条消息中，每条最多取 2000
-            字；未发送的草稿不在这里。
+            只把勾选的内容发给当前模型（最近 30 条消息，每条最多 2000 字）。
           </p>
           {!sessionId && (
             <label>

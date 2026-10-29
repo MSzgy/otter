@@ -142,18 +142,11 @@ export function AwarenessPane() {
   }
   return (
     <section className="awareness-pane" aria-label="应用感知">
-      <div className="heading">
-        <p className="eyebrow">先了解你正在做什么</p>
-        <h1>看见你的工作现场。</h1>
-        <p className="muted">
-          只在本机展示应用和标签页信息，不自动发送给模型。
-        </p>
-      </div>
       <section className="awareness-controls">
         <div className="setting-row">
           <div>
             <h2>应用感知</h2>
-            <p>每 4 秒更新运行中的桌面应用和当前前台应用。</p>
+            <p>看看你正在用哪些应用。只在本机显示，不会自动发给模型。</p>
           </div>
           <input
             type="checkbox"
@@ -172,9 +165,7 @@ export function AwarenessPane() {
         <div className="setting-row browser-toggle">
           <div>
             <h2>浏览器标签页</h2>
-            <p>
-              列出支持浏览器所有窗口的现有标签页；选择具体标签页读取。首次可能弹出系统授权。
-            </p>
+            <p>列出已打开的网页，你选了哪页才读正文。第一次可能要授权。</p>
           </div>
           <input
             type="checkbox"
@@ -229,10 +220,7 @@ export function AwarenessPane() {
       {!state.enabled ? (
         <div className="empty awareness-empty">
           <h3>感知已关闭</h3>
-          <p>
-            开启后，Otter
-            才会读取当前应用列表。关闭会清空已展示的应用与标签页信息。
-          </p>
+          <p>开启后才读取应用列表；关闭会清空已显示的信息。</p>
         </div>
       ) : (
         <>
@@ -403,8 +391,8 @@ export function AwarenessPane() {
           <ApplicationContent apps={state.apps} enabled={state.enabled} />
         </>
       )}
-      <div className="awareness-privacy">
-        <h2>这一版能感知到什么</h2>
+      <details className="settings-more awareness-privacy">
+        <summary>它能看到什么</summary>
         <p>
           可列出运行应用和浏览器的现有标签页；点击应用读取按钮可读取窗口内容，点击标签页可读取该页正文。自动轮询不读取正文。OCR
           仅在点击时临时截取所选应用窗口，在本机识别后丢弃图像。网址会移除查询参数与片段；标题和路径仍可能包含私人信息，只在内存中保留最近一次结果。
@@ -412,7 +400,7 @@ export function AwarenessPane() {
         <p>
           信息不写入数据库，也不会自动加入水獭聊天。隐私/无痕窗口未单独识别；不希望读取时请关闭浏览器感知。关闭应用感知同时关闭标签页读取并清空结果。
         </p>
-      </div>
+      </details>
     </section>
   );
 }

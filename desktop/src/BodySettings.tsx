@@ -47,31 +47,33 @@ export function BodySettings() {
   }
   if (!state) return null;
   return (
-    <section className="settings-section quick-access">
-      <h2>实体水獭</h2>
-      <p>
-        用 USB 连接 ESP32
-        水獭后，它会跟着桌面状态换表情：聊天时思考、朗读时说话、生成简报时忙碌、提醒到点时摇铃。没有设备时不影响任何功能。
-      </p>
-      <label className="check">
+    <section className="settings-section">
+      <div className="setting-row">
+        <div>
+          <h2>USB 连接</h2>
+          <p>接上 ESP32 水獭，它会跟着桌面换表情。没有设备也不影响使用。</p>
+        </div>
         <input
           aria-label="连接实体水獭"
           type="checkbox"
+          className="toggle"
           checked={state.enabled}
           onChange={(e) => void toggle(e.target.checked)}
         />
-        连接实体水獭
-      </label>
-      <p role="status">
+      </div>
+      <p role="status" className={`body-status ${state.status}`}>
         {STATUS[state.status]}
         {state.message && state.message !== STATUS[state.status]
           ? ` · ${state.message}`
           : ""}
         {state.status === "connected" ? ` · 当前表情：${state.expression}` : ""}
       </p>
-      <p>
-        只把表情名称和提醒铃声发给设备，不发送聊天、提醒内容或记忆。点一下设备屏幕：有到点提醒时等于“知道了”，否则等于摸摸头；不会完成或删除任务。
-      </p>
+      <details className="settings-more">
+        <summary>它会收到什么</summary>
+        <p>
+          只把表情名称和提醒铃声发给设备，不发送聊天、提醒内容或记忆。点一下设备屏幕：有到点提醒时等于“知道了”，否则等于摸摸头；不会完成或删除任务。
+        </p>
+      </details>
       {message && <p role="alert">{message}</p>}
     </section>
   );

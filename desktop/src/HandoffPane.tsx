@@ -232,17 +232,6 @@ export function HandoffPane() {
   }
   return (
     <section className="handoff-pane">
-      <div className="heading">
-        <div>
-          <p className="eyebrow">一份上下文，多个 AI 帮手</p>
-          <h1>AI 交接。</h1>
-          <p className="muted">
-            让 Claude Code、Codex、Cursor
-            等工具在你批准后读取项目进度，也能把进度交回
-            Otter。换工具时不用再手动贴上下文。
-          </p>
-        </div>
-      </div>
       {error && (
         <div className="alert" role="alert">
           {error}
@@ -257,27 +246,40 @@ export function HandoffPane() {
         </p>
       )}
       <section className="settings-section">
-        <h2>交接通道</h2>
-        <label className="check">
+        <div className="setting-row">
+          <div>
+            <h2>允许 AI 工具连接</h2>
+            <p>
+              Claude Code、Codex、Cursor
+              经你批准后读取项目进度，也能把进度交回来。
+            </p>
+          </div>
           <input
             type="checkbox"
+            className="toggle"
             aria-label="允许 AI 工具连接 Otter"
             checked={!!state?.enabled}
             disabled={!state}
             onChange={(e) => void configure(e.target.checked)}
           />
-          允许 AI 工具连接 Otter
-          <span>
-            {!state
-              ? "正在读取…"
-              : state.error ||
-                (state.listening ? "已开启，等待连接" : "已关闭")}
-          </span>
-        </label>
-        <p className="muted">
-          AI 工具只能连接正在运行的
-          Otter，碰不到数据库文件。每次读取都会在这里请你批准；交回的进度先进收件箱，检查确认后才保存。
+        </div>
+        <p className="body-status">
+          {!state
+            ? "正在读取…"
+            : state.error || (state.listening ? "已开启，等待连接" : "已关闭")}
         </p>
+        <details className="settings-more">
+          <summary>安全边界</summary>
+          <p>
+            AI 工具只能连接正在运行的
+            Otter，碰不到数据库文件。每次读取都会在这里请你批准；交回的进度先进收件箱，检查确认后才保存。
+          </p>
+          <p>
+            AI 工具的名称由它自己报告，无法核实；“30
+            分钟内允许”按名称和项目生效。这能防止 AI
+            工具悄悄拿走上下文，但防不住以你身份运行的恶意程序。当前只分享项目进度，不包括长期记忆和聊天记录。
+          </p>
+        </details>
       </section>
       {!!state?.pending.length && (
         <section className="settings-section" aria-label="待批准的请求">
@@ -291,7 +293,7 @@ export function HandoffPane() {
         <h2>交来的进度 · {inbox.length}</h2>
         {!inbox.length && (
           <p className="muted">
-            还没有。AI 工具调用 propose_progress 后会出现在这里，保留 7 天。
+            还没有。AI 工具交回的进度会在这里等你确认，保留 7 天。
           </p>
         )}
         {inbox.map((h) => {
@@ -383,12 +385,15 @@ export function HandoffPane() {
           ))}
         </section>
       )}
-      <section className="settings-section" aria-label="接入 AI 工具">
-        <h2>接入 AI 工具</h2>
+      <details
+        className="settings-section settings-more handoff-clients"
+        aria-label="接入 AI 工具"
+      >
+        <summary>接入 AI 工具</summary>
         <p className="muted">
-          Otter 不会改动其他工具的配置。按下面的方式添加一次即可
+          按下面的方式在工具里添加一次即可，Otter 不会改动它们的配置
           {state && !state.setup.packaged
-            ? "；当前是开发版，命令指向源码目录，安装版会指向应用内的程序"
+            ? "；当前是开发版，命令指向源码目录"
             : ""}
           。
         </p>
@@ -405,7 +410,7 @@ export function HandoffPane() {
               <pre>{state.setup.snippets[c.key]}</pre>
             </div>
           ))}
-      </section>
+      </details>
       <section className="settings-section" aria-label="访问记录">
         <h2>访问记录</h2>
         {!state?.log.length ? (
@@ -427,11 +432,6 @@ export function HandoffPane() {
           </table>
         )}
       </section>
-      <p className="muted handoff-note">
-        边界：AI 工具的名称由它自己报告，无法核实；“30
-        分钟内允许”按名称和项目生效。这能防止 AI
-        工具悄悄拿走上下文，但防不住以你身份运行的恶意程序。当前只分享项目进度，不包括长期记忆和聊天记录。
-      </p>
     </section>
   );
 }

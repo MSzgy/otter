@@ -2,20 +2,25 @@ import React, { useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import Markdown from "react-markdown";
 import { Otter, onHead, type Mood } from "./Otter";
+import { Icon } from "./icons";
+import otterFace from "./assets/otter/idle.gif?inline";
 import { useEvolution } from "./evolution-runtime";
 import type { Health, Job, Report, Prefs, Snapshot } from "./types";
 import "./style.css";
 import { AmbientSettings } from "./AmbientSettings";
 import { BodySettings } from "./BodySettings";
 import { ProjectsPane } from "./ProjectsPane";
-import { AssistantPane } from "./AssistantPane";
+import { TodayPane } from "./TodayPane";
 import { QuickAccessCard } from "./QuickAccessCard";
 import { AwarenessPane } from "./AwarenessPane";
-import { PetInteractions, usePetState } from "./PetInteractions";
+import { DesktopTips, PetInteractions, usePetState } from "./PetInteractions";
+import { EvolutionWorkshop } from "./EvolutionWorkshop";
 import { ChatPane } from "./ChatPane";
 import { MemoryPane } from "./MemoryPane";
 import { HandoffPane } from "./HandoffPane";
 import { ModelSettings } from "./ModelSettings";
+import { VoiceSettings } from "./VoiceControls";
+import { SettingsSheet, type SettingsSection } from "./SettingsSheet";
 const api = window.otter;
 function message(error: unknown) {
   return error instanceof Error
@@ -254,42 +259,44 @@ function Panel() {
     chatBusy,
     version,
   } = useRuntime();
-  const { pet: petLocal } = usePetState();
-  const [tab, setTab] = useState<
-    | "reports"
-    | "settings"
-    | "chat"
-    | "pet"
-    | "awareness"
-    | "assistant"
-    | "memory"
-    | "projects"
-    | "handoff"
-  >("reports");
+  // Three everyday places, the otter's own page, and settings in a sheet on top.
+  const [place, setPlace] = useState<"today" | "chat" | "projects" | "otter">(
+    "today",
+  );
+  const [settings, setSettings] = useState<SettingsSection | null>(null);
   const [handoffPending, setHandoffPending] = useState(0);
   const [projectFocus, setProjectFocus] = useState<string | null>(null);
   const [memoryFocus, setMemoryFocus] = useState<string | null>(null);
+  // Text typed on 今天, handed to chat to send.
+  const [ask, setAsk] = useState<string | null>(null);
   const mainScroll = useRef<HTMLElement | null>(null);
   useEffect(() => {
     mainScroll.current?.scrollTo({ top: 0 });
-  }, [tab]);
+  }, [place]);
+  // The menu bar, the pet, notifications and actions inside settings (such as
+  // "chat about this") still name the old sections. Going to a place closes the
+  // settings sheet, which would otherwise sit over it.
+  function open(view: string | undefined) {
+    if (view === "handoff") {
+      setSettings("handoff");
+      return true;
+    }
+    const next = ({ chat: "chat", pet: "otter", assistant: "today" } as const)[
+      view as "chat" | "pet" | "assistant"
+    ];
+    if (!next) return false;
+    setSettings(null);
+    setPlace(next);
+    return true;
+  }
   useEffect(() => {
     let navigated = false;
     const unsub = api.subscribe((event) => {
-      if (
-        event.type === "navigation" &&
-        ["chat", "pet", "assistant", "handoff"].includes(event.data.view)
-      ) {
+      if (event.type === "navigation" && open(event.data.view))
         navigated = true;
-        setTab(event.data.view);
-      }
     });
     void api.action<Snapshot>("snapshot").then((s) => {
-      if (
-        !navigated &&
-        ["chat", "pet", "assistant", "handoff"].includes(s.view || "")
-      )
-        setTab(s.view as typeof tab);
+      if (!navigated) open(s.view);
     });
     return unsub;
   }, []);
@@ -369,51 +376,189 @@ function Panel() {
       setSubmitting(false);
     }
   }
+  const connectionLabel = connecting
+    ? "正在连接"
+    : health
+      ? health.demo
+        ? "离线演示模式"
+        : "已连接 Otter"
+      : "后台未连接";
+  const hasToday = !!health && reports.some((r) => r.date === health.today);
+  const reportCard = (
+    <section className="today-card report-card" aria-label="简报">
+      <span className="card-icon">
+        <Icon name="reports" />
+      </span>
+      <div>
+        <strong>
+          {busy
+            ? "正在整理简报…"
+            : hasToday
+              ? "今天的简报整理好了"
+              : "今天的简报"}
+        </strong>
+        <small role="status">
+          {job?.status === "failed"
+            ? job.message
+            : busy
+              ? job?.message || "整理好会告诉你。"
+              : health?.demo
+                ? "演示模式，用本地模拟模型整理。"
+                : hasToday
+                  ? "就在下面，随时翻看。"
+                  : "下班前，我可以帮你写一份。"}
+          {job?.warnings?.length ? ` · ${job.warnings.join("；")}` : ""}
+        </small>
+        <details className="report-options">
+          <summary>选项</summary>
+          <label>
+            日期
+            <input
+              aria-label="简报日期"
+              type="date"
+              value={date}
+              onChange={(e) => setDate(e.target.value)}
+              disabled={!health || busy}
+            />
+          </label>
+          <label className="check">
+            <input
+              type="checkbox"
+              checked={collect}
+              disabled={!health || busy || health.demo}
+              onChange={(e) => setCollect(e.target.checked)}
+            />
+            先采集已启用的数据源
+          </label>
+          {health?.demo && (
+            <button className="link" onClick={() => setSettings("workspace")}>
+              连接我的 Otter →
+            </button>
+          )}
+        </details>
+      </div>
+      <button
+        className={hasToday ? "" : "primary"}
+        disabled={!health || busy || !date}
+        onClick={generate}
+      >
+        {busy ? "正在整理…" : "生成简报"}
+      </button>
+    </section>
+  );
+  const reportArchive = reports.length > 0 && (
+    <section className="today-reports" aria-label="简报档案">
+      <div className="section-title">
+        <h2>简报</h2>
+        <button disabled={!health || loading} onClick={() => refresh()}>
+          刷新
+        </button>
+      </div>
+      <div className="report-grid">
+        <div className="report-list" aria-label="历史简报">
+          {reports.map((r) => (
+            <button
+              key={r.date}
+              className={selected?.date === r.date ? "selected" : ""}
+              onClick={() => loadReport(r.date)}
+            >
+              <strong>{r.date}</strong>
+              <small>
+                {r.llm_provider === "mock"
+                  ? "演示简报"
+                  : `${r.event_count} 条工作记录`}
+              </small>
+            </button>
+          ))}
+        </div>
+        <article className="report-body" aria-busy={loading}>
+          {loading ? (
+            <p className="muted">正在打开简报…</p>
+          ) : selected ? (
+            <>
+              <div className="report-meta">
+                {selected.llm_provider === "mock"
+                  ? "离线演示"
+                  : selected.llm_model}{" "}
+                · {selected.date}
+              </div>
+              <Markdown
+                skipHtml
+                components={{
+                  a: ({ href, children }) => (
+                    <a
+                      href={href}
+                      onClick={(e) => {
+                        e.preventDefault();
+                        if (href) void action("open-link", href);
+                      }}
+                    >
+                      {children}
+                    </a>
+                  ),
+                  img: () => null,
+                }}
+              >
+                {selected.content_md || ""}
+              </Markdown>
+            </>
+          ) : (
+            <p>没有找到该日期的简报。</p>
+          )}
+        </article>
+      </div>
+    </section>
+  );
+  const alert = error && (
+    <div role="alert" className="alert">
+      {error}
+      <button aria-label="关闭错误提示" onClick={() => setError("")}>
+        ×
+      </button>
+    </div>
+  );
   return (
     <div className="app-shell">
-      <aside className="sidebar">
-        <div className="brand">
-          <span className="brand-mark">o.</span>
-          <div>
-            Otter<small>你的桌面伙伴</small>
-          </div>
-        </div>
+      <aside className="rail">
         <nav aria-label="主导航">
           <button
-            className={tab === "assistant" ? "active" : ""}
-            onClick={() => setTab("assistant")}
+            className={place === "today" ? "active" : ""}
+            onClick={() => setPlace("today")}
           >
-            <span>◷</span>生活助手
+            <Icon name="today" />
+            今天
           </button>
           <button
-            className={tab === "awareness" ? "active" : ""}
-            onClick={() => setTab("awareness")}
+            className={place === "chat" ? "active" : ""}
+            onClick={() => setPlace("chat")}
           >
-            <span>◉</span>应用感知
+            <Icon name="chat" />
+            聊天
           </button>
           <button
-            className={tab === "pet" ? "active" : ""}
-            onClick={() => setTab("pet")}
+            className={place === "projects" ? "active" : ""}
+            onClick={() => setPlace("projects")}
           >
-            <span>♡</span>陪伴互动
+            <Icon name="projects" />
+            项目
+          </button>
+        </nav>
+        <div className="rail-foot">
+          <button
+            className={`rail-otter ${place === "otter" ? "active" : ""}`}
+            aria-label="我的水獭"
+            title={`我的水獭 · ${connectionLabel}`}
+            onClick={() => setPlace("otter")}
+          >
+            <img src={otterFace} alt="" />
           </button>
           <button
-            className={tab === "chat" ? "active" : ""}
-            onClick={() => setTab("chat")}
+            className="rail-gear"
+            aria-label="设置"
+            title="设置"
+            onClick={() => setSettings("general")}
           >
-            <span>◌</span>与水獭聊天
-          </button>
-          <button
-            className={tab === "projects" ? "active" : ""}
-            onClick={() => setTab("projects")}
-          >
-            <span>▱</span>项目与进度
-          </button>
-          <button
-            className={tab === "handoff" ? "active" : ""}
-            onClick={() => setTab("handoff")}
-          >
-            <span>⇄</span>AI 交接
+            <Icon name="settings" />
             {!!handoffPending && (
               <em
                 className="nav-badge"
@@ -423,386 +568,204 @@ function Panel() {
               </em>
             )}
           </button>
-          <button
-            className={tab === "memory" ? "active" : ""}
-            onClick={() => setTab("memory")}
-          >
-            <span>❋</span>记忆与个性
-          </button>
-          <button
-            className={tab === "reports" ? "active" : ""}
-            onClick={() => setTab("reports")}
-          >
-            <span>▤</span>工作简报
-          </button>
-          <button
-            className={tab === "settings" ? "active" : ""}
-            onClick={() => setTab("settings")}
-          >
-            <span>⚙</span>偏好设置
-          </button>
-        </nav>
-        <div className="companion">
-          <Otter
-            size={158}
-            mood={
-              petLocal.effect
-                ? petLocal.mood
-                : petLocal.asleep
-                  ? "sleeping"
-                  : busy || chatBusy
-                    ? "working"
-                    : "idle"
-            }
-          />
-          <strong>{busy ? "让我整理一下" : "安静地，陪你工作"}</strong>
-          <p>
-            {busy
-              ? "准备好后会告诉你。"
-              : "把工作留在简报里，\n把注意力留给现在。"}
-          </p>
-        </div>
-        <div className="connection">
-          <span className={health ? "dot online" : "dot"} />
-          {connecting
-            ? "正在连接"
-            : health
-              ? health.demo
-                ? "离线演示模式"
-                : "已连接 Otter"
-              : "后台未连接"}
         </div>
       </aside>
       <main ref={mainScroll}>
         <header className="topbar">
-          <span>
-            {tab === "reports"
-              ? "工作空间 / 简报"
-              : tab === "chat"
-                ? "Otter / 聊天"
-                : tab === "pet"
-                  ? "Otter / 陪伴互动"
-                  : tab === "awareness"
-                    ? "Otter / 应用感知"
-                    : tab === "assistant"
-                      ? "Otter / 生活助手"
-                      : tab === "projects"
-                        ? "Otter / 项目与进度"
-                        : tab === "handoff"
-                          ? "Otter / AI 交接"
-                          : tab === "memory"
-                            ? "Otter / 记忆与个性"
-                            : "工作空间 / 设置"}
-          </span>
+          {/* Only an unusual connection needs saying; a working one stays quiet. */}
+          {health && !health.demo ? (
+            <span />
+          ) : (
+            <span className="status-pill">
+              <span className={health ? "dot online" : "dot"} />
+              {connectionLabel}
+            </span>
+          )}
           <span>OTTER {version}</span>
         </header>
         <div className="content">
-          {error && (
-            <div role="alert" className="alert">
-              {error}
-              <button aria-label="关闭错误提示" onClick={() => setError("")}>
-                ×
-              </button>
-            </div>
-          )}
-          {tab === "projects" ? (
+          {alert}
+          {place === "projects" ? (
             health ? (
               <ProjectsPane key={prefs.config} focusId={projectFocus} />
             ) : (
               <p className="muted">正在连接项目数据…</p>
             )
-          ) : tab === "handoff" ? (
-            health ? (
-              <HandoffPane key={prefs.config} />
-            ) : (
-              <p className="muted">正在连接项目数据…</p>
-            )
-          ) : tab === "assistant" ? (
-            <AssistantPane />
-          ) : tab === "awareness" ? (
-            <AwarenessPane />
-          ) : tab === "pet" ? (
-            <PetInteractions />
-          ) : tab === "chat" ? (
+          ) : place === "chat" ? (
             <ChatPane
               key={prefs.config}
               health={health}
-              onSettings={() => setTab("settings")}
+              initialDraft={ask}
+              onDraftTaken={() => setAsk(null)}
+              onSettings={() => setSettings("model")}
               onProjects={(id) => {
                 setProjectFocus(id || null);
-                setTab("projects");
+                setPlace("projects");
               }}
               onEditMemory={(id) => {
                 setMemoryFocus(id);
-                setTab("memory");
+                setPlace("otter");
               }}
             />
-          ) : tab === "memory" ? (
-            <MemoryPane
-              key={prefs.config}
-              focus={memoryFocus}
-              onFocused={() => setMemoryFocus(null)}
-            />
-          ) : tab === "reports" ? (
+          ) : place === "otter" ? (
             <>
-              <div className="heading">
-                <div>
-                  <p className="eyebrow">一点回顾，一点从容</p>
-                  <h1>接着昨天，继续今天。</h1>
-                  <p className="muted">
-                    你的工作记录，已经有了一个安放的地方。
-                  </p>
-                </div>
-              </div>
-              {health?.demo && (
-                <div className="demo-note">
-                  <span>演示模式</span> 使用本地模拟模型，不读取工作数据、不产生
-                  API 费用。
-                  <button onClick={() => setTab("settings")}>
-                    连接我的 Otter →
-                  </button>
-                </div>
-              )}
-              <section className="generate-box" aria-label="生成简报">
-                <div className="generate-top">
-                  <div>
-                    <strong>整理一份简报</strong>
-                    <p>选择日期，回顾那一天的工作。</p>
-                  </div>
-                  <div className="generate-controls">
-                    <input
-                      aria-label="简报日期"
-                      type="date"
-                      value={date}
-                      onChange={(e) => setDate(e.target.value)}
-                      disabled={!health || busy}
-                    />
-                    <button
-                      className="primary"
-                      disabled={!health || busy || !date}
-                      onClick={generate}
-                    >
-                      {busy ? "正在整理…" : "生成简报"}
-                    </button>
-                  </div>
-                </div>
-                <label className="check">
-                  <input
-                    type="checkbox"
-                    checked={collect}
-                    disabled={!health || busy || health.demo}
-                    onChange={(e) => setCollect(e.target.checked)}
-                  />
-                  生成前采集已启用的数据源
-                  <span>
-                    {health && !health.demo
-                      ? `模型：${health.model || health.provider} · 生成将调用已配置的模型`
-                      : "仅演示已有流程"}
-                  </span>
-                </label>
-              </section>
-              {job && (
-                <div className={`job-status ${job.status}`} role="status">
-                  <span>
-                    {job.status === "finished"
-                      ? "✓"
-                      : job.status === "failed"
-                        ? "!"
-                        : "◌"}
-                  </span>
-                  <div>
-                    {job.message}
-                    <small>
-                      {job.date}
-                      {job.warnings?.length
-                        ? ` · ${job.warnings.join("；")}`
-                        : ""}
-                    </small>
-                  </div>
-                </div>
-              )}
-              <section className="archive">
-                <div className="section-title">
-                  <h2>简报档案</h2>
-                  <button
-                    disabled={!health || loading}
-                    onClick={() => refresh()}
-                  >
-                    刷新
-                  </button>
-                </div>
-                {reports.length === 0 ? (
-                  <div className="empty">
-                    <span className="empty-symbol">▤</span>
-                    <h3>
-                      {connecting
-                        ? "正在打开你的工作空间"
-                        : "第一份简报，从这里开始"}
-                    </h3>
-                    <p>
-                      {health
-                        ? "生成一份简报后，它会保存在这里。"
-                        : "请在偏好设置中检查连接。"}
-                    </p>
-                  </div>
-                ) : (
-                  <div className="report-grid">
-                    <div className="report-list" aria-label="历史简报">
-                      {reports.map((r) => (
-                        <button
-                          key={r.date}
-                          className={
-                            selected?.date === r.date ? "selected" : ""
-                          }
-                          onClick={() => loadReport(r.date)}
-                        >
-                          <strong>{r.date}</strong>
-                          <small>
-                            {r.llm_provider === "mock"
-                              ? "演示简报"
-                              : `${r.event_count} 条工作记录`}
-                          </small>
-                        </button>
-                      ))}
-                    </div>
-                    <article className="report-body" aria-busy={loading}>
-                      {loading ? (
-                        <p className="muted">正在打开简报…</p>
-                      ) : selected ? (
-                        <>
-                          <div className="report-meta">
-                            {selected.llm_provider === "mock"
-                              ? "离线演示"
-                              : selected.llm_model}{" "}
-                            · {selected.date}
-                          </div>
-                          <Markdown
-                            skipHtml
-                            components={{
-                              a: ({ href, children }) => (
-                                <a
-                                  href={href}
-                                  onClick={(e) => {
-                                    e.preventDefault();
-                                    if (href) void action("open-link", href);
-                                  }}
-                                >
-                                  {children}
-                                </a>
-                              ),
-                              img: () => null,
-                            }}
-                          >
-                            {selected.content_md || ""}
-                          </Markdown>
-                        </>
-                      ) : (
-                        <p>没有找到该日期的简报。</p>
-                      )}
-                    </article>
-                  </div>
-                )}
-              </section>
+              <PetInteractions />
+              <MemoryPane
+                key={prefs.config}
+                focus={memoryFocus}
+                onFocused={() => setMemoryFocus(null)}
+              />
+              <EvolutionWorkshop />
+              <DesktopTips />
             </>
           ) : (
-            <>
-              <div className="heading">
-                <p className="eyebrow">让陪伴刚刚好</p>
-                <h1>按你的节奏来。</h1>
-                <p className="muted">
-                  连接现有工作空间，选择你喜欢的相处方式。
-                </p>
-              </div>
-              <AmbientSettings />
-              <BodySettings />
-              <QuickAccessCard />
-              <ModelSettings
-                key={prefs.config}
-                connected={!!health}
-                blocked={!!busy || connecting || chatBusy}
-              />
-              <section className="settings-section">
-                <h2>工作空间</h2>
-                <p>
-                  选择现有的
-                  config.toml，再选择它对应的项目根目录。沿用原有数据库与密钥引用，不复制密钥。
-                </p>
-                <div className="path-label">当前配置</div>
-                <code className="config-path">
-                  {prefs.config || "正在读取…"}
-                </code>
-                <div className="button-row">
-                  <button
-                    className="primary"
-                    disabled={busy || connecting || prefs.envConfig}
-                    onClick={() => action("choose-config")}
-                  >
-                    选择现有配置
-                  </button>
-                  <button
-                    disabled={busy || connecting}
-                    onClick={() => action("reconnect")}
-                  >
-                    重新连接
-                  </button>
-                  <button
-                    disabled={busy || connecting || prefs.envConfig}
-                    onClick={() => action("use-demo")}
-                  >
-                    使用离线演示
-                  </button>
-                </div>
-                {prefs.envConfig && (
-                  <p>配置由启动环境变量指定，请调整启动参数后重启。</p>
-                )}
-              </section>
-              <section className="settings-section">
-                <div className="setting-row">
-                  <div>
-                    <h2>安静模式</h2>
-                    <p>关闭简报完成时的系统通知，仍显示任务状态。</p>
-                  </div>
-                  <input
-                    aria-label="安静模式"
-                    className="toggle"
-                    type="checkbox"
-                    checked={prefs.quiet}
-                    onChange={(e) => {
-                      const quiet = e.target.checked;
-                      setPrefs((previous) => ({ ...previous, quiet }));
-                      void api.action("quiet", quiet).catch((error) => {
-                        setPrefs((previous) => ({
-                          ...previous,
-                          quiet: !quiet,
-                        }));
-                        setError(message(error));
-                      });
-                    }}
-                  />
-                </div>
-              </section>
-              <section className="settings-section">
-                <h2>连接状态</h2>
-                <dl>
-                  <dt>模型</dt>
-                  <dd>
-                    {health
-                      ? `${health.provider}${health.model ? " / " + health.model : ""}`
-                      : "未连接"}
-                  </dd>
-                  <dt>时区</dt>
-                  <dd>{health?.timezone || "—"}</dd>
-                  <dt>启用的数据源</dt>
-                  <dd>{health?.collectors.join("、") || "无"}</dd>
-                </dl>
-                <p>
-                  关闭面板后，水獭仍驻留在菜单栏。退出应用会停止后台任务。当前版本提供宠物聊天和工作简报；提醒与语音在后续阶段接入。
-                </p>
-              </section>
-            </>
+            <TodayPane
+              health={health}
+              handoffPending={handoffPending}
+              report={{ card: reportCard, archive: reportArchive }}
+              onAsk={(text) => {
+                setAsk(text);
+                setPlace("chat");
+              }}
+              onOpenProject={(id) => {
+                setProjectFocus(id || null);
+                setPlace("projects");
+              }}
+              onOpenHandoff={() => setSettings("handoff")}
+            />
           )}
         </div>
       </main>
+      {settings && (
+        <SettingsSheet
+          section={settings}
+          alert={alert}
+          onClose={() => setSettings(null)}
+          sections={[
+            {
+              id: "general",
+              label: "通用",
+              content: (
+                <>
+                  <section className="settings-section">
+                    <div className="setting-row">
+                      <div>
+                        <h2>安静模式</h2>
+                        <p>简报完成时不弹系统通知。</p>
+                      </div>
+                      <input
+                        aria-label="安静模式"
+                        className="toggle"
+                        type="checkbox"
+                        checked={prefs.quiet}
+                        onChange={(e) => {
+                          const quiet = e.target.checked;
+                          setPrefs((previous) => ({ ...previous, quiet }));
+                          void api.action("quiet", quiet).catch((error) => {
+                            setPrefs((previous) => ({
+                              ...previous,
+                              quiet: !quiet,
+                            }));
+                            setError(message(error));
+                          });
+                        }}
+                      />
+                    </div>
+                  </section>
+                  <AmbientSettings />
+                  <QuickAccessCard />
+                </>
+              ),
+            },
+            {
+              id: "model",
+              label: "模型",
+              content: (
+                <>
+                  <ModelSettings
+                    key={prefs.config}
+                    connected={!!health}
+                    blocked={!!busy || connecting || chatBusy}
+                  />
+                  <section className="settings-section">
+                    <VoiceSettings />
+                  </section>
+                </>
+              ),
+            },
+            { id: "privacy", label: "隐私与感知", content: <AwarenessPane /> },
+            {
+              id: "handoff",
+              label: "AI 交接",
+              badge: handoffPending,
+              content: health ? (
+                <HandoffPane key={prefs.config} />
+              ) : (
+                <p className="muted">正在连接项目数据…</p>
+              ),
+            },
+            { id: "body", label: "实体水獭", content: <BodySettings /> },
+            {
+              id: "workspace",
+              label: "工作空间",
+              content: (
+                <>
+                  <section className="settings-section">
+                    <h2>配置文件</h2>
+                    <p>
+                      选一个现有的 config.toml
+                      和它的项目目录，沿用原来的数据库和密钥引用。
+                    </p>
+                    <code className="config-path">
+                      {prefs.config || "正在读取…"}
+                    </code>
+                    <div className="button-row">
+                      <button
+                        className="primary"
+                        disabled={busy || connecting || prefs.envConfig}
+                        onClick={() => action("choose-config")}
+                      >
+                        选择现有配置
+                      </button>
+                      <button
+                        disabled={busy || connecting}
+                        onClick={() => action("reconnect")}
+                      >
+                        重新连接
+                      </button>
+                      <button
+                        disabled={busy || connecting || prefs.envConfig}
+                        onClick={() => action("use-demo")}
+                      >
+                        使用离线演示
+                      </button>
+                    </div>
+                    {prefs.envConfig && (
+                      <p>配置由启动环境变量指定，请调整启动参数后重启。</p>
+                    )}
+                  </section>
+                  <section className="settings-section">
+                    <h2>连接状态</h2>
+                    <dl>
+                      <dt>模型</dt>
+                      <dd>
+                        {health
+                          ? `${health.provider}${health.model ? " / " + health.model : ""}`
+                          : "未连接"}
+                      </dd>
+                      <dt>时区</dt>
+                      <dd>{health?.timezone || "—"}</dd>
+                      <dt>启用的数据源</dt>
+                      <dd>{health?.collectors.join("、") || "无"}</dd>
+                    </dl>
+                    <p>关掉面板后，水獭还在菜单栏；退出应用会停掉后台任务。</p>
+                  </section>
+                </>
+              ),
+            },
+          ]}
+        />
+      )}
     </div>
   );
 }

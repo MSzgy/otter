@@ -4,6 +4,7 @@ import { ProjectCapture } from "./ProjectCapture";
 import { MemorySuggestions } from "./MemorySuggestions";
 import { VoiceControls } from "./VoiceControls";
 import { Otter } from "./Otter";
+import { Icon } from "./icons";
 import type {
   Health,
   ChatTurn,
@@ -34,11 +35,15 @@ export function ChatPane({
   onSettings,
   onEditMemory,
   onProjects,
+  initialDraft,
+  onDraftTaken,
 }: {
   health: Health | null;
   onSettings: () => void;
   onEditMemory: (id: string) => void;
   onProjects: (id?: string) => void;
+  initialDraft?: string | null;
+  onDraftTaken?: () => void;
 }) {
   const [sessions, setSessions] = useState<Session[]>([]);
   const [session, setSession] = useState("");
@@ -232,6 +237,20 @@ export function ChatPane({
   const active = turn?.status === "streaming";
   const busy = !!active || sending || planning || !!captureProject;
   const supported = health && ["mock", "openai"].includes(health.provider);
+  // Text handed over from 今天: put it in the box, then send it once chat is ready.
+  const handed = useRef(initialDraft || "");
+  const composer = useRef<HTMLFormElement>(null);
+  useEffect(() => {
+    if (!handed.current) return;
+    setDraft(handed.current);
+    onDraftTaken?.();
+  }, []);
+  useEffect(() => {
+    if (!handed.current || draft !== handed.current) return;
+    if (busy || !supported || !session || !tasksReady) return;
+    handed.current = "";
+    composer.current?.requestSubmit();
+  }, [draft, busy, supported, session, tasksReady]);
   function fail(e: unknown) {
     setError(
       e instanceof Error
@@ -464,57 +483,9 @@ export function ChatPane({
   }
   return (
     <section className="chat-pane" aria-label="与 Otter 聊天">
-      <div className="chat-header">
-        <div>
-          <h1>和 Otter 聊聊。</h1>
-          <p>
-            {health?.demo
-              ? "离线演示 · 配置模型后开启自由对话"
-              : `${health?.model || health?.provider || "未连接"} · 你的水獭伙伴`}
-          </p>
-        </div>
-        <button disabled={!health || busy} onClick={newChat}>
-          新对话
-        </button>
-      </div>
-      <div className="chat-project">
-        <label>
-          当前项目{" "}
-          <select
-            aria-label="关联项目"
-            value={boundProject?.id || ""}
-            disabled={busy || loading}
-            onChange={(e) => void bindProject(e.target.value)}
-          >
-            <option value="">未关联项目</option>
-            {projects
-              .filter((p) => !p.archived)
-              .map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name}
-                </option>
-              ))}
-          </select>
-        </label>
-        <button disabled={busy} onClick={() => onProjects(boundProject?.id)}>
-          管理项目
-        </button>
-        {boundProject && (
-          <button
-            disabled={busy || loading}
-            onClick={() => setCaptureProject(boundProject.id)}
-          >
-            保存本段进度
-          </button>
-        )}
-        {boundProject && (
-          <small>
-            聊天会引用这个项目最近确认的进度；切换关联会保留当前聊天历史。
-          </small>
-        )}
-      </div>
-      <div className="chat-session-row">
+      <div className="chat-bar">
         <select
+          className="chat-sessions"
           aria-label="聊天记录"
           value={session}
           disabled={busy || loading}
@@ -526,11 +497,63 @@ export function ChatPane({
             </option>
           ))}
         </select>
+        <label
+          className="chat-project-pick"
+          title="关联后，聊天会参考这个项目最近确认的进度"
+        >
+          <Icon name="projects" />
+          <select
+            aria-label="关联项目"
+            value={boundProject?.id || ""}
+            disabled={busy || loading}
+            onChange={(e) => void bindProject(e.target.value)}
+          >
+            <option value="">不关联项目</option>
+            {projects
+              .filter((p) => !p.archived)
+              .map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name}
+                </option>
+              ))}
+          </select>
+        </label>
+        {boundProject && (
+          <>
+            <button
+              className="chat-link"
+              disabled={busy || loading}
+              title="把这段聊天里的进展存成项目快照"
+              onClick={() => setCaptureProject(boundProject.id)}
+            >
+              保存进度
+            </button>
+            <button
+              className="chat-link"
+              disabled={busy}
+              onClick={() => onProjects(boundProject.id)}
+            >
+              看项目
+            </button>
+          </>
+        )}
+        <span className="chat-bar-gap" />
         <button
+          className="icon-button"
+          aria-label="删除对话"
+          title="删除对话"
           disabled={!session || busy || loading}
           onClick={() => setDeleting(!deleting)}
         >
-          删除对话
+          <Icon name="trash" />
+        </button>
+        <button
+          className="chat-new"
+          disabled={!health || busy}
+          onClick={newChat}
+        >
+          <Icon name="plus" />
+          新对话
         </button>
       </div>
       {deleting && (
@@ -589,20 +612,6 @@ export function ChatPane({
               <div className="chat-author">
                 {m.role === "user" ? "你" : "Otter 🦦"}
               </div>
-              {m.role === "assistant" &&
-                m.content &&
-                m.status !== "streaming" && (
-                  <button
-                    className="read-message"
-                    onClick={() =>
-                      void api
-                        .action("voice.speak", m.content.slice(0, 8000))
-                        .catch(fail)
-                    }
-                  >
-                    朗读
-                  </button>
-                )}
               {!!m.memory_refs?.length && (
                 <MemoryRefs refs={m.memory_refs} onEdit={onEditMemory} />
               )}
@@ -639,6 +648,20 @@ export function ChatPane({
                   </span>
                 )}
               </div>
+              {m.role === "assistant" &&
+                m.content &&
+                m.status !== "streaming" && (
+                  <button
+                    className="read-message"
+                    onClick={() =>
+                      void api
+                        .action("voice.speak", m.content.slice(0, 8000))
+                        .catch(fail)
+                    }
+                  >
+                    朗读
+                  </button>
+                )}
               {["cancelled", "interrupted", "error"].includes(m.status) && (
                 <small className="chat-message-state">
                   {m.error ||
@@ -779,47 +802,8 @@ export function ChatPane({
           </div>
         </section>
       )}
-      <VoiceControls
-        enabled={health?.provider === "openai" && !busy && !taskProposal}
-        onText={(text) =>
-          setDraft((current) =>
-            (current ? current + "\n" : "").concat(text).slice(0, 6000),
-          )
-        }
-      />
-      <div className="chat-context-actions">
-        <button
-          onClick={() =>
-            void api
-              .action("context.scene")
-              .catch((e) => setContextError(e.message))
-          }
-        >
-          附带当前场景
-        </button>
-        <label
-          className="memory-toggle"
-          title="说“记住：……”保存一条记忆；附件和网页内容不会自动成为记忆。"
-        >
-          <input
-            type="checkbox"
-            checked={useMemory}
-            onChange={(e) => setUseMemory(e.target.checked)}
-          />
-          本轮使用记忆
-        </label>
-        <label className="memory-toggle">
-          <input
-            type="checkbox"
-            checked={allowTasks}
-            disabled={busy || !!taskProposal || !tasksReady}
-            onChange={(e) => void configureTasks(e.target.checked)}
-          />
-          理解办事请求
-        </label>
-        <span>选中文字：⌘⇧E（可在设置中修改）</span>
-      </div>
-      <form className="chat-composer" onSubmit={send}>
+      {!!session && <MemorySuggestions key={session} sessionId={session} />}
+      <form className="chat-composer" ref={composer} onSubmit={send}>
         <textarea
           ref={textarea}
           aria-label="聊天输入"
@@ -839,8 +823,53 @@ export function ChatPane({
             }
           }}
         />
-        <div>
-          <span>Enter 发送 · Shift + Enter 换行</span>
+        <div className="composer-foot">
+          <div className="composer-tools">
+            <VoiceControls
+              enabled={health?.provider === "openai" && !busy && !taskProposal}
+              onText={(text) =>
+                setDraft((current) =>
+                  (current ? current + "\n" : "").concat(text).slice(0, 6000),
+                )
+              }
+            />
+            <button
+              type="button"
+              className="tool-chip"
+              title="附上你正在看的网页或窗口；选中文字后按 ⌘⇧E 也行"
+              onClick={() =>
+                void api
+                  .action("context.scene")
+                  .catch((e) => setContextError(e.message))
+              }
+            >
+              <Icon name="attach" />
+              附带当前场景
+            </button>
+            <label
+              className="tool-chip"
+              title="说“记住：……”保存一条记忆；附件和网页内容不会自动成为记忆。"
+            >
+              <input
+                type="checkbox"
+                checked={useMemory}
+                onChange={(e) => setUseMemory(e.target.checked)}
+              />
+              本轮使用记忆
+            </label>
+            <label
+              className="tool-chip"
+              title="让它听懂“提醒我…”“加个待办”这类请求，执行前先给你确认"
+            >
+              <input
+                type="checkbox"
+                checked={allowTasks}
+                disabled={busy || !!taskProposal || !tasksReady}
+                onChange={(e) => void configureTasks(e.target.checked)}
+              />
+              理解办事请求
+            </label>
+          </div>
           {planning ? (
             <button type="button" onClick={cancelTask}>
               停止理解
@@ -852,6 +881,7 @@ export function ChatPane({
           ) : (
             <button
               className="primary"
+              title="Enter 发送 · Shift + Enter 换行"
               disabled={
                 !supported ||
                 loading ||
@@ -867,10 +897,12 @@ export function ChatPane({
           )}
         </div>
       </form>
-      {!!session && <MemorySuggestions key={session} sessionId={session} />}
-      <p className="chat-privacy">
-        开启办事理解时，输入、近期无附件聊天、部分提醒和待办，以及项目和资料名称会交给当前模型理解；操作先确认，查询直接返回。附带网页或窗口内容时按普通聊天处理。记录保存在本机。发送时携带当前会话的近期内容和相关记忆，不自动读取工作记录。说“记住：……”保存记忆，“忘掉刚才那条”撤回。
-      </p>
+      <details className="chat-privacy">
+        <summary>聊天记录只存在这台 Mac 上</summary>
+        <p>
+          发送时会带上这段对话的近期内容和相关记忆，不会自动读取工作记录。开启“理解办事请求”时，你的输入、近期无附件的聊天、部分提醒和待办，以及项目和资料名称会交给当前模型理解；操作先确认，查询直接返回。附带网页或窗口内容时按普通聊天处理。说“记住：……”保存记忆，“忘掉刚才那条”撤回。
+        </p>
+      </details>
     </section>
   );
 }

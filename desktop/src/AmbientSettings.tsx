@@ -27,55 +27,63 @@ export function AmbientSettings() {
     }
   }
   return (
-    <section className="settings-section quick-access">
-      <h2>主动陪伴</h2>
-      <p>
-        根据编程场景、简报完成和专注结束，偶尔给你一句回应或一个动作。不调用模型，不主动说话。
-      </p>
-      <label className="check">
+    <section className="settings-section">
+      <div className="setting-row">
+        <div>
+          <h2>主动陪伴</h2>
+          <p>偶尔根据你在做的事回应一句或做个动作，不调用模型。</p>
+        </div>
         <input
           aria-label="开启主动陪伴"
           type="checkbox"
+          className="toggle"
           checked={config.enabled}
           onChange={(e) =>
             setConfig((c) => ({ ...c, enabled: e.target.checked }))
           }
         />
-        开启主动陪伴
+      </div>
+      <label className="setting-line">
+        <span>最短间隔</span>
+        <span className="unit-field">
+          <input
+            aria-label="陪伴间隔"
+            type="number"
+            min={1}
+            max={120}
+            value={config.cooldownMinutes}
+            onChange={(e) =>
+              setConfig((c) => ({
+                ...c,
+                cooldownMinutes: Number(e.target.value),
+              }))
+            }
+          />
+          分钟
+        </span>
       </label>
-      <label>
-        最短间隔（分钟）
-        <input
-          aria-label="陪伴间隔"
-          type="number"
-          min={1}
-          max={120}
-          value={config.cooldownMinutes}
-          onChange={(e) =>
-            setConfig((c) => ({
-              ...c,
-              cooldownMinutes: Number(e.target.value),
-            }))
-          }
-        />
+      <label className="setting-line">
+        <span>每天最多</span>
+        <span className="unit-field">
+          <input
+            aria-label="陪伴每日上限"
+            type="number"
+            min={1}
+            max={30}
+            value={config.dailyLimit}
+            onChange={(e) =>
+              setConfig((c) => ({ ...c, dailyLimit: Number(e.target.value) }))
+            }
+          />
+          次
+        </span>
       </label>
-      <label>
-        每日最多次数
-        <input
-          aria-label="陪伴每日上限"
-          type="number"
-          min={1}
-          max={30}
-          value={config.dailyLimit}
-          onChange={(e) =>
-            setConfig((c) => ({ ...c, dailyLimit: Number(e.target.value) }))
-          }
-        />
-      </label>
-      <button onClick={save}>保存陪伴设置</button>
-      <p>
-        安静模式、专注中、聊天回复中、手动动作中和水獭睡眠时不会触发。编程场景需要开启应用感知。
-      </p>
+      <div className="section-foot">
+        <button onClick={save}>保存陪伴设置</button>
+        <small>
+          安静模式、专注、聊天回复和水獭睡觉时不打扰；编程场景要先开应用感知。
+        </small>
+      </div>
       {message && <p role="status">{message}</p>}
     </section>
   );
