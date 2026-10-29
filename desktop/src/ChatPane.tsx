@@ -99,12 +99,17 @@ export function ChatPane({
     message: string;
     ok: boolean;
     warning: string;
+    undo?: { id: string; label: string };
   };
   const [allowTasks, setAllowTasks] = useState(true);
   const [tasksReady, setTasksReady] = useState(false);
   const [planning, setPlanning] = useState(false);
   const [taskProposal, setTaskProposal] = useState<TaskProposal | null>(null);
   const [taskNotice, setTaskNotice] = useState("");
+  // A setting changed from chat can be put back once, from this bar.
+  const [settingUndo, setSettingUndo] = useState<TaskResult["undo"] | null>(
+    null,
+  );
   const [taskFailed, setTaskFailed] = useState(false);
   const taskRequest = useRef<string | null>(null);
   const skipTask = useRef(false);
@@ -166,8 +171,25 @@ export function ChatPane({
     setDraft("");
     await choose(selected);
     setTaskNotice(result.warning ? `${result.message}\n${result.warning}` : "");
+    setSettingUndo(result.ok && result.undo ? result.undo : null);
     await refreshSessions();
     await refreshProject(selected);
+  }
+  async function undoSetting() {
+    if (sending) return;
+    setSending(true);
+    setError("");
+    try {
+      const result = await api.action<TaskResult>("tasks.undo-setting", {
+        sessionId: session,
+      });
+      await showTaskResult(result, session);
+    } catch (e) {
+      setSettingUndo(null);
+      fail(e);
+    } finally {
+      setSending(false);
+    }
   }
   async function confirmTask() {
     if (!taskProposal || sending) return;
@@ -282,6 +304,7 @@ export function ChatPane({
   async function choose(id: string) {
     cancelTask();
     setTaskNotice("");
+    setSettingUndo(null);
     setTaskFailed(false);
     setBoundProject(null);
     const generation = ++request.current;
@@ -364,6 +387,7 @@ export function ChatPane({
   async function send(e: React.FormEvent) {
     e.preventDefault();
     if (!draft.trim() || busy || !supported || !session || !tasksReady) return;
+    setSettingUndo(null);
     const bypass = skipTask.current;
     skipTask.current = false;
     if (taskProposal && !bypass) return;
@@ -690,6 +714,21 @@ export function ChatPane({
       {taskNotice && (
         <div className="alert" role="status">
           {taskNotice}
+        </div>
+      )}
+      {settingUndo && (
+        <div className="undo-bar">
+          刚把「{settingUndo.label}」改了，不满意可以
+          <button disabled={sending} onClick={undoSetting}>
+            撤销
+          </button>
+          <button
+            className="ghost"
+            aria-label="关闭撤销提示"
+            onClick={() => setSettingUndo(null)}
+          >
+            ×
+          </button>
         </div>
       )}
       {taskProposal && (

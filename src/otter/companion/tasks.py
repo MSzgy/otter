@@ -54,6 +54,16 @@ VS Code 是 com.microsoft.VSCode。
 {"kind":"project_open","project_id":"已有编号","link_id":"该项目已有链接编号"}。
 多个链接时依据用户明确给出的资料名称匹配；没有明确选择就 clarify，不默认全部打开。
 “记住”和“忘掉”属于记忆，返回 none。
+设置：tasks.settings 列出能在聊天里修改的设置（id、名称、类型、可选值或范围、当前值）。
+用户明确要求打开、关闭或改成某个值时返回 {"kind":"setting_change","id":"设置 id","value":新值}。
+switch 的 value 是 true/false；choice 只能取 options 里的 value；
+number 是范围内整数；text 是简短文字。
+问某项设置现在怎样返回 {"kind":"setting_query","id":"设置 id"}；
+问能改哪些设置返回 {"kind":"setting_query"}。
+“改回来/撤销刚才的设置”使用 recent_target 中 kind 为 setting 的 id 和 previous。
+每次只改一项。模型、密钥、工作空间、“允许 AI 工具连接”不在列表里，
+要求修改时 clarify 请用户到设置里手动改。
+只是抱怨或描述感受（如“通知好烦”）而没有明确要改时返回 clarify 问是否要改哪项设置。
 """
 
 
@@ -63,12 +73,45 @@ def clean_text(value, limit=200):
     return value.strip()
 
 
+def setting_value(setting, value):
+    """The value a setting will take, checked against what the app offered."""
+    kind = setting.get("type")
+    if kind == "switch" and isinstance(value, bool):
+        return value
+    if kind == "choice" and any(o.get("value") == value for o in setting.get("options", [])):
+        return value
+    if (
+        kind == "number"
+        and isinstance(value, int)
+        and not isinstance(value, bool)
+        and setting.get("min", 0) <= value <= setting.get("max", 0)
+    ):
+        return value
+    if kind == "text":
+        return clean_text(value, setting.get("max", 40))
+    raise ValueError("Invalid setting value")
+
+
 def normalize(result, text, state, now, timezone):
     if not isinstance(result, dict):
         raise ValueError("Invalid plan")
     kind = result.get("kind")
     if kind == "none":
         return {"kind": kind}
+    if kind in {"setting_change", "setting_query"}:
+        settings = {s["id"]: s for s in state.get("settings", []) if isinstance(s, dict)}
+        if kind == "setting_query" and result.get("id") in (None, ""):
+            return {"kind": kind}
+        setting = settings.get(result.get("id"))
+        if not setting:
+            raise ValueError("Unknown setting")
+        if kind == "setting_query":
+            return {"kind": kind, "id": setting["id"]}
+        return {
+            "kind": kind,
+            "id": setting["id"],
+            "value": setting_value(setting, result.get("value")),
+        }
     if kind == "clarify":
         return {"kind": kind, "message": clean_text(result.get("message"), 500)}
     if kind in {"project_resume", "project_capture", "project_todo", "project_open"}:
@@ -223,6 +266,12 @@ class TaskPlanner:
         try:
             return normalize(result, text, state, now, timezone)
         except (ValueError, TypeError, KeyError, OverflowError):
+            if isinstance(result, dict) and str(result.get("kind", "")).startswith("setting_"):
+                return {
+                    "kind": "clarify",
+                    "message": "这项设置不能在聊天里改，或者要改成的值不在可选范围内。"
+                    "可以说“打开安静模式”“换成夜里小窝主题”，模型和密钥请到设置里手动改。",
+                }
             return {
                 "kind": "clarify",
                 "message": "暂时无法确定有效的时间或操作目标。"

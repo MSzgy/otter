@@ -3507,3 +3507,25 @@ details.settings-section[open] > summary {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }
+/* After a setting changed from chat: one line to put it back. */
+.undo-bar {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 10px;
+  padding: 8px 10px 8px 16px;
+  border-radius: var(--r-md);
+  background: var(--clay-tint);
+  color: var(--clay-ink);
+  font-size: 12.5px;
+}
+.undo-bar button:first-of-type {
+  padding: 4px 12px;
+  font-size: 12px;
+  background: var(--surface);
+  color: var(--clay-ink);
+}
+.undo-bar .ghost {
+  margin-left: auto;
+}

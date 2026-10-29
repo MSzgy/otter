@@ -29,6 +29,7 @@ const {
   resolvedTheme,
   windowColor,
 } = require("./theme.cjs");
+const { SettingsRegistry } = require("./settings-registry.cjs");
 const actionGate = new ActionGate({
   resolveApp: (id) => nativeRead("resolve-app", id),
   execute: (proposal) =>
@@ -188,6 +189,175 @@ function applyAppearance() {
 function themeQuery() {
   return resolvedTheme(preferences.theme, nativeTheme.shouldUseDarkColors);
 }
+// What chat may change (see settings-registry.cjs). Each write is the settings
+// sheet's own action, sent as if from the panel.
+const asPanel = (name, value) =>
+  panelAction({ sender: panel.webContents }, name, value);
+const memorySettings = async () =>
+  (await backend.call("memory.get")).settings || {};
+const memoryWrite = (key) => async (value) => {
+  if (!backend || backend.closed || switching)
+    throw new Error("后台尚未就绪。");
+  await backend.call("memory.configure", {
+    ...(await memorySettings()),
+    [key]: value,
+  });
+};
+const ambientWrite = (key) => (value) =>
+  asPanel("ambient.configure", { ...ambient.snapshot().config, [key]: value });
+const evolutionWrite = (key) => (value) =>
+  asPanel("evolution.configure", {
+    ...evolution.snapshot().settings,
+    [key]: value,
+  });
+const chatSettings = new SettingsRegistry([
+  {
+    id: "quiet",
+    label: "安静模式",
+    type: "switch",
+    read: () => !!preferences.quiet,
+    write: (value) => asPanel("quiet", value),
+  },
+  {
+    id: "theme",
+    label: "主题",
+    type: "choice",
+    options: [
+      { value: "warm", label: "暖阳小窝" },
+      { value: "mint", label: "薄荷清晨" },
+      { value: "bay", label: "海湾蓝" },
+      { value: "night", label: "夜里小窝" },
+      { value: "system", label: "跟随系统" },
+    ],
+    read: () => normalizeTheme(preferences.theme),
+    write: (value) => asPanel("theme", value),
+  },
+  {
+    id: "ambient.enabled",
+    label: "主动陪伴",
+    type: "switch",
+    read: () => ambient.snapshot().config.enabled,
+    write: ambientWrite("enabled"),
+  },
+  {
+    id: "ambient.cooldownMinutes",
+    label: "主动陪伴的最短间隔",
+    type: "number",
+    min: 1,
+    max: 120,
+    unit: " 分钟",
+    read: () => ambient.snapshot().config.cooldownMinutes,
+    write: ambientWrite("cooldownMinutes"),
+  },
+  {
+    id: "ambient.dailyLimit",
+    label: "主动陪伴每天最多",
+    type: "number",
+    min: 1,
+    max: 30,
+    unit: " 次",
+    read: () => ambient.snapshot().config.dailyLimit,
+    write: ambientWrite("dailyLimit"),
+  },
+  {
+    id: "shortcuts.enabled",
+    label: "全局快捷键",
+    type: "switch",
+    read: () => !!shortcutStatus.enabled,
+    write: (enabled) =>
+      asPanel("shortcuts.save", {
+        enabled,
+        chat: shortcutStatus.chat,
+        selection: shortcutStatus.selection,
+      }),
+  },
+  {
+    id: "awareness.enabled",
+    label: "应用感知",
+    type: "switch",
+    read: () => awareness.snapshot().enabled,
+    write: (enabled) =>
+      asPanel("awareness.configure", {
+        enabled,
+        browserEnabled: enabled && awareness.snapshot().browserEnabled,
+      }),
+  },
+  {
+    id: "awareness.browserEnabled",
+    label: "浏览器标签页感知",
+    type: "switch",
+    read: () => awareness.snapshot().browserEnabled,
+    write: (browserEnabled) => {
+      const { enabled } = awareness.snapshot();
+      if (browserEnabled && !enabled) throw new Error("请先打开应用感知。");
+      return asPanel("awareness.configure", { enabled, browserEnabled });
+    },
+  },
+  {
+    id: "voice.autoSpeak",
+    label: "自动朗读新回复",
+    type: "switch",
+    read: () => preferences.voice?.autoSpeak === true,
+    write: (autoSpeak) =>
+      asPanel("voice.configure", {
+        model: preferences.voice?.model || "whisper-1",
+        autoSpeak,
+      }),
+  },
+  {
+    id: "body.enabled",
+    label: "连接实体水獭",
+    type: "switch",
+    read: () => preferences.body?.enabled === true,
+    write: (enabled) => asPanel("body.configure", { enabled }),
+  },
+  {
+    id: "evolution.enabled",
+    label: "任务进化",
+    type: "switch",
+    read: () => evolution.snapshot().settings.enabled,
+    write: evolutionWrite("enabled"),
+  },
+  {
+    id: "evolution.mode",
+    label: "工作形态偏好",
+    type: "choice",
+    options: [
+      { value: "auto", label: "自动" },
+      { value: "artisan", label: "工匠" },
+      { value: "deep", label: "深潜" },
+    ],
+    read: () => evolution.snapshot().settings.mode,
+    write: evolutionWrite("mode"),
+  },
+  {
+    id: "memory.enabled",
+    label: "长期记忆",
+    type: "switch",
+    read: async () => (await memorySettings()).enabled !== false,
+    write: memoryWrite("enabled"),
+  },
+  {
+    id: "memory.nickname",
+    label: "对你的称呼",
+    type: "text",
+    max: 40,
+    read: async () => (await memorySettings()).nickname || "",
+    write: memoryWrite("nickname"),
+  },
+  {
+    id: "memory.tone",
+    label: "说话风格",
+    type: "choice",
+    options: [
+      { value: "warm", label: "自然温柔" },
+      { value: "concise", label: "简洁直接" },
+      { value: "playful", label: "轻松活泼" },
+    ],
+    read: async () => (await memorySettings()).tone || "warm",
+    write: memoryWrite("tone"),
+  },
+]);
 function preferencesPublic() {
   return {
     quiet: !!preferences.quiet,
@@ -739,6 +909,11 @@ ipcMain.handle("otter:call", async (event, method, params) => {
 });
 ipcMain.handle("otter:action", async (event, name, value) => {
   guard(event);
+  return panelAction(event, name, value);
+});
+// Every renderer action. A setting changed from chat calls this with the panel
+// as sender, so it runs exactly what the settings sheet runs.
+async function panelAction(event, name, value) {
   if (name.startsWith("projects.")) {
     if (event.sender !== panel.webContents)
       throw new Error("请在主面板管理项目。");
@@ -819,6 +994,8 @@ ipcMain.handle("otter:action", async (event, name, value) => {
         throw error;
       }
     }
+    if (name === "tasks.undo-setting")
+      return taskAssistant.undoSetting(value || {});
     if (name === "tasks.confirm") {
       // Planner proposal IDs differ from the renderer's request ID. A cached
       // receipt for an older proposal must not complete a newer visual task.
@@ -1280,7 +1457,7 @@ ipcMain.handle("otter:action", async (event, name, value) => {
     return;
   }
   throw new Error("不支持的操作。");
-});
+}
 if (process.env.OTTER_DESKTOP_USER_DATA)
   app.setPath("userData", path.resolve(process.env.OTTER_DESKTOP_USER_DATA));
 if (!app.requestSingleInstanceLock()) app.quit();
@@ -1438,6 +1615,7 @@ else {
         record: (params) => backend.call("tasks.record", params),
         checkProject: (params) => backend.call("projects.check", params),
         scope: (session_id) => backend.call("projects.scope", { session_id }),
+        settings: chatSettings,
         projectAction: async (plan, request) => {
           if (plan.kind === "project_capture")
             return {

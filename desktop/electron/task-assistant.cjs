@@ -1,4 +1,5 @@
 const { randomUUID } = require("node:crypto");
+const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 
 class TaskAssistant {
   constructor({
@@ -9,6 +10,7 @@ class TaskAssistant {
     projectAction = null,
     checkProject = null,
     scope = null,
+    settings = null,
     timezone = () => "Asia/Shanghai",
     now = Date.now,
   }) {
@@ -20,6 +22,7 @@ class TaskAssistant {
       projectAction,
       checkProject,
       scope,
+      settings,
       timezone,
       now,
     });
@@ -28,6 +31,8 @@ class TaskAssistant {
     this.active = null;
     this.recent = new Map();
     this.receipts = new Map();
+    // The last setting changed in each session, so its card can offer 撤销.
+    this.lastSetting = new Map();
     this.executing = false;
   }
   get busy() {
@@ -53,6 +58,7 @@ class TaskAssistant {
     )
       this.invalidate();
     this.recent.delete(sessionId);
+    this.lastSetting.delete(sessionId);
   }
   date(value) {
     return (
@@ -112,7 +118,7 @@ class TaskAssistant {
         todos.length > todoRows.length,
     };
   }
-  async receipt(request, message, ok = true) {
+  async receipt(request, message, ok = true, extra = {}) {
     let warning = "";
     try {
       await this.record({
@@ -124,7 +130,7 @@ class TaskAssistant {
     } catch {
       warning = "本次结果未能写入聊天记录，请以生活助手列表为准。";
     }
-    return { kind: "result", message, ok, warning };
+    return { kind: "result", message, ok, warning, ...extra };
   }
   async plan({ text, sessionId, requestId }) {
     if (this.executing) throw new Error("正在执行上一项操作，请稍等。");
@@ -151,6 +157,8 @@ class TaskAssistant {
       const projectId = this.scope ? await this.scope(sessionId) : undefined;
       if (generation !== this.generation) return { kind: "cancelled" };
       const context = this.state(sessionId, projectId);
+      if (this.settings) context.settings = await this.settings.rows();
+      if (generation !== this.generation) return { kind: "cancelled" };
       let plan = await this.interpret({
         text: request.text,
         session_id: sessionId,
@@ -168,6 +176,20 @@ class TaskAssistant {
       if (plan.kind === "none") return { kind: "chat" };
       if (plan.kind === "clarify")
         return await this.receipt(request, `尚未执行操作。\n\n${plan.message}`);
+      if (plan.kind === "setting_query") {
+        if (!this.settings) throw new Error("设置尚未就绪。");
+        const rows = context.settings || [];
+        const row = plan.id && rows.find((r) => r.id === plan.id);
+        if (plan.id && !row) throw new Error("这项设置不能在聊天里查看。");
+        const line = (r) =>
+          `${r.label}：${this.settings.format(r.id, r.current)}`;
+        return await this.receipt(
+          request,
+          row
+            ? `${line(row)}。`
+            : `这些设置可以直接在聊天里改：\n\n${rows.map((r) => `• ${line(r)}`).join("\n\n")}\n\n模型、密钥和工作空间请到设置里手动改。`,
+        );
+      }
       if (["reminder_list", "todo_list"].includes(plan.kind)) {
         const snapshot = this.store.snapshot(),
           reminder = plan.kind === "reminder_list";
@@ -218,6 +240,7 @@ class TaskAssistant {
       let title,
         detail,
         target = null,
+        settingBefore,
         gateId;
       if (
         ["reminder_update", "reminder_cancel", "todo_complete"].includes(
@@ -264,6 +287,21 @@ class TaskAssistant {
           title = "确认完成待办";
           detail = target.title;
           break;
+        case "setting_change": {
+          if (!this.settings) throw new Error("设置尚未就绪。");
+          const value = this.settings.validate(plan.id, plan.value);
+          const { label } = this.settings.get(plan.id);
+          settingBefore = await this.settings.read(plan.id);
+          if (same(settingBefore, value))
+            return await this.receipt(
+              request,
+              `${label}已经是${this.settings.format(plan.id, value)}，不用改。`,
+            );
+          plan = { ...plan, value };
+          title = "确认更改设置";
+          detail = `${label}：${this.settings.format(plan.id, settingBefore)} → ${this.settings.format(plan.id, value)}`;
+          break;
+        }
         case "open_app":
         case "open_url": {
           const action = await this.gate.prepare(plan);
@@ -283,6 +321,7 @@ class TaskAssistant {
         ...request,
         plan,
         target,
+        settingBefore,
         gateId,
         title,
         detail,
@@ -310,6 +349,7 @@ class TaskAssistant {
     this.pending = null;
     this.executing = true;
     let message,
+      undo,
       ok = true;
     try {
       if (request.expiresAt < this.now())
@@ -365,6 +405,25 @@ class TaskAssistant {
           item = this.store.completeTodo(p.id);
           message = `已完成待办：${item.title}`;
           break;
+        case "setting_change": {
+          const { label } = this.settings.get(p.id);
+          if (!same(await this.settings.read(p.id), request.settingBefore))
+            throw new Error(`${label}刚刚被改过，请重新说一次。`);
+          const after = await this.settings.write(p.id, p.value);
+          message = `已把${label}改为${this.settings.format(p.id, after)}。`;
+          undo = { id: p.id, label };
+          this.lastSetting.set(sessionId, {
+            id: p.id,
+            before: request.settingBefore,
+            after,
+          });
+          this.recent.set(sessionId, {
+            id: p.id,
+            kind: "setting",
+            previous: request.settingBefore,
+          });
+          break;
+        }
         case "open_app":
         case "open_url":
           message =
@@ -387,11 +446,42 @@ class TaskAssistant {
     }
     if (request.gateId) this.gate.cancel(request.gateId);
     try {
-      const result = await this.receipt(request, message, ok);
+      const result = await this.receipt(
+        request,
+        message,
+        ok,
+        ok && undo ? { undo } : {},
+      );
       this.receipts.set(id, { sessionId, result });
       if (this.receipts.size > 100)
         this.receipts.delete(this.receipts.keys().next().value);
       return result;
+    } finally {
+      this.executing = false;
+    }
+  }
+  // 撤销 on a settings card: put the last chat change back, unless the setting
+  // has moved on since (then nothing is changed).
+  async undoSetting({ sessionId }) {
+    if (this.executing) throw new Error("操作正在执行，请稍等。");
+    const last = this.lastSetting.get(sessionId);
+    if (!last || !this.settings) throw new Error("没有可以撤销的设置。");
+    this.executing = true;
+    try {
+      const { label } = this.settings.get(last.id);
+      if (!same(await this.settings.read(last.id), last.after))
+        throw new Error(`${label}之后又被改过，没有撤销。`);
+      const value = await this.settings.write(last.id, last.before);
+      this.lastSetting.delete(sessionId);
+      this.recent.set(sessionId, {
+        id: last.id,
+        kind: "setting",
+        previous: last.after,
+      });
+      return await this.receipt(
+        { id: randomUUID(), sessionId, text: "撤销刚才的设置" },
+        `已撤销：${label}改回${this.settings.format(last.id, value)}。`,
+      );
     } finally {
       this.executing = false;
     }

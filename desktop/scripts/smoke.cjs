@@ -117,6 +117,12 @@ const { execFileSync } = require("node:child_process");
           plan = { kind: "todo_list", status: "done" };
         } else if (request === "帮我提醒一下") {
           plan = { kind: "clarify", message: "请告诉我提醒的具体时间和内容。" };
+        } else if (request === "换成夜里小窝主题") {
+          plan = { kind: "setting_change", id: "theme", value: "night" };
+        } else if (request === "安静模式现在开着吗") {
+          plan = { kind: "setting_query", id: "quiet" };
+        } else if (request === "把模型密钥改成 abc") {
+          plan = { kind: "setting_change", id: "models.api_key", value: "abc" };
         } else if (request === "打开计算器") {
           plan = { kind: "open_app", target: "com.apple.calculator" };
         } else if (request.startsWith("打开这个网页 http://127.0.0.1:")) {
@@ -1019,6 +1025,8 @@ const { execFileSync } = require("node:child_process");
       name: "聊天输入",
       exact: true,
     });
+    const themeOf = (page) =>
+      page.evaluate(() => document.documentElement.dataset.theme);
     const taskSend = async (text) => {
       await taskInput.fill(text);
       await panel.getByRole("button", { name: "发送", exact: true }).click();
@@ -1083,6 +1091,53 @@ const { execFileSync } = require("node:child_process");
     assert.equal(
       await panel.getByRole("region", { name: "办事确认" }).count(),
       0,
+    );
+    // Settings from chat: the planner sees what may change and nothing else;
+    // a change waits for the card, takes effect app-wide and can be undone.
+    await taskSend("换成夜里小窝主题");
+    const settingCard = panel.getByRole("region", { name: "办事确认" });
+    await settingCard.getByText("主题：暖阳小窝 → 夜里小窝").waitFor();
+    const offered = taskRequests.at(-1).tasks.settings;
+    assert.equal(offered.find((r) => r.id === "theme").current, "warm");
+    assert(offered.some((r) => r.id === "memory.tone"));
+    assert(
+      !offered.some((r) => /^(models|handoff|workspace)/.test(r.id)),
+      "Model, handoff and workspace are never offered",
+    );
+    assert.equal(await themeOf(panel), "warm", "Nothing changes before 确认");
+    await settingCard
+      .getByRole("button", { name: "确认执行", exact: true })
+      .click();
+    await panel.getByText("已把主题改为夜里小窝。", { exact: true }).waitFor();
+    await panel.waitForFunction(
+      () => document.documentElement.dataset.theme === "night",
+    );
+    await pet.waitForFunction(
+      () => document.documentElement.dataset.theme === "night",
+    );
+    await panel.screenshot({
+      path: path.join(output, "otter-setting-from-chat.png"),
+    });
+    await panel.getByRole("button", { name: "撤销", exact: true }).click();
+    await panel
+      .getByText("已撤销：主题改回暖阳小窝。", { exact: true })
+      .waitFor();
+    await panel.waitForFunction(
+      () => document.documentElement.dataset.theme === "warm",
+    );
+    assert.equal(
+      JSON.parse(fs.readFileSync(path.join(userData, "desktop.json"), "utf8"))
+        .theme,
+      "warm",
+    );
+    await taskSend("安静模式现在开着吗");
+    await panel.getByText(/^安静模式：(开|关)。$/).waitFor();
+    await taskSend("把模型密钥改成 abc");
+    await panel.getByText(/模型和密钥请到设置里手动改/).waitFor();
+    assert.equal(
+      await panel.getByRole("region", { name: "办事确认" }).count(),
+      0,
+      "No card for a setting chat may not change",
     );
     if (process.env.OTTER_TEST_TASK_ACTIONS === "1") {
       const calculatorAlreadyRunning = (await nativeRead("apps")).apps.some(
@@ -1196,7 +1251,7 @@ const { execFileSync } = require("node:child_process");
       }),
     );
     console.log(
-      "PASS: conversational reminders, edits, queries, cancellation, todos, app preview, malformed model output, stopped analysis and IPC guards.",
+      "PASS: conversational reminders, edits, queries, cancellation, todos, app preview, settings changed and undone from chat, malformed model output, stopped analysis and IPC guards.",
     );
     await panel
       .getByRole("checkbox", { name: "理解办事请求", exact: true })
@@ -1412,8 +1467,6 @@ const { execFileSync } = require("node:child_process");
     console.log("PASS: 今天's ask bar opens chat and sends the text.");
     // Themes: the panel picks one, both windows re-colour, macOS follows, and
     // the choice survives a reload; the pet window cannot change it.
-    const themeOf = (page) =>
-      page.evaluate(() => document.documentElement.dataset.theme);
     const appearance = () =>
       app.evaluate(({ nativeTheme, BrowserWindow }) => ({
         source: nativeTheme.themeSource,

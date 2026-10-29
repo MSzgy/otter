@@ -175,3 +175,76 @@ def test_runtime_planner_omits_attached_turns_and_private_sources(tmp_path):
         assert "喝水" in contents
     finally:
         runtime.close()
+
+
+SETTINGS = [
+    {"id": "quiet", "label": "安静模式", "type": "switch", "current": False},
+    {
+        "id": "theme",
+        "label": "主题",
+        "type": "choice",
+        "options": [
+            {"value": "warm", "label": "暖阳小窝"},
+            {"value": "night", "label": "夜里小窝"},
+        ],
+        "current": "warm",
+    },
+    {"id": "ambient.dailyLimit", "label": "陪伴每天最多", "type": "number", "min": 1, "max": 30},
+    {"id": "memory.nickname", "label": "称呼", "type": "text", "max": 40},
+]
+
+
+def snorm(plan):
+    return normalize(plan, "改设置", {**STATE, "settings": SETTINGS}, NOW, "Asia/Shanghai")
+
+
+def test_setting_changes_take_only_offered_settings_and_values():
+    assert snorm({"kind": "setting_change", "id": "quiet", "value": True}) == {
+        "kind": "setting_change",
+        "id": "quiet",
+        "value": True,
+    }
+    assert snorm({"kind": "setting_change", "id": "theme", "value": "night"})["value"] == "night"
+    assert snorm({"kind": "setting_change", "id": "ambient.dailyLimit", "value": 8})["value"] == 8
+    assert snorm({"kind": "setting_change", "id": "memory.nickname", "value": " 小杨 "})[
+        "value"
+    ] == ("小杨")
+    assert snorm({"kind": "setting_query"}) == {"kind": "setting_query"}
+    assert snorm({"kind": "setting_query", "id": "theme"}) == {
+        "kind": "setting_query",
+        "id": "theme",
+    }
+
+
+@pytest.mark.parametrize(
+    "plan",
+    [
+        {"kind": "setting_change", "id": "models.base_url", "value": "http://evil"},
+        {"kind": "setting_change", "id": "handoff.enabled", "value": True},
+        {"kind": "setting_change", "id": "quiet", "value": "true"},
+        {"kind": "setting_change", "id": "quiet", "value": 1},
+        {"kind": "setting_change", "id": "theme", "value": "neon"},
+        {"kind": "setting_change", "id": "ambient.dailyLimit", "value": 31},
+        {"kind": "setting_change", "id": "ambient.dailyLimit", "value": True},
+        {"kind": "setting_change", "id": "ambient.dailyLimit", "value": 2.5},
+        {"kind": "setting_change", "id": "memory.nickname", "value": "x" * 41},
+        {"kind": "setting_query", "id": "models.api_key"},
+    ],
+)
+def test_setting_changes_outside_the_list_or_range_are_rejected(plan):
+    with pytest.raises(ValueError):
+        snorm(plan)
+
+
+def test_rejected_setting_change_asks_instead_of_guessing():
+    async def stream(config, messages, resolver):
+        yield json.dumps({"kind": "setting_change", "id": "models.api_key", "value": "x"})
+
+    llm = LLMCfg(provider="openai", providers={"openai": {"model": "fixture"}})
+    result = asyncio.run(
+        TaskPlanner(stream, None).plan(
+            llm, "把密钥改成 x", {**STATE, "settings": SETTINGS}, [], NOW, "Asia/Shanghai"
+        )
+    )
+    assert result["kind"] == "clarify"
+    assert "设置里手动改" in result["message"]
