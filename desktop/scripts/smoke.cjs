@@ -216,6 +216,42 @@ const { execFileSync } = require("node:child_process");
       const lastUser =
         [...(body.messages || [])].reverse().find((m) => m.role === "user")
           ?.content || "";
+      if (body.stream && lastUser.startsWith("用 skill 写俳句")) {
+        res.setHeader("Content-Type", "text/event-stream");
+        const result = body.messages.find((m) => m.role === "tool");
+        const chunk = result
+          ? {
+              choices: [
+                {
+                  delta: {
+                    content: `照着 skill：${result.content.includes("第三行写水獭") ? "已读" : "没读到"}`,
+                  },
+                  finish_reason: "stop",
+                },
+              ],
+            }
+          : {
+              choices: [
+                {
+                  delta: {
+                    tool_calls: [
+                      {
+                        index: 0,
+                        id: "call_skill",
+                        function: {
+                          name: "use_skill",
+                          arguments: JSON.stringify({ name: "otter-haiku" }),
+                        },
+                      },
+                    ],
+                  },
+                  finish_reason: "tool_calls",
+                },
+              ],
+            };
+        res.end(`data: ${JSON.stringify(chunk)}\n\ndata: [DONE]\n\n`);
+        return;
+      }
       if (body.stream && lastUser.startsWith("用笔记工具记下")) {
         // Ask the MCP server's add_note, then report what came back.
         res.setHeader("Content-Type", "text/event-stream");
@@ -1010,8 +1046,48 @@ const { execFileSync } = require("node:child_process");
     await panel.getByText("还没有接上 MCP 服务。").waitFor();
     await panel.keyboard.press("Escape");
     fs.rmSync(notesFile, { force: true });
+    // Skills: a folder with SKILL.md shows up after 重新扫描; the model reads
+    // it through use_skill without a card; switched off, it is not offered.
+    const skillDir = path.join(userData, "skills", "otter-haiku");
+    fs.mkdirSync(skillDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(skillDir, "SKILL.md"),
+      "---\nname: otter-haiku\ndescription: 用户想要一首俳句时用\n---\n第一行写季节，第三行写水獭。\n",
+    );
+    await openTools();
+    await panel.getByRole("button", { name: "重新扫描", exact: true }).click();
+    const skillSwitch = panel.getByRole("checkbox", {
+      name: "启用 skill otter-haiku",
+      exact: true,
+    });
+    await skillSwitch.waitFor();
+    await panel.keyboard.press("Escape");
+    await chatSay("用 skill 写俳句");
+    const offeredSkill = requests
+      .filter((r) => r.body.stream && r.body.tools)
+      .at(-2)
+      .body.tools.find((t) => t.function.name === "use_skill");
+    assert.deepEqual(offeredSkill.function.parameters.properties.name.enum, [
+      "otter-haiku",
+    ]);
+    await panel.getByText("照着 skill：已读", { exact: true }).waitFor();
+    await panel
+      .locator(".chat-message.assistant")
+      .last()
+      .getByText("✓ 读 skill")
+      .waitFor();
+    await openTools();
+    await skillSwitch.uncheck();
+    await panel.keyboard.press("Escape");
+    await chatSay("随便聊聊");
+    assert(
+      !requests
+        .at(-1)
+        .body.tools.some((t) => t.function.name.includes("skill")),
+      "A switched-off skill is not offered",
+    );
     console.log(
-      "PASS: MCP server added from settings: preview first, its tools offered, a writing call waits for the card, 允许一次 runs it, 拒绝 does not, 不用再问 skips the card, disable and remove.",
+      "PASS: MCP server added from settings: preview first, its tools offered, a writing call waits for the card, 允许一次 runs it, 拒绝 does not, 不用再问 skips the card, disable and remove; a skill found by 重新扫描, read through use_skill, and not offered once off.",
     );
     await panel.getByRole("button", { name: "新对话", exact: true }).click();
     await panel

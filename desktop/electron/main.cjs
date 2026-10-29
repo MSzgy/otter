@@ -32,6 +32,7 @@ const {
 const { SettingsRegistry } = require("./settings-registry.cjs");
 const { ToolHost } = require("./tool-host.cjs");
 const { Extensions } = require("./extensions.cjs");
+const { SkillLibrary } = require("./skills.cjs");
 const actionGate = new ActionGate({
   resolveApp: (id) => nativeRead("resolve-app", id),
   execute: (proposal) =>
@@ -466,6 +467,8 @@ const toolHost = new ToolHost({
 });
 // MCP servers the user added; their tools join the host once running.
 let extensions;
+// Skill folders in <userData>/skills; the model loads them with use_skill.
+let skills;
 const toolsEnabled = () =>
   extensions ? extensions.enabled : preferences.extensions?.tools !== false;
 function preferencesPublic() {
@@ -1066,6 +1069,7 @@ async function panelAction(event, name, value) {
       return {
         ...extensions.snapshot(),
         builtins: builtinTools.list().map((t) => t.label),
+        skills: skills?.snapshot() || null,
       };
     if (name === "extensions.configure")
       return extensions.setTools(value?.tools);
@@ -1077,6 +1081,28 @@ async function panelAction(event, name, value) {
     if (name === "extensions.allow")
       return extensions.setAllow(value?.id, value?.tool, value?.allow);
     throw new Error("不支持的工具设置。");
+  }
+  if (name.startsWith("skills.")) {
+    if (event.sender !== panel.webContents)
+      throw new Error("请在设置里管理 skill。");
+    if (!skills) throw new Error("Skill 尚未就绪。");
+    if (name === "skills.rescan") return skills.scan();
+    if (name === "skills.toggle")
+      return skills.setEnabled(value?.name, value?.enabled);
+    if (name === "skills.open") {
+      fs.mkdirSync(skills.dir, { recursive: true });
+      await shell.openPath(skills.dir);
+      return skills.snapshot();
+    }
+    if (name === "skills.import") {
+      const picked = await dialog.showOpenDialog(panel, {
+        title: "选择一个 skill 文件夹（里面有 SKILL.md）",
+        properties: ["openDirectory"],
+      });
+      if (picked.canceled) return skills.snapshot();
+      return skills.import(picked.filePaths[0]);
+    }
+    throw new Error("不支持的 skill 操作。");
   }
   if (name.startsWith("projects.")) {
     if (event.sender !== panel.webContents)
@@ -1652,6 +1678,25 @@ else {
     });
     toolHost.addSource(extensions.source());
     extensions.init();
+    skills = new SkillLibrary({
+      dir: path.join(app.getPath("userData"), "skills"),
+      load: () => preferences.skills,
+      save: (value) => {
+        preferences.skills = value;
+        save();
+      },
+      onChange: (data) => {
+        if (panel && !panel.isDestroyed())
+          panel.webContents.send("otter:event", {
+            type: "skills.changed",
+            data,
+          });
+      },
+    });
+    try {
+      skills.scan();
+    } catch {}
+    toolHost.addSource(skills.source());
     appContentReader = new AppContentReader(
       app.isPackaged
         ? path.join(process.resourcesPath, "native/otter-app-content")
