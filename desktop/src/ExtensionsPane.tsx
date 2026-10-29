@@ -319,7 +319,7 @@ export function ExtensionsPane() {
           </p>
           {!state.skills.items.length && (
             <p className="card-empty">
-              还没有 skill。把 skill 文件夹放进 skill 文件夹，或者导入一个。
+              还没有 skill。把 skill 放进 skill 文件夹，或者导入一个。
             </p>
           )}
           {state.skills.items.map((k) => (

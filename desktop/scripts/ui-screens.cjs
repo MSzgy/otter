@@ -158,6 +158,7 @@ const PLACES = [
 const SETTINGS = [
   ["general", "通用"],
   ["model", "模型"],
+  ["tools", "工具与扩展"],
   ["privacy", "隐私与感知"],
   ["handoff", "AI 交接"],
   ["body", "实体水獭"],
