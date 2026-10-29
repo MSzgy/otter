@@ -1,7 +1,8 @@
 // Screenshots every section of the panel for design review. Uses isolated local
 // mock data (no model, no device) like the smoke tests; writes PNGs to
 // OTTER_UI_OUTPUT (default /tmp/otter-ui). Build first: npm run build.
-// Pass place names to shoot only those, or "states" for in-progress screens.
+// Pass place names to shoot only those, or "states" for in-progress screens;
+// OTTER_UI_THEME picks a theme, OTTER_UI_SIZE a window size.
 const { _electron: electron } = require("playwright");
 const http = require("node:http");
 const fs = require("node:fs"),
@@ -290,6 +291,12 @@ const SETTINGS = [
         nickname: "小杨",
       });
     });
+    // OTTER_UI_THEME=night (or mint, bay, system) shoots that theme.
+    if (process.env.OTTER_UI_THEME)
+      await panel.evaluate(
+        (theme) => window.otter.action("theme", theme),
+        process.env.OTTER_UI_THEME,
+      );
     await panel.reload();
     await panel.waitForFunction(
       async () => !!(await window.otter.action("snapshot")).health,

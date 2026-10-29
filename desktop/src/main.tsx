@@ -21,6 +21,7 @@ import { HandoffPane } from "./HandoffPane";
 import { ModelSettings } from "./ModelSettings";
 import { VoiceSettings } from "./VoiceControls";
 import { SettingsSheet, type SettingsSection } from "./SettingsSheet";
+import { ThemePicker, applyTheme, isTheme, useTheme } from "./ThemePicker";
 const api = window.otter;
 function message(error: unknown) {
   return error instanceof Error
@@ -43,6 +44,7 @@ function useRuntime() {
   });
   const [error, setError] = useState("");
   const [connecting, setConnecting] = useState(true);
+  useTheme(prefs.theme);
   useEffect(() => {
     let active = true;
     let revision = 0;
@@ -647,6 +649,20 @@ function Panel() {
               label: "通用",
               content: (
                 <>
+                  <ThemePicker
+                    value={isTheme(prefs.theme) ? prefs.theme : "warm"}
+                    onChange={(theme) => {
+                      const before = prefs.theme;
+                      setPrefs((previous) => ({ ...previous, theme }));
+                      void api.action("theme", theme).catch((error) => {
+                        setPrefs((previous) => ({
+                          ...previous,
+                          theme: before,
+                        }));
+                        setError(message(error));
+                      });
+                    }}
+                  />
                   <section className="settings-section">
                     <div className="setting-row">
                       <div>
@@ -769,7 +785,11 @@ function Panel() {
     </div>
   );
 }
-const view = new URLSearchParams(location.search).get("view");
+const query = new URLSearchParams(location.search);
+const view = query.get("view");
+// The main process passes the theme in the URL, so the first paint is already
+// in the right colours; the setting takes over once the snapshot arrives.
+applyTheme(query.get("theme"));
 document.documentElement.dataset.view = view === "pet" ? "pet" : "panel";
 document.body.className = view === "pet" ? "pet-mode" : "panel-mode";
 createRoot(document.getElementById("root")!).render(

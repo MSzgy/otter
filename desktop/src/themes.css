@@ -1,0 +1,154 @@
+/* Themes only re-colour the tokens defined in style.css's :root; layout and
+   shapes stay the same. 暖阳小窝 is the default and has no block here. The
+   panel picks one with <html data-theme>; "follow the system" resolves to
+   暖阳小窝 or 夜里小窝 in the renderer. */
+
+/* 薄荷清晨: cool mint morning, green accent. */
+:root[data-theme="mint"] {
+  --ink: #1f2d27;
+  --ink-2: #55665e;
+  --ink-3: #84958c;
+  --ink-4: #b4c4bb;
+  --surface-1: #f7fcf9;
+  --tint-1: #ebf5ef;
+  --tint-2: #dfeee6;
+  --tint-3: #cde2d6;
+  --line: #e1efe7;
+  --line-2: #cfe2d7;
+  --cream: #eff7f2;
+  --clay: #2f9e78;
+  --clay-2: #4fbf95;
+  --clay-ink: #1d6e52;
+  --clay-tint: #d8f1e6;
+  --clay-tint-2: #c3e9d7;
+  --ink-hover: #33463d;
+  --wash: rgba(235, 245, 239, 0.65);
+  --bubble: rgba(250, 255, 252, 0.96);
+  --scrim: rgba(20, 50, 35, 0.2);
+  --scroll-thumb: rgba(132, 149, 140, 0.35);
+  --pebble: #dcebe2;
+  --pebble-2: #cfe2d7;
+  --pool-1: rgba(190, 235, 212, 0.95);
+  --pool-2: rgba(205, 228, 250, 0.7);
+  --pool-3: rgba(255, 240, 200, 0.6);
+  --ring: rgba(79, 191, 149, 0.35);
+  --ring-soft: rgba(79, 191, 149, 0.18);
+  --outline: rgba(47, 158, 120, 0.45);
+  --accent-glow: rgba(47, 158, 120, 0.8);
+  --shade: 30, 80, 60;
+  --focus-a: #e0f4ea;
+  --focus-b: #bfe7d3;
+  --focus-ink: #1d6e52;
+  --focus-face: #e6f6ee;
+  --focus-face-on: #f2fbf6;
+  --hero-a: #effaf4;
+  --hero-b: #cdeedd;
+}
+
+/* 海湾蓝: the otter's bay, a quiet blue. */
+:root[data-theme="bay"] {
+  --ink: #1d2a3a;
+  --ink-2: #56657a;
+  --ink-3: #8595aa;
+  --ink-4: #b7c3d3;
+  --surface-1: #f7faff;
+  --tint-1: #eaf1f9;
+  --tint-2: #dde7f4;
+  --tint-3: #ccd9ea;
+  --line: #e2eaf4;
+  --line-2: #d0dceb;
+  --cream: #edf3fa;
+  --clay: #3a7bd5;
+  --clay-2: #5f97e3;
+  --clay-ink: #245aa6;
+  --clay-tint: #dce9fa;
+  --clay-tint-2: #c8dcf6;
+  --ink-hover: #2c3d52;
+  --wash: rgba(234, 241, 249, 0.65);
+  --bubble: rgba(250, 252, 255, 0.96);
+  --scrim: rgba(20, 35, 60, 0.22);
+  --scroll-thumb: rgba(133, 149, 170, 0.35);
+  --pebble: #dfe8f3;
+  --pebble-2: #d0dceb;
+  --pool-1: rgba(190, 214, 250, 0.95);
+  --pool-2: rgba(200, 238, 230, 0.7);
+  --pool-3: rgba(255, 232, 205, 0.55);
+  --ring: rgba(95, 151, 227, 0.35);
+  --ring-soft: rgba(95, 151, 227, 0.18);
+  --outline: rgba(58, 123, 213, 0.45);
+  --accent-glow: rgba(58, 123, 213, 0.8);
+  --shade: 25, 50, 90;
+  --focus-a: #e3eefc;
+  --focus-b: #c3d8f6;
+  --focus-ink: #245aa6;
+  --focus-face: #e9f1fd;
+  --focus-face-on: #f4f8fe;
+  --hero-a: #eef5fe;
+  --hero-b: #d2e2f8;
+}
+
+/* 夜里小窝: the warm room after dark. Light ink on dark surfaces, so text on
+   the ink button and on the accent turns dark. */
+:root[data-theme="night"] {
+  color-scheme: dark;
+  --ink: #f4ebe2;
+  --ink-2: #cdbdb0;
+  --ink-3: #9a8a7e;
+  --ink-4: #6d5f55;
+  --surface: #2f2621;
+  --surface-1: #292019;
+  --tint-1: #382d26;
+  --tint-2: #42362e;
+  --tint-3: #4e4037;
+  --line: #3b3029;
+  --line-2: #4b3e35;
+  --cream: #1d1713;
+  --clay: #f08a50;
+  --clay-2: #f39a5d;
+  --clay-ink: #ffb78a;
+  --clay-tint: #4a3226;
+  --clay-tint-2: #5a3c2c;
+  --ok: #4cc08f;
+  --danger: #ff7a5f;
+  --danger-tint: #4a2722;
+  --card: rgba(47, 38, 33, 0.82);
+  --on-ink: #1d1713;
+  --on-accent: #1d1713;
+  --ink-hover: #e0d4c8;
+  --knob: #f4ebe2;
+  --glass-soft: rgba(255, 255, 255, 0.05);
+  --glass: rgba(255, 255, 255, 0.07);
+  --glass-strong: rgba(255, 255, 255, 0.1);
+  --wash: rgba(255, 255, 255, 0.04);
+  --bubble: rgba(47, 38, 33, 0.96);
+  --scrim: rgba(0, 0, 0, 0.45);
+  --scroll-thumb: rgba(205, 189, 176, 0.25);
+  --pebble: #3a2f28;
+  --pebble-2: #463930;
+  --pool-1: rgba(240, 138, 80, 0.16);
+  --pool-2: rgba(70, 140, 120, 0.13);
+  --pool-3: rgba(255, 200, 120, 0.08);
+  --ring: rgba(243, 154, 93, 0.4);
+  --ring-soft: rgba(243, 154, 93, 0.2);
+  --outline: rgba(243, 154, 93, 0.6);
+  --accent-glow: rgba(240, 138, 80, 0.5);
+  --shade: 0, 0, 0;
+  --highlight: rgba(255, 255, 255, 0.04);
+  --focus-a: #4a3022;
+  --focus-b: #5e3a26;
+  --focus-ink: #ffc39b;
+  --focus-face: #3a281e;
+  --focus-face-on: #45301f;
+  --sunny: #3b3222;
+  --sunny-line: #5a4a2c;
+  --leaf: #1f3a31;
+  --leaf-icon: #24493d;
+  --leaf-ink: #7fd8b4;
+  --violet-icon: #362f52;
+  --violet-ink: #b8a8ff;
+  --rose: #46262d;
+  --rose-icon: #5a2e38;
+  --rose-ink: #ff9fb2;
+  --hero-a: #3a2a20;
+  --hero-b: #4d3324;
+}

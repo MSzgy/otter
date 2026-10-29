@@ -1410,6 +1410,84 @@ const { execFileSync } = require("node:child_process");
       "The handed-over text is sent, not left in the box",
     );
     console.log("PASS: 今天's ask bar opens chat and sends the text.");
+    // Themes: the panel picks one, both windows re-colour, macOS follows, and
+    // the choice survives a reload; the pet window cannot change it.
+    const themeOf = (page) =>
+      page.evaluate(() => document.documentElement.dataset.theme);
+    const appearance = () =>
+      app.evaluate(({ nativeTheme, BrowserWindow }) => ({
+        source: nativeTheme.themeSource,
+        dark: nativeTheme.shouldUseDarkColors,
+        colors: BrowserWindow.getAllWindows().map((w) =>
+          w.getBackgroundColor().toLowerCase(),
+        ),
+      }));
+    await go(panel, "偏好设置");
+    await panel.getByRole("radio", { name: "夜里小窝", exact: true }).click();
+    await panel.waitForFunction(
+      () => document.documentElement.dataset.theme === "night",
+    );
+    await pet.waitForFunction(
+      () => document.documentElement.dataset.theme === "night",
+    );
+    const look = await appearance();
+    assert.equal(look.source, "dark");
+    assert(look.colors.includes("#1d1713"), look.colors.join());
+    assert.equal(
+      JSON.parse(fs.readFileSync(path.join(userData, "desktop.json"), "utf8"))
+        .theme,
+      "night",
+    );
+    await panel.screenshot({
+      path: path.join(output, "otter-theme-night.png"),
+    });
+    for (const [page, value] of [
+      [pet, "mint"],
+      [panel, "neon"],
+    ])
+      assert(
+        await page.evaluate(async (value) => {
+          try {
+            await window.otter.action("theme", value);
+            return false;
+          } catch {
+            return true;
+          }
+        }, value),
+        "Only the panel sets a known theme",
+      );
+    await panel.reload();
+    await panel.waitForFunction(
+      async () =>
+        (await window.otter.action("snapshot")).preferences.theme === "night",
+    );
+    assert.equal(await themeOf(panel), "night");
+    await go(panel, "偏好设置");
+    await panel.getByRole("radio", { name: "跟随系统", exact: true }).click();
+    await panel.waitForFunction(
+      async () =>
+        (await window.otter.action("snapshot")).preferences.theme === "system",
+    );
+    assert.equal((await appearance()).source, "system");
+    // Playwright pins the page's prefers-color-scheme, so check the page's
+    // choice against what the page itself sees rather than against macOS.
+    assert.equal(
+      await themeOf(panel),
+      (await panel.evaluate(
+        () => matchMedia("(prefers-color-scheme: dark)").matches,
+      ))
+        ? "night"
+        : "warm",
+    );
+    await panel.getByRole("radio", { name: "暖阳小窝", exact: true }).click();
+    await panel.waitForFunction(
+      () => document.documentElement.dataset.theme === "warm",
+    );
+    assert.equal((await appearance()).source, "light");
+    await panel.keyboard.press("Escape");
+    console.log(
+      "PASS: themes re-colour panel and pet, set macOS appearance and the window base, persist, follow the system; pet and unknown themes refused.",
+    );
     // Exercise privileged boundary with a non-allowlisted method.
     const denied = await panel.evaluate(async () => {
       try {

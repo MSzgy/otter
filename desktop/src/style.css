@@ -1,5 +1,7 @@
 /* 暖阳小窝: warm cream, the otter's fur colour as the accent, soft depth instead
-   of lines, rounded type. Colours below are the only palette; the rules use them. */
+   of lines, rounded type. Colours below are the only palette; the rules use them.
+   Other themes (themes.css) override these tokens and nothing else. "clay" names
+   the accent role: the otter's orange here, mint or bay blue in other themes. */
 :root {
   --ink: #2f2620;
   --ink-2: #6f6157;
@@ -24,17 +26,63 @@
   --danger: #cf4f37;
   --danger-tint: #fdece6;
   --card: rgba(255, 255, 255, 0.78);
+  --ok-2: #3cc28a;
+  --clay-tint-2: #ffdcbf;
+  /* Text on the ink button and on the accent. */
+  --on-ink: #ffffff;
+  --on-accent: #ffffff;
+  --ink-hover: #4a3c32;
+  --knob: #ffffff;
+  /* Translucent surfaces that let the light pools show through. */
+  --glass-soft: rgba(255, 255, 255, 0.6);
+  --glass: rgba(255, 255, 255, 0.72);
+  --glass-strong: rgba(255, 255, 255, 0.85);
+  --wash: rgba(249, 241, 231, 0.65);
+  --bubble: rgba(255, 252, 247, 0.96);
+  --scrim: rgba(60, 40, 25, 0.2);
+  --scroll-thumb: rgba(157, 143, 132, 0.35);
+  --pebble: #efe4d6;
+  --pebble-2: #e6d9c8;
+  /* The three light pools behind the panel. */
+  --pool-1: rgba(255, 214, 180, 0.95);
+  --pool-2: rgba(205, 238, 225, 0.9);
+  --pool-3: rgba(255, 238, 196, 0.75);
+  /* Focus glow and the accent's own shadow. */
+  --ring: rgba(243, 154, 93, 0.35);
+  --ring-soft: rgba(243, 154, 93, 0.18);
+  --outline: rgba(232, 116, 63, 0.45);
+  --accent-glow: rgba(232, 116, 63, 0.85);
+  --ok-ring: rgba(60, 194, 138, 0.18);
+  /* Shadows are this colour at varying strength; highlight is the top edge. */
+  --shade: 90, 55, 25;
+  --highlight: rgba(255, 255, 255, 0.9);
+  /* Today's cards each have their own colour. */
+  --focus-a: #ffe6cf;
+  --focus-b: #ffcfa6;
+  --focus-ink: #a45e33;
+  --focus-face: #ffe8d4;
+  --focus-face-on: #fff3e8;
+  --sunny: #fff6d9;
+  --sunny-line: #f0dfb5;
+  --leaf: #e3f6ee;
+  --leaf-icon: #cdeee1;
+  --leaf-ink: #1f8a68;
+  --violet-icon: #ece5ff;
+  --violet-ink: #6b55c9;
+  --rose: #ffe1e6;
+  --rose-icon: #ffd0d8;
+  --rose-ink: #c2405b;
+  --hero-a: #fff3e6;
+  --hero-b: #ffe0c4;
   --r-sm: 12px;
   --r-md: 16px;
   --r-lg: 24px;
   --r-xl: 30px;
   --pill: 999px;
   --shadow-1:
-    0 1px 0 rgba(255, 255, 255, 0.9) inset,
-    0 12px 30px -22px rgba(90, 55, 25, 0.45);
+    0 1px 0 var(--highlight) inset, 0 12px 30px -22px rgba(var(--shade), 0.45);
   --shadow-2:
-    0 1px 0 rgba(255, 255, 255, 0.9) inset,
-    0 20px 44px -26px rgba(90, 55, 25, 0.5);
+    0 1px 0 var(--highlight) inset, 0 20px 44px -26px rgba(var(--shade), 0.5);
   --ease: cubic-bezier(0.2, 0.7, 0.2, 1);
   /* Latin in a rounded face, Chinese in 圆体 where installed, else PingFang. */
   --display: "Arial Rounded MT Bold", "Yuanti SC", "PingFang SC", sans-serif;
@@ -80,7 +128,7 @@ input:focus-visible {
 }
 button.primary {
   background: var(--ink);
-  color: white;
+  color: var(--on-ink);
   border-color: var(--ink);
 }
 button.primary:hover {
@@ -422,7 +470,7 @@ main {
 .pet-caption {
   font-size: 11px;
   color: var(--ink-2);
-  background: rgba(255, 252, 247, 0.94);
+  background: var(--bubble);
   border: 1px solid var(--line-2);
   border-radius: 20px;
   padding: 7px 13px;
@@ -1333,21 +1381,9 @@ main {
 /* Light pools behind everything; only the content column scrolls over them. */
 .panel-mode .app-shell {
   background:
-    radial-gradient(
-      circle at 96% -4%,
-      rgba(255, 214, 180, 0.95),
-      transparent 34%
-    ),
-    radial-gradient(
-      circle at 34% 108%,
-      rgba(205, 238, 225, 0.9),
-      transparent 34%
-    ),
-    radial-gradient(
-      circle at 78% 86%,
-      rgba(255, 238, 196, 0.75),
-      transparent 28%
-    ),
+    radial-gradient(circle at 96% -4%, var(--pool-1), transparent 34%),
+    radial-gradient(circle at 34% 108%, var(--pool-2), transparent 34%),
+    radial-gradient(circle at 78% 86%, var(--pool-3), transparent 28%),
     var(--cream);
   grid-template-columns: 96px 1fr;
   padding: 12px 0 12px 12px;
@@ -1382,8 +1418,8 @@ h3 {
   background: var(--ink-4);
 }
 .dot.online {
-  background: #3cc28a;
-  box-shadow: 0 0 0 4px rgba(60, 194, 138, 0.18);
+  background: var(--ok-2);
+  box-shadow: 0 0 0 4px var(--ok-ring);
 }
 
 /* Top bar and page heading. */
@@ -1399,7 +1435,7 @@ h3 {
   font-size: 11px;
   letter-spacing: 0.5px;
   color: var(--ink-3);
-  background: rgba(255, 255, 255, 0.72);
+  background: var(--glass);
   padding: 5px 11px;
   border-radius: var(--pill);
 }
@@ -1462,11 +1498,11 @@ button:disabled {
 }
 button.primary {
   background: var(--ink);
-  color: #fff;
-  box-shadow: 0 10px 20px -12px rgba(47, 38, 32, 0.85);
+  color: var(--on-ink);
+  box-shadow: 0 10px 20px -12px rgba(var(--shade), 0.85);
 }
 button.primary:hover {
-  background: #4a3c32;
+  background: var(--ink-hover);
 }
 button.primary:disabled {
   background: var(--ink-3);
@@ -1478,7 +1514,7 @@ input:focus-visible,
 select:focus-visible,
 textarea:focus-visible,
 summary:focus-visible {
-  outline: 3px solid rgba(232, 116, 63, 0.45);
+  outline: 3px solid var(--outline);
   outline-offset: 2px;
 }
 
@@ -1504,7 +1540,7 @@ summary:focus-visible {
   outline: none;
   background-color: var(--surface);
   border-color: var(--clay-2);
-  box-shadow: 0 0 0 4px rgba(243, 154, 93, 0.18);
+  box-shadow: 0 0 0 4px var(--ring-soft);
 }
 .app-shell select {
   appearance: none;
@@ -1541,8 +1577,8 @@ input[type="checkbox"].toggle::after {
   width: 18px;
   height: 18px;
   border-radius: 50%;
-  background: #fff;
-  box-shadow: 0 2px 6px rgba(90, 55, 25, 0.3);
+  background: var(--knob);
+  box-shadow: 0 2px 6px rgba(var(--shade), 0.3);
   transition: transform 0.25s var(--ease);
 }
 input[type="checkbox"].toggle:checked {
@@ -1591,7 +1627,7 @@ input[type="checkbox"].toggle:checked::after {
   overflow: hidden;
 }
 .report-list {
-  background: rgba(249, 241, 231, 0.7);
+  background: var(--wash);
   border-right: 0;
   padding: 10px;
 }
@@ -1607,12 +1643,12 @@ input[type="checkbox"].toggle:checked::after {
 }
 .demo-note {
   border-radius: var(--r-md);
-  background: rgba(255, 255, 255, 0.62);
+  background: var(--glass-soft);
 }
 .empty {
   border: 0;
   border-radius: var(--r-lg);
-  background: rgba(255, 255, 255, 0.6);
+  background: var(--glass-soft);
   box-shadow: var(--shadow-1);
 }
 /* River pebbles instead of a glyph. */
@@ -1623,9 +1659,21 @@ input[type="checkbox"].toggle:checked::after {
   height: 36px;
   margin: 0 auto 16px;
   background:
-    radial-gradient(ellipse 20px 13px at 20px 22px, #efe4d6 98%, transparent),
-    radial-gradient(ellipse 28px 17px at 66px 18px, #e6d9c8 98%, transparent),
-    radial-gradient(ellipse 20px 13px at 112px 22px, #efe4d6 98%, transparent);
+    radial-gradient(
+      ellipse 20px 13px at 20px 22px,
+      var(--pebble) 98%,
+      transparent
+    ),
+    radial-gradient(
+      ellipse 28px 17px at 66px 18px,
+      var(--pebble-2) 98%,
+      transparent
+    ),
+    radial-gradient(
+      ellipse 20px 13px at 112px 22px,
+      var(--pebble) 98%,
+      transparent
+    );
 }
 
 .empty h3 {
@@ -1661,7 +1709,7 @@ input[type="checkbox"].toggle:checked::after {
 .chat-composer:focus-within {
   outline: none;
   box-shadow:
-    0 0 0 3px rgba(243, 154, 93, 0.35),
+    0 0 0 3px var(--ring),
     var(--shadow-2);
 }
 .app-shell .chat-composer textarea,
@@ -1690,11 +1738,7 @@ input[type="checkbox"].toggle:checked::after {
 
 /* 陪伴互动 */
 .interaction-stage {
-  background: linear-gradient(
-    120deg,
-    rgba(255, 255, 255, 0.85),
-    rgba(255, 233, 214, 0.75)
-  );
+  background: linear-gradient(120deg, var(--glass-strong), var(--clay-tint));
   border-radius: var(--r-xl);
 }
 
@@ -1710,9 +1754,9 @@ summary {
   font-family: var(--display);
   border: 0;
   border-radius: var(--r-md);
-  background: rgba(255, 252, 247, 0.96);
+  background: var(--bubble);
   color: var(--ink-2);
-  box-shadow: 0 6px 16px -8px rgba(90, 55, 25, 0.45);
+  box-shadow: 0 6px 16px -8px rgba(var(--shade), 0.45);
   padding: 6px 12px;
 }
 
@@ -1722,7 +1766,7 @@ summary {
   height: 10px;
 }
 .panel-mode ::-webkit-scrollbar-thumb {
-  background: rgba(157, 143, 132, 0.35);
+  background: var(--scroll-thumb);
   border-radius: var(--pill);
   border: 3px solid transparent;
   background-clip: content-box;
@@ -1746,7 +1790,7 @@ summary {
   font-size: 12px;
 }
 .section-title button:hover {
-  background: #ffdcbf;
+  background: var(--clay-tint-2);
 }
 
 /* The desktop tips under 陪伴互动 and the milestones above them are cards too. */
@@ -1765,7 +1809,7 @@ summary {
   flex-direction: column;
   align-items: center;
   justify-content: space-between;
-  background: rgba(255, 255, 255, 0.62);
+  background: var(--glass-soft);
   backdrop-filter: blur(18px);
   border-radius: 28px;
   box-shadow: var(--shadow-2);
@@ -1797,12 +1841,12 @@ summary {
   height: 21px;
 }
 .rail nav button:hover {
-  background: rgba(255, 255, 255, 0.85);
+  background: var(--glass-strong);
 }
 .rail nav button.active {
   background: linear-gradient(135deg, var(--clay-2), var(--clay));
-  color: #fff;
-  box-shadow: 0 10px 22px -10px rgba(232, 116, 63, 0.85);
+  color: var(--on-accent);
+  box-shadow: 0 10px 22px -10px var(--accent-glow);
 }
 .rail-foot {
   display: flex;
@@ -1817,7 +1861,7 @@ summary {
   padding: 0;
   border-radius: 50%;
   background: var(--peach);
-  box-shadow: 0 0 0 3px #fff;
+  box-shadow: 0 0 0 3px var(--surface);
   display: grid;
   place-items: start center;
   transition: transform 0.2s var(--ease);
@@ -1852,7 +1896,7 @@ summary {
   height: 21px;
 }
 .rail-gear:hover {
-  background: rgba(255, 255, 255, 0.85);
+  background: var(--glass-strong);
   color: var(--ink);
 }
 .rail-gear .nav-badge {
@@ -1865,7 +1909,7 @@ summary {
   border-radius: var(--pill);
   padding: 1px 6px;
   background: var(--danger);
-  color: #fff;
+  color: var(--on-accent);
   font-size: 11px;
   font-weight: 700;
   font-style: normal;
@@ -1879,7 +1923,7 @@ summary {
   z-index: 40;
   display: grid;
   place-items: center;
-  background: rgba(60, 40, 25, 0.2);
+  background: var(--scrim);
   backdrop-filter: blur(4px);
 }
 .settings-sheet {
@@ -1890,7 +1934,7 @@ summary {
   grid-template-columns: 196px 1fr;
   border-radius: var(--r-xl);
   background: var(--surface-1);
-  box-shadow: 0 40px 80px -30px rgba(60, 35, 15, 0.55);
+  box-shadow: 0 40px 80px -30px rgba(var(--shade), 0.55);
   overflow: hidden;
 }
 @media (prefers-reduced-motion: no-preference) {
@@ -1967,7 +2011,7 @@ summary {
   gap: 8px;
   font-size: 12px;
   color: var(--ink-2);
-  background: rgba(255, 255, 255, 0.72);
+  background: var(--glass);
   padding: 5px 12px;
   border-radius: var(--pill);
 }
@@ -2006,7 +2050,7 @@ summary {
 }
 .ask-bar:focus-within {
   box-shadow:
-    0 0 0 3px rgba(243, 154, 93, 0.35),
+    0 0 0 3px var(--ring),
     var(--shadow-2);
 }
 /* As heavy as the field rule, so the bar's own look wins. */
@@ -2027,11 +2071,11 @@ summary {
   display: grid;
   place-items: center;
   background: var(--ink);
-  color: #fff;
+  color: var(--on-ink);
   flex: none;
 }
 .ask-send:hover {
-  background: #4a3c32;
+  background: var(--ink-hover);
 }
 .ask-send svg {
   width: 18px;
@@ -2044,7 +2088,7 @@ summary {
   margin-bottom: 18px;
 }
 .today-chips button {
-  background: rgba(255, 255, 255, 0.72);
+  background: var(--glass);
   font-weight: 500;
   color: var(--ink-2);
   font-size: 13px;
@@ -2120,7 +2164,7 @@ button.ghost:hover {
   gap: 4px;
   padding: 4px;
   border-radius: var(--pill);
-  background: rgba(255, 255, 255, 0.55);
+  background: var(--glass-soft);
 }
 .segmented button {
   padding: 5px 12px;
@@ -2132,19 +2176,19 @@ button.ghost:hover {
 .segmented button[aria-pressed="true"] {
   background: var(--surface);
   color: var(--ink);
-  box-shadow: 0 4px 10px -6px rgba(90, 55, 25, 0.5);
+  box-shadow: 0 4px 10px -6px rgba(var(--shade), 0.5);
 }
 
 /* Focus: a warm card with a ring that fills as the time passes. */
 .focus-card {
-  background: linear-gradient(140deg, #ffe6cf, #ffcfa6);
+  background: linear-gradient(140deg, var(--focus-a), var(--focus-b));
   display: flex;
   flex-direction: column;
   align-items: flex-start;
   gap: 12px;
 }
 .focus-card h2 {
-  color: #a45e33;
+  color: var(--focus-ink);
 }
 .focus-ring {
   --p: 0;
@@ -2155,7 +2199,7 @@ button.ghost:hover {
   place-items: center;
   background: conic-gradient(
     var(--clay) calc(var(--p) * 360deg),
-    rgba(255, 255, 255, 0.6) 0
+    var(--glass-soft) 0
   );
 }
 .focus-ring b {
@@ -2164,18 +2208,18 @@ button.ghost:hover {
   border-radius: 50%;
   display: grid;
   place-items: center;
-  background: #ffe8d4;
+  background: var(--focus-face);
   font-family: var(--display);
   font-size: 20px;
   font-variant-numeric: tabular-nums;
 }
 .focus-card.running .focus-ring b {
-  background: #fff3e8;
+  background: var(--focus-face-on);
 }
 
 /* Reminders */
 .reminder-card {
-  background: linear-gradient(150deg, #fff6d9, rgba(255, 255, 255, 0.85));
+  background: linear-gradient(150deg, var(--sunny), var(--glass-strong));
 }
 .reminder-rows,
 .todo-rows {
@@ -2191,7 +2235,7 @@ button.ghost:hover {
   padding: 7px 0;
 }
 .reminder-rows li + li {
-  border-top: 1px dashed #f0dfb5;
+  border-top: 1px dashed var(--sunny-line);
 }
 .reminder-rows b {
   font-family: var(--display);
@@ -2325,23 +2369,23 @@ button.ghost:hover {
   height: 20px;
 }
 .project-card {
-  background: linear-gradient(120deg, #e3f6ee, rgba(255, 255, 255, 0.85));
+  background: linear-gradient(120deg, var(--leaf), var(--glass-strong));
 }
 .project-card .card-icon {
-  background: #cdeee1;
-  color: #1f8a68;
+  background: var(--leaf-icon);
+  color: var(--leaf-ink);
 }
 .report-card .card-icon {
-  background: #ece5ff;
-  color: #6b55c9;
+  background: var(--violet-icon);
+  color: var(--violet-ink);
 }
 .today-notice {
   margin-bottom: 14px;
-  background: linear-gradient(120deg, #ffe1e6, rgba(255, 255, 255, 0.9));
+  background: linear-gradient(120deg, var(--rose), var(--glass-strong));
 }
 .today-notice .card-icon {
-  background: #ffd0d8;
-  color: #c2405b;
+  background: var(--rose-icon);
+  color: var(--rose-ink);
 }
 .report-options summary {
   font-size: 12px;
@@ -2410,7 +2454,7 @@ button.ghost:hover {
   padding: 18px 28px;
   margin-bottom: 16px;
   border-radius: var(--r-xl);
-  background: linear-gradient(120deg, #fff3e6, #ffe0c4);
+  background: linear-gradient(120deg, var(--hero-a), var(--hero-b));
   box-shadow: var(--shadow-1);
 }
 .otter-hero canvas {
@@ -2646,7 +2690,7 @@ button.ghost:hover {
   flex: none;
 }
 .app-shell .chat-bar select {
-  background-color: rgba(255, 255, 255, 0.6);
+  background-color: var(--glass-soft);
   font-size: 13px;
   padding-top: 8px;
   padding-bottom: 8px;
@@ -2732,7 +2776,7 @@ button.ghost:hover {
 }
 .chat-delete button:first-of-type {
   background: var(--danger);
-  color: #fff;
+  color: var(--on-accent);
 }
 .composer-tools {
   display: flex;
@@ -2819,7 +2863,7 @@ button.ghost:hover {
 }
 .voice-button.recording {
   background: var(--clay);
-  color: #fff;
+  color: var(--on-accent);
   animation: voice-pulse 1.2s var(--ease) infinite;
 }
 .voice-button.permission,
@@ -2829,7 +2873,7 @@ button.ghost:hover {
 }
 @keyframes voice-pulse {
   50% {
-    box-shadow: 0 0 0 6px rgba(232, 116, 63, 0.18);
+    box-shadow: 0 0 0 6px var(--ring-soft);
   }
 }
 .voice-stop {
@@ -2902,7 +2946,7 @@ button.ghost:hover {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  background: rgba(255, 255, 255, 0.6);
+  background: var(--glass-soft);
   color: var(--ink-2);
   font-size: 13px;
   padding: 7px 15px;
@@ -2913,7 +2957,7 @@ button.ghost:hover {
 }
 .project-tabs button.selected {
   background: var(--ink);
-  color: #fff;
+  color: var(--on-ink);
 }
 .project-tabs small,
 .tag {
@@ -2989,7 +3033,7 @@ button.ghost:hover {
 }
 .snapshot-remove button:first-of-type {
   background: var(--danger);
-  color: #fff;
+  color: var(--on-accent);
 }
 .snapshot-cols {
   display: grid;
@@ -2997,7 +3041,7 @@ button.ghost:hover {
   gap: 12px;
 }
 .snapshot-col {
-  background: rgba(249, 241, 231, 0.6);
+  background: var(--wash);
   border-radius: var(--r-md);
   padding: 12px 14px;
 }
@@ -3291,11 +3335,7 @@ details.settings-section[open] > summary {
   gap: 12px;
   padding: 12px 14px 12px 12px;
   border-radius: var(--r-md);
-  background: linear-gradient(
-    100deg,
-    rgba(255, 233, 214, 0.9),
-    rgba(255, 255, 255, 0.85)
-  );
+  background: linear-gradient(100deg, var(--clay-tint), var(--glass-strong));
   box-shadow: var(--shadow-1);
 }
 .candidate-icon {
@@ -3402,5 +3442,68 @@ details.settings-section[open] > summary {
   .chat-messages {
     min-height: 120px;
     padding: 12px 4px;
+  }
+}
+
+/* 外观: a swatch per theme, drawn in that theme's own colours. */
+.theme-picker {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 14px;
+}
+.theme-picker button {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
+  padding: 8px 8px 10px;
+  border-radius: var(--r-md);
+  background: var(--glass-soft);
+  box-shadow: 0 0 0 1.5px var(--line) inset;
+  text-align: left;
+  font-weight: 500;
+}
+.theme-picker button:hover {
+  background: var(--tint-1);
+}
+.theme-picker button.selected {
+  background: var(--surface);
+  box-shadow: 0 0 0 2px var(--clay) inset;
+}
+.theme-swatch {
+  position: relative;
+  width: 100%;
+  height: 46px;
+  margin-bottom: 6px;
+  border-radius: 10px;
+  overflow: hidden;
+  box-shadow: 0 0 0 1px rgba(var(--shade), 0.1) inset;
+}
+.theme-swatch i {
+  position: absolute;
+  inset: 9px 24px 9px 8px;
+  border-radius: 6px;
+}
+.theme-swatch b {
+  position: absolute;
+  right: 7px;
+  bottom: 7px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+}
+.theme-picker strong {
+  font-size: 12.5px;
+  color: var(--ink);
+}
+.theme-picker small {
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--ink-3);
+}
+@media (max-width: 860px) {
+  .theme-picker {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }

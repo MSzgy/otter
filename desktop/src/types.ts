@@ -26,6 +26,7 @@ export type Report = {
 export type Prefs = {
   quiet: boolean;
   hidden: boolean;
+  theme?: string;
   config: string;
   envConfig?: boolean;
 };

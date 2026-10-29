@@ -12,6 +12,7 @@ const {
   globalShortcut,
   powerMonitor,
   clipboard,
+  nativeTheme,
 } = require("electron");
 const fs = require("node:fs");
 const { createHash, randomUUID } = require("node:crypto");
@@ -21,6 +22,13 @@ const { Backend } = require("./bridge.cjs");
 const { Awareness, nativeRead } = require("./awareness.cjs");
 const { execFile } = require("node:child_process");
 const { ActionGate } = require("./actions.cjs");
+const {
+  THEMES,
+  normalizeTheme,
+  themeSource,
+  resolvedTheme,
+  windowColor,
+} = require("./theme.cjs");
 const actionGate = new ActionGate({
   resolveApp: (id) => nativeRead("resolve-app", id),
   execute: (proposal) =>
@@ -168,10 +176,23 @@ function selection() {
       }
     : preferences.selection || defaultConfig();
 }
+// macOS appearance and the panel's base colour follow the theme; the page
+// itself re-colours from the preferences broadcast.
+function applyAppearance() {
+  nativeTheme.themeSource = themeSource(preferences.theme);
+  if (panel && !panel.isDestroyed())
+    panel.setBackgroundColor(
+      windowColor(preferences.theme, nativeTheme.shouldUseDarkColors),
+    );
+}
+function themeQuery() {
+  return resolvedTheme(preferences.theme, nativeTheme.shouldUseDarkColors);
+}
 function preferencesPublic() {
   return {
     quiet: !!preferences.quiet,
     hidden: !!preferences.hidden,
+    theme: normalizeTheme(preferences.theme),
     config: selection().config,
     envConfig: !!process.env.OTTER_DESKTOP_CONFIG,
   };
@@ -1163,6 +1184,16 @@ ipcMain.handle("otter:action", async (event, name, value) => {
     broadcast({ type: "preferences", data: preferencesPublic() });
     return;
   }
+  if (name === "theme") {
+    if (event.sender !== panel.webContents)
+      throw new Error("请在设置里更换主题。");
+    if (!THEMES.includes(value)) throw new Error("不支持的主题。");
+    preferences.theme = value;
+    save();
+    applyAppearance();
+    broadcast({ type: "preferences", data: preferencesPublic() });
+    return;
+  }
   if (
     name === "hit" &&
     event.sender === pet.webContents &&
@@ -1263,6 +1294,7 @@ else {
       preferences = {};
     }
     evolution.restore(preferences.evolution);
+    nativeTheme.themeSource = themeSource(preferences.theme);
     appContentReader = new AppContentReader(
       app.isPackaged
         ? path.join(process.resourcesPath, "native/otter-app-content")
@@ -1296,7 +1328,10 @@ else {
       minWidth: 760,
       minHeight: 560,
       title: "Otter · 桌面伙伴",
-      backgroundColor: "#f7f8f6",
+      backgroundColor: windowColor(
+        preferences.theme,
+        nativeTheme.shouldUseDarkColors,
+      ),
       show: false,
       titleBarStyle: "hiddenInset",
     });
@@ -1319,8 +1354,9 @@ else {
       if (!preferences.hidden) pet.showInactive();
     });
     pet.setIgnoreMouseEvents(true, { forward: true });
-    pet.loadFile(page, { query: { view: "pet" } });
-    panel.loadFile(page, { query: { view: "panel" } });
+    pet.loadFile(page, { query: { view: "pet", theme: themeQuery() } });
+    panel.loadFile(page, { query: { view: "panel", theme: themeQuery() } });
+    nativeTheme.on("updated", applyAppearance);
     const icon = nativeImage.createFromDataURL(
       "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScLbtAAAAABJRU5ErkJggg==",
     );
