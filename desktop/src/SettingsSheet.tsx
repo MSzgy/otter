@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 
 export type SettingsSection =
-  "general" | "model" | "privacy" | "handoff" | "body" | "workspace";
+  "general" | "model" | "tools" | "privacy" | "handoff" | "body" | "workspace";
 
 // Everything set once and then left alone lives here, out of the main places.
 // All groups sit in one scrolling column; the list on the left jumps to a group

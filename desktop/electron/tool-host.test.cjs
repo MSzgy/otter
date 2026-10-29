@@ -97,3 +97,19 @@ test("unknown tools, errors, slow tools and unanswered cards all come back as te
   assert.equal((await h.handle(call("notes_add"))).ok, false);
   assert.throws(() => h.decide("missing", "once"), /已经结束/);
 });
+
+test("tools the backend would refuse are left out of the offer", () => {
+  const huge = {
+    type: "object",
+    properties: { x: { description: "y".repeat(13000) } },
+  };
+  const { h } = host([
+    lookup,
+    { ...lookup, name: "bad name" },
+    { ...lookup, name: "huge", parameters: huge },
+    ...Array.from({ length: 70 }, (_, i) => ({ ...lookup, name: `t${i}` })),
+  ]);
+  const names = h.definitions().map((d) => d.function.name);
+  assert.equal(names.length, 64);
+  assert(!names.includes("bad name") && !names.includes("huge"));
+});

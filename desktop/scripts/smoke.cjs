@@ -216,6 +216,42 @@ const { execFileSync } = require("node:child_process");
       const lastUser =
         [...(body.messages || [])].reverse().find((m) => m.role === "user")
           ?.content || "";
+      if (body.stream && lastUser.startsWith("用笔记工具记下")) {
+        // Ask the MCP server's add_note, then report what came back.
+        res.setHeader("Content-Type", "text/event-stream");
+        const result = body.messages.find((m) => m.role === "tool");
+        const note = lastUser.slice("用笔记工具记下".length).trim();
+        const chunk = result
+          ? {
+              choices: [
+                {
+                  delta: { content: `工具结果：${result.content}` },
+                  finish_reason: "stop",
+                },
+              ],
+            }
+          : {
+              choices: [
+                {
+                  delta: {
+                    tool_calls: [
+                      {
+                        index: 0,
+                        id: "call_note",
+                        function: {
+                          name: "mcp__fake__add_note",
+                          arguments: JSON.stringify({ text: note }),
+                        },
+                      },
+                    ],
+                  },
+                  finish_reason: "tool_calls",
+                },
+              ],
+            };
+        res.end(`data: ${JSON.stringify(chunk)}\n\ndata: [DONE]\n\n`);
+        return;
+      }
       if (body.stream && lastUser.startsWith("用工具看看现在几点")) {
         // First ask for otter_time, then answer with what it returned.
         res.setHeader("Content-Type", "text/event-stream");
@@ -885,6 +921,98 @@ const { execFileSync } = require("node:child_process");
       .last()
       .getByText(/按 Otter 的时钟：.*（Asia\/Shanghai）/)
       .waitFor();
+    // MCP: a server added in settings offers its tools; a call that writes
+    // waits for the card, and only 允许 lets it run.
+    const notesFile = path.join(
+      os.tmpdir(),
+      `otter-mcp-notes-${process.pid}.txt`,
+    );
+    fs.rmSync(notesFile, { force: true });
+    const notes = () =>
+      fs.existsSync(notesFile) ? fs.readFileSync(notesFile, "utf8") : "";
+    const openTools = async () => {
+      if (!(await panel.getByRole("dialog", { name: "设置" }).isVisible()))
+        await panel.getByRole("button", { name: "设置", exact: true }).click();
+      await panel
+        .getByRole("navigation", { name: "设置分组" })
+        .getByRole("button", { name: "工具与扩展" })
+        .click();
+    };
+    await openTools();
+    await panel.getByRole("textbox", { name: "MCP 配置" }).fill(
+      JSON.stringify({
+        mcpServers: {
+          fake: {
+            command: process.execPath,
+            args: [path.join(__dirname, "fake-mcp-server.cjs")],
+            env: { NOTES_FILE: notesFile },
+          },
+        },
+      }),
+    );
+    await panel.getByRole("button", { name: "检查配置", exact: true }).click();
+    await panel.getByText(/这会在你的 Mac 上运行下面的命令/).waitFor();
+    await panel.getByRole("button", { name: "确认添加", exact: true }).click();
+    await panel.getByText("运行中 · 2 个工具", { exact: true }).waitFor();
+    await panel.screenshot({
+      path: path.join(output, "otter-mcp-settings.png"),
+    });
+    await panel.keyboard.press("Escape");
+    const noteSay = async (text) => {
+      await panel.getByRole("textbox", { name: "聊天输入" }).fill(text);
+      await panel.getByRole("button", { name: "发送", exact: true }).click();
+    };
+    const card = panel.getByRole("region", { name: "工具请求：记一条笔记" });
+    await noteSay("用笔记工具记下 买牛奶");
+    await card.getByText(/"text": "买牛奶"/).waitFor();
+    assert.equal(notes(), "", "Nothing runs before 允许");
+    assert(
+      requests
+        .at(-1)
+        .body.tools.some((t) => t.function.name === "mcp__fake__add_note"),
+    );
+    await panel.screenshot({ path: path.join(output, "otter-mcp-card.png") });
+    await card.getByRole("button", { name: "允许一次", exact: true }).click();
+    await panel
+      .getByText("工具结果：记下了：买牛奶", { exact: true })
+      .waitFor();
+    assert.equal(notes(), "买牛奶\n");
+    await noteSay("用笔记工具记下 第二条");
+    await card.getByRole("button", { name: "拒绝", exact: true }).click();
+    await panel.getByText(/工具结果：用户没有允许这次调用/).waitFor();
+    await panel
+      .locator(".chat-message.assistant")
+      .last()
+      .getByText("✕ 记一条笔记")
+      .waitFor();
+    assert.equal(notes(), "买牛奶\n", "A refused call does not run");
+    await openTools();
+    await panel.getByText("它的工具 · 2").click();
+    await panel
+      .getByRole("checkbox", { name: "记一条笔记 不用再问", exact: true })
+      .check();
+    await panel.keyboard.press("Escape");
+    await noteSay("用笔记工具记下 第三条");
+    await panel
+      .getByText("工具结果：记下了：第三条", { exact: true })
+      .waitFor();
+    assert.equal(notes(), "买牛奶\n第三条\n", "不用再问 runs without a card");
+    await openTools();
+    await panel
+      .getByRole("checkbox", { name: "启用 fake", exact: true })
+      .uncheck();
+    await panel
+      .getByRole("article", { name: "MCP 服务：fake" })
+      .getByText("已关闭", { exact: true })
+      .waitFor();
+    await panel.getByRole("button", { name: "删除 fake", exact: true }).click();
+    await panel.getByRole("button", { name: "确认删除", exact: true }).click();
+    await panel.getByText("还没有接上 MCP 服务。").waitFor();
+    await panel.keyboard.press("Escape");
+    fs.rmSync(notesFile, { force: true });
+    console.log(
+      "PASS: MCP server added from settings: preview first, its tools offered, a writing call waits for the card, 允许一次 runs it, 拒绝 does not, 不用再问 skips the card, disable and remove.",
+    );
     await panel.getByRole("button", { name: "新对话", exact: true }).click();
     await panel
       .getByRole("heading", { name: "我在这里，慢慢说。", exact: true })

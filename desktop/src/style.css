@@ -3565,3 +3565,84 @@ details.settings-section[open] > summary {
   font-weight: 500;
   color: var(--ink-3);
 }
+
+/* 工具与扩展 */
+.tool-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 12px;
+}
+.tool-chips span {
+  font-size: 12px;
+  padding: 3px 10px;
+  border-radius: var(--pill);
+  background: var(--leaf);
+  color: var(--leaf-ink);
+}
+.mcp-section > p {
+  margin-bottom: 10px;
+}
+.mcp-server {
+  padding: 4px 0 10px;
+  border-top: 1px solid var(--line);
+}
+.mcp-server .setting-line {
+  border-top: 0;
+}
+.mcp-server .setting-line strong {
+  display: block;
+  font-size: 13.5px;
+}
+.mcp-status::before {
+  content: "";
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  margin-right: 6px;
+  border-radius: 50%;
+  background: var(--ink-4);
+  vertical-align: 1px;
+}
+.mcp-status.ready::before {
+  background: var(--ok);
+}
+.mcp-status.starting::before {
+  background: var(--sun);
+}
+.mcp-status.error {
+  color: var(--danger);
+}
+.mcp-status.error::before {
+  background: var(--danger);
+}
+.mcp-command {
+  display: block;
+  margin: 2px 0 6px;
+  padding: 6px 10px;
+  border-radius: var(--r-sm);
+  background: var(--tint-1);
+  color: var(--ink-2);
+  font:
+    11.5px/1.5 ui-monospace,
+    Menlo,
+    monospace;
+  overflow-wrap: anywhere;
+}
+.app-shell textarea.mcp-config {
+  width: 100%;
+  min-height: 130px;
+  margin: 6px 0 4px;
+  font:
+    12px/1.5 ui-monospace,
+    Menlo,
+    monospace;
+  resize: vertical;
+}
+.mcp-preview p {
+  margin: 6px 0;
+}
+button.danger {
+  background: var(--danger);
+  color: var(--on-accent);
+}

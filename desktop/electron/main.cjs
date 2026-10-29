@@ -31,6 +31,7 @@ const {
 } = require("./theme.cjs");
 const { SettingsRegistry } = require("./settings-registry.cjs");
 const { ToolHost } = require("./tool-host.cjs");
+const { Extensions } = require("./extensions.cjs");
 const actionGate = new ActionGate({
   resolveApp: (id) => nativeRead("resolve-app", id),
   execute: (proposal) =>
@@ -463,7 +464,10 @@ const toolHost = new ToolHost({
       });
   },
 });
-const toolsEnabled = () => preferences.extensions?.tools !== false;
+// MCP servers the user added; their tools join the host once running.
+let extensions;
+const toolsEnabled = () =>
+  extensions ? extensions.enabled : preferences.extensions?.tools !== false;
 function preferencesPublic() {
   return {
     quiet: !!preferences.quiet,
@@ -1054,6 +1058,26 @@ async function panelAction(event, name, value) {
       return toolHost.decide(value?.id, value?.decision);
     throw new Error("不支持的工具操作。");
   }
+  if (name.startsWith("extensions.")) {
+    if (event.sender !== panel.webContents)
+      throw new Error("请在设置里管理工具。");
+    if (!extensions) throw new Error("工具尚未就绪。");
+    if (name === "extensions.get")
+      return {
+        ...extensions.snapshot(),
+        builtins: builtinTools.list().map((t) => t.label),
+      };
+    if (name === "extensions.configure")
+      return extensions.setTools(value?.tools);
+    if (name === "extensions.preview") return extensions.preview(value?.text);
+    if (name === "extensions.add") return extensions.add(value?.text);
+    if (name === "extensions.server")
+      return extensions.setEnabled(value?.id, value?.enabled);
+    if (name === "extensions.remove") return extensions.remove(value?.id);
+    if (name === "extensions.allow")
+      return extensions.setAllow(value?.id, value?.tool, value?.allow);
+    throw new Error("不支持的工具设置。");
+  }
   if (name.startsWith("projects.")) {
     if (event.sender !== panel.webContents)
       throw new Error("请在主面板管理项目。");
@@ -1612,6 +1636,22 @@ else {
     }
     evolution.restore(preferences.evolution);
     nativeTheme.themeSource = themeSource(preferences.theme);
+    extensions = new Extensions({
+      load: () => preferences.extensions,
+      save: (value) => {
+        preferences.extensions = value;
+        save();
+      },
+    });
+    extensions.on("change", (data) => {
+      if (panel && !panel.isDestroyed())
+        panel.webContents.send("otter:event", {
+          type: "extensions.changed",
+          data,
+        });
+    });
+    toolHost.addSource(extensions.source());
+    extensions.init();
     appContentReader = new AppContentReader(
       app.isPackaged
         ? path.join(process.resourcesPath, "native/otter-app-content")
@@ -1850,6 +1890,7 @@ else {
     speechPlayer?.stop();
     body.stop();
     evolution.close();
+    extensions?.stopAll();
     globalShortcut.unregisterAll();
     (backend ? backend.stop() : Promise.resolve()).finally(() => app.quit());
   });

@@ -4,8 +4,9 @@
 // tool with a time limit and hands the result back as text.
 //
 // A tool is { name, label, origin, description, parameters, readOnly, trusted,
-// run(args, context) }. Only trusted read-only tools (Otter's own look-ups) run
-// without asking; everything else waits for 允许一次 / 这段对话都允许 / 拒绝.
+// autoApprove, run(args, context) }. Trusted read-only tools (Otter's own
+// look-ups) and tools the user marked 不用再问 (autoApprove) run without asking;
+// everything else waits for 允许一次 / 这段对话都允许 / 拒绝.
 const MAX_RESULT = 16000;
 
 function text(result) {
@@ -37,15 +38,24 @@ class ToolHost {
         if (!seen.has(tool.name)) seen.set(tool.name, tool);
     return [...seen.values()];
   }
+  // At most 64, and none the backend would refuse (bad name, huge schema), so
+  // one odd MCP tool cannot break every chat.
   definitions() {
-    return this.tools().map((t) => ({
-      type: "function",
-      function: {
-        name: t.name,
-        description: t.description || t.label,
-        parameters: t.parameters || { type: "object", properties: {} },
-      },
-    }));
+    return this.tools()
+      .map((t) => ({
+        type: "function",
+        function: {
+          name: t.name,
+          description: (t.description || t.label || "").slice(0, 1024),
+          parameters: t.parameters || { type: "object", properties: {} },
+        },
+      }))
+      .filter(
+        (d) =>
+          /^[A-Za-z0-9_-]{1,64}$/.test(d.function.name) &&
+          JSON.stringify(d.function).length <= 12000,
+      )
+      .slice(0, 64);
   }
   pending() {
     return [...this.waiting.values()].map(
@@ -96,7 +106,8 @@ class ToolHost {
     if (!tool)
       return { ok: false, content: "没有这个工具。", label: call.name };
     const grant = `${call.session_id}\n${tool.name}`;
-    if (!(tool.readOnly && tool.trusted) && !this.sessionGrants.has(grant)) {
+    const free = tool.autoApprove || (tool.readOnly && tool.trusted);
+    if (!free && !this.sessionGrants.has(grant)) {
       const decision = await this.ask(call, tool);
       if (decision === "deny")
         return {
