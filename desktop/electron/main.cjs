@@ -30,6 +30,7 @@ const {
   windowColor,
 } = require("./theme.cjs");
 const { SettingsRegistry } = require("./settings-registry.cjs");
+const { ToolHost } = require("./tool-host.cjs");
 const actionGate = new ActionGate({
   resolveApp: (id) => nativeRead("resolve-app", id),
   execute: (proposal) =>
@@ -358,6 +359,111 @@ const chatSettings = new SettingsRegistry([
     write: memoryWrite("tone"),
   },
 ]);
+// Otter's own look-ups for the chat model. Read-only, so they run without a
+// card; anything that changes data still goes through the confirmation cards.
+const lookup = (tool) => ({
+  origin: "Otter",
+  readOnly: true,
+  trusted: true,
+  parameters: { type: "object", properties: {} },
+  ...tool,
+});
+const zone = () => currentHealth?.timezone || "Asia/Shanghai";
+const statusFilter = {
+  type: "object",
+  properties: {
+    status: {
+      type: "string",
+      enum: ["active", "done", "all"],
+      description: "active（默认）、done 或 all",
+    },
+  },
+};
+const builtinTools = {
+  list: () => [
+    lookup({
+      name: "otter_time",
+      label: "看时间",
+      description: "现在的日期、星期、时间和时区。",
+      run: () =>
+        new Intl.DateTimeFormat("zh-CN", {
+          timeZone: zone(),
+          dateStyle: "full",
+          timeStyle: "short",
+        }).format(new Date()) + `（${zone()}）`,
+    }),
+    lookup({
+      name: "otter_reminders",
+      label: "看提醒",
+      description:
+        "用户在 Otter 里的提醒。只能查看；要新建或修改提醒，请让用户直接说出要求，Otter 会弹出确认。",
+      parameters: statusFilter,
+      run: ({ status = "active" }) => {
+        if (!assistantStore) throw new Error(assistantError);
+        const when = new Intl.DateTimeFormat("zh-CN", {
+          timeZone: zone(),
+          dateStyle: "medium",
+          timeStyle: "short",
+        });
+        const active = (r) => ["pending", "due"].includes(r.status);
+        return assistantStore
+          .snapshot()
+          .reminders.filter((r) =>
+            status === "all"
+              ? true
+              : status === "done"
+                ? !active(r)
+                : active(r),
+          )
+          .slice(0, 40)
+          .map((r) => ({
+            内容: r.title,
+            时间: when.format(r.dueAt),
+            状态: r.status,
+          }));
+      },
+    }),
+    lookup({
+      name: "otter_todos",
+      label: "看待办",
+      description:
+        "用户在 Otter 里的待办。只能查看；要添加或完成待办，请让用户直接说出要求，Otter 会弹出确认。",
+      parameters: statusFilter,
+      run: ({ status = "active" }) => {
+        if (!assistantStore) throw new Error(assistantError);
+        return assistantStore
+          .snapshot()
+          .todos.filter((t) =>
+            status === "all" ? true : status === "done" ? t.done : !t.done,
+          )
+          .slice(0, 60)
+          .map((t) => ({ 内容: t.title, 完成: t.done }));
+      },
+    }),
+    lookup({
+      name: "otter_settings",
+      label: "看设置",
+      description:
+        "能在聊天里修改的 Otter 设置和现在的值。只能查看；要修改请让用户直接说“打开/关闭/改成……”，Otter 会弹出确认。",
+      run: async () =>
+        (await chatSettings.rows()).map((r) => ({
+          设置: r.label,
+          现在: chatSettings.format(r.id, r.current),
+        })),
+    }),
+  ],
+};
+const toolHost = new ToolHost({
+  sources: [builtinTools],
+  onChange: (pending) => {
+    if (panel && !panel.isDestroyed())
+      panel.webContents.send("otter:event", {
+        type: "tools.pending",
+        data: pending,
+      });
+  },
+});
+const toolsEnabled = () => preferences.extensions?.tools !== false;
 function preferencesPublic() {
   return {
     quiet: !!preferences.quiet,
@@ -431,8 +537,25 @@ async function connect() {
     });
     child.on("event", (event) => {
       if (backend !== child) return;
+      if (event.type === "chat.tool-call") {
+        // Runs here (asking the user when needed) and answers the backend.
+        const call = event.data;
+        void toolHost
+          .handle(call)
+          .then((result) =>
+            child.closed
+              ? null
+              : child.call("chat.tool-result", {
+                  call_id: call.call_id,
+                  ...result,
+                }),
+          )
+          .catch(() => {});
+        return;
+      }
       if (event.type === "chat.changed") {
         chatState = event.data;
+        if (chatState.status !== "streaming") toolHost.cancelTurn(chatState.id);
         body.observe({
           type: "chat.activity",
           data: { status: chatState.status },
@@ -874,6 +997,12 @@ ipcMain.handle("otter:call", async (event, method, params) => {
   )
     throw new Error("参数无效。");
   if (!backend || switching) throw new Error("后台尚未就绪。");
+  // The renderer never chooses tools; the host offers what is enabled.
+  if (method === "chat.send")
+    params = {
+      ...params,
+      tools: toolsEnabled() ? toolHost.definitions() : [],
+    };
   if (
     [
       "models.save",
@@ -894,7 +1023,10 @@ ipcMain.handle("otter:call", async (event, method, params) => {
   )
     throw new Error("请在设置面板中配置模型。");
   const result = await backend.call(method, params);
-  if (method === "chat.delete") taskAssistant?.forget(params.session_id);
+  if (method === "chat.delete") {
+    taskAssistant?.forget(params.session_id);
+    toolHost.forgetSession(params.session_id);
+  }
   if (method === "chat.delete" && chatState?.session_id === params.session_id)
     chatState = null;
   if (["models.save", "models.reset"].includes(method)) {
@@ -914,6 +1046,14 @@ ipcMain.handle("otter:action", async (event, name, value) => {
 // Every renderer action. A setting changed from chat calls this with the panel
 // as sender, so it runs exactly what the settings sheet runs.
 async function panelAction(event, name, value) {
+  if (name.startsWith("tools.")) {
+    if (event.sender !== panel.webContents)
+      throw new Error("请在主面板处理工具请求。");
+    if (name === "tools.pending") return toolHost.pending();
+    if (name === "tools.decide")
+      return toolHost.decide(value?.id, value?.decision);
+    throw new Error("不支持的工具操作。");
+  }
   if (name.startsWith("projects.")) {
     if (event.sender !== panel.webContents)
       throw new Error("请在主面板管理项目。");

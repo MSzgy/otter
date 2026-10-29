@@ -183,6 +183,8 @@ class Runtime:
                 return self.chat.send(params, self.config.llm)
         if method == "chat.cancel":
             return self.chat.cancel(params.get("turn_id"))
+        if method == "chat.tool-result":
+            return self.chat.tool_result(params)
         if method == "chat.delete":
             result = self.chat.delete(params.get("session_id"))
             self.chat.projects.forget_session(params.get("session_id"))

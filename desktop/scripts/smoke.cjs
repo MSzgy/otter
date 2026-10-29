@@ -22,6 +22,9 @@ const { execFileSync } = require("node:child_process");
   const taskRequests = [];
   const projectRequests = [];
   let openedLink = 0;
+  const lastUserOf = (body) =>
+    [...(body.messages || [])].reverse().find((m) => m.role === "user")
+      ?.content || "";
   const server = http.createServer((req, res) => {
     if (req.method === "GET" && req.url === "/action-target") {
       openedLink++;
@@ -210,6 +213,41 @@ const { execFileSync } = require("node:child_process");
       }
       requests.push({ url: req.url, body, auth: req.headers.authorization });
       res.setHeader("Content-Type", "application/json");
+      const lastUser =
+        [...(body.messages || [])].reverse().find((m) => m.role === "user")
+          ?.content || "";
+      if (body.stream && lastUser.startsWith("用工具看看现在几点")) {
+        // First ask for otter_time, then answer with what it returned.
+        res.setHeader("Content-Type", "text/event-stream");
+        const result = body.messages.find((m) => m.role === "tool");
+        const chunk = result
+          ? {
+              choices: [
+                {
+                  delta: { content: `按 Otter 的时钟：${result.content}` },
+                  finish_reason: "stop",
+                },
+              ],
+            }
+          : {
+              choices: [
+                {
+                  delta: {
+                    tool_calls: [
+                      {
+                        index: 0,
+                        id: "call_time",
+                        function: { name: "otter_time", arguments: "{}" },
+                      },
+                    ],
+                  },
+                  finish_reason: "tool_calls",
+                },
+              ],
+            };
+        res.end(`data: ${JSON.stringify(chunk)}\n\ndata: [DONE]\n\n`);
+        return;
+      }
       if (body.model === "bad-model") {
         res.statusCode = 401;
         res.end(JSON.stringify({ error: "private-server-error" }));
@@ -824,6 +862,29 @@ const { execFileSync } = require("node:child_process");
         count,
       );
     };
+    // Tools: the chat offers Otter's look-ups, runs the one the model asks for
+    // without a card (read-only), and shows it under the reply.
+    await chatSay("用工具看看现在几点");
+    const toolTurns = requests.filter(
+      (r) =>
+        r.body.stream && lastUserOf(r.body).startsWith("用工具看看现在几点"),
+    );
+    assert.equal(toolTurns.length, 2, "Asked once, answered after the tool");
+    assert.deepEqual(
+      toolTurns[0].body.tools.map((t) => t.function.name),
+      ["otter_time", "otter_reminders", "otter_todos", "otter_settings"],
+    );
+    assert.equal(toolTurns[1].body.messages.at(-1).role, "tool");
+    await panel
+      .locator(".chat-message.assistant")
+      .last()
+      .getByText("✓ 看时间")
+      .waitFor();
+    await panel
+      .locator(".chat-message.assistant")
+      .last()
+      .getByText(/按 Otter 的时钟：.*（Asia\/Shanghai）/)
+      .waitFor();
     await panel.getByRole("button", { name: "新对话", exact: true }).click();
     await panel
       .getByRole("heading", { name: "我在这里，慢慢说。", exact: true })
@@ -1580,7 +1641,7 @@ const { execFileSync } = require("node:child_process");
     );
     assert.equal(errors.length, 0, errors.join("\n"));
     console.log(
-      "PASS: real Electron report generation, persistence after reconnect, quiet setting, OpenAI model test/save/reconnect/generation/reset, streaming multi-turn chat, explicit memory save/recall/correction/undo/clear, pet entry, cancel, history and deletion, local pet actions, head tap, sleep/wake, native menu wiring, live app awareness toggle/clear, IPC allowlist.",
+      "PASS: real Electron report generation, persistence after reconnect, quiet setting, OpenAI model test/save/reconnect/generation/reset, streaming multi-turn chat, a read-only tool call answered mid-reply, explicit memory save/recall/correction/undo/clear, pet entry, cancel, history and deletion, local pet actions, head tap, sleep/wake, native menu wiring, live app awareness toggle/clear, IPC allowlist.",
     );
   } catch (error) {
     console.error(error);

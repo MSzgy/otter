@@ -44,6 +44,24 @@ export type ChatTurn = {
   error: string;
   model: string;
   memory_refs?: MemoryRef[];
+  tool_calls?: ToolCall[];
+};
+// One tool the model used in a reply, as shown under it.
+export type ToolCall = {
+  name: string;
+  label: string;
+  ok: boolean;
+  summary: string;
+};
+// A tool call waiting for the user's 允许 or 拒绝.
+export type ToolRequest = {
+  id: string;
+  turnId: string;
+  sessionId: string;
+  name: string;
+  label: string;
+  origin?: string;
+  arguments: Record<string, unknown>;
 };
 export type PetSnapshot = {
   asleep: boolean;

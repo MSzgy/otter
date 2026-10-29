@@ -8,6 +8,8 @@ import { Icon } from "./icons";
 import type {
   Health,
   ChatTurn,
+  ToolCall,
+  ToolRequest,
   MemoryRef,
   Project,
   ProjectInfo,
@@ -22,6 +24,7 @@ type Message = {
   session_id: string;
   context?: string;
   memory_refs?: MemoryRef[];
+  tool_calls?: ToolCall[];
 };
 type Attachment = {
   id: string;
@@ -209,6 +212,25 @@ export function ChatPane({
       setSending(false);
     }
   }
+  // Tool calls from the model waiting for 允许 or 拒绝 on a card.
+  const [toolRequests, setToolRequests] = useState<ToolRequest[]>([]);
+  useEffect(() => {
+    const off = api.subscribe((event) => {
+      if (event.type === "tools.pending") setToolRequests(event.data);
+    });
+    void api
+      .action<ToolRequest[]>("tools.pending")
+      .then(setToolRequests)
+      .catch(() => {});
+    return off;
+  }, []);
+  async function decideTool(id: string, decision: string) {
+    try {
+      await api.action("tools.decide", { id, decision });
+    } catch (e) {
+      fail(e);
+    }
+  }
   const [attachment, setAttachment] = useState<Attachment | null>(null);
   const [contextError, setContextError] = useState("");
   useEffect(() => {
@@ -295,6 +317,7 @@ export function ChatPane({
         error: value.error,
         session_id: value.session_id,
         memory_refs: value.memory_refs,
+        tool_calls: value.tool_calls,
       };
       return rows.some((r) => r.id === value.id)
         ? rows.map((r) => (r.id === value.id ? message : r))
@@ -639,6 +662,19 @@ export function ChatPane({
               {!!m.memory_refs?.length && (
                 <MemoryRefs refs={m.memory_refs} onEdit={onEditMemory} />
               )}
+              {!!m.tool_calls?.length && (
+                <div className="tool-trace" aria-label="用到的工具">
+                  {m.tool_calls.map((c, i) => (
+                    <span
+                      key={i}
+                      className={c.ok ? "" : "failed"}
+                      title={c.summary}
+                    >
+                      {c.ok ? "✓" : "✕"} {c.label}
+                    </span>
+                  ))}
+                </div>
+              )}
               {m.context && (
                 <details className="sent-context">
                   <summary>附带的上下文</summary>
@@ -716,6 +752,35 @@ export function ChatPane({
           {taskNotice}
         </div>
       )}
+      {toolRequests
+        .filter((r) => r.sessionId === session)
+        .map((r) => (
+          <section
+            key={r.id}
+            className="context-preview tool-request"
+            aria-label={`工具请求：${r.label}`}
+          >
+            <strong>
+              水獭想用「{r.label}」
+              {r.origin && <small> · 来自 {r.origin}</small>}
+            </strong>
+            {Object.keys(r.arguments || {}).length > 0 && (
+              <pre>{JSON.stringify(r.arguments, null, 1)}</pre>
+            )}
+            <div className="button-row">
+              <button
+                className="primary"
+                onClick={() => decideTool(r.id, "once")}
+              >
+                允许一次
+              </button>
+              <button onClick={() => decideTool(r.id, "session")}>
+                这段对话都允许
+              </button>
+              <button onClick={() => decideTool(r.id, "deny")}>拒绝</button>
+            </div>
+          </section>
+        ))}
       {settingUndo && (
         <div className="undo-bar">
           刚把「{settingUndo.label}」改了，不满意可以

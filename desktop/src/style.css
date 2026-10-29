@@ -3529,3 +3529,39 @@ details.settings-section[open] > summary {
 .undo-bar .ghost {
   margin-left: auto;
 }
+/* Tools the model used, under its reply; a card when one needs permission. */
+.tool-trace {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0 6px 6px;
+}
+.tool-trace span {
+  font-size: 11.5px;
+  padding: 2px 9px;
+  border-radius: var(--pill);
+  background: var(--leaf);
+  color: var(--leaf-ink);
+}
+.tool-trace span.failed {
+  background: var(--danger-tint);
+  color: var(--danger);
+}
+.tool-request pre {
+  max-height: 140px;
+  overflow: auto;
+  margin: 8px 0;
+  padding: 8px 10px;
+  border-radius: var(--r-sm);
+  background: var(--tint-1);
+  font:
+    12px/1.5 ui-monospace,
+    Menlo,
+    monospace;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.tool-request small {
+  font-weight: 500;
+  color: var(--ink-3);
+}

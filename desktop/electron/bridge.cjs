@@ -49,6 +49,7 @@ class Backend extends EventEmitter {
           [
             "job.changed",
             "chat.changed",
+            "chat.tool-call",
             "memory.changed",
             "projects.changed",
             "memory.suggestion-status",
