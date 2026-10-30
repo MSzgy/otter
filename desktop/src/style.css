@@ -3662,3 +3662,20 @@ button.danger {
   font-style: normal;
   vertical-align: 1px;
 }
+.skill-source {
+  border-top: 1px solid var(--line);
+  padding: 4px 0 6px;
+}
+.skill-source > .setting-line {
+  border-top: 0;
+}
+.skill-source.off details,
+.muted-line {
+  opacity: 0.55;
+}
+.skill-source details .setting-line small {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}

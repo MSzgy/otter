@@ -6,8 +6,10 @@
 const fs = require("node:fs");
 const path = require("node:path");
 
-const MAX_SKILL = 60000;
-const MAX_FILE = 50000;
+const MAX_SKILL = 256 * 1024;
+const MAX_FILE = 512 * 1024;
+// What one tool answer carries; longer text is read in parts.
+const PART = 14000;
 const MAX_IMPORT = 5 * 1024 * 1024;
 
 // The small part of YAML front matter skills use: `key: value`, quoted
@@ -35,7 +37,7 @@ function frontMatter(text) {
 function readSkill(folder) {
   const file = path.join(folder, "SKILL.md");
   const stat = fs.statSync(file);
-  if (stat.size > MAX_SKILL) throw new Error("SKILL.md 太大（上限 60 KB）");
+  if (stat.size > MAX_SKILL) throw new Error("SKILL.md 太大（上限 256 KB）");
   const { meta, body } = frontMatter(fs.readFileSync(file, "utf8"));
   const name = String(meta.name || "").trim();
   const description = String(meta.description || "").trim();
@@ -58,60 +60,133 @@ function listFiles(folder, base = folder, found = []) {
   return found;
 }
 
+// Where skills come from, in order of precedence when names clash.
+// builtin ships with the app; otter is the user's own folder; the rest are
+// other tools' folders, read in place (never copied or changed) and each with
+// its own switch.
 class SkillLibrary {
-  // dir is the user's folder; builtin is the folder of skills shipped with
-  // the app (read-only, can be switched off like any other).
-  constructor({ dir, builtin = null, load, save, onChange = () => {} }) {
-    Object.assign(this, { dir, builtin, load, save, onChange });
+  constructor({
+    dir,
+    builtin = null,
+    external = [],
+    load,
+    save,
+    onChange = () => {},
+  }) {
+    Object.assign(this, { dir, builtin, external, load, save, onChange });
     this.skills = [];
     this.problems = [];
+    this.counts = {};
+  }
+  settings() {
+    const value = this.load() || {};
+    return {
+      disabled: Array.isArray(value.disabled) ? value.disabled : [],
+      sourcesOff: Array.isArray(value.sourcesOff) ? value.sourcesOff : [],
+    };
   }
   disabled() {
-    const value = this.load() || {};
-    return Array.isArray(value.disabled) ? value.disabled : [];
+    return this.settings().disabled;
+  }
+  sources() {
+    return [
+      ...(this.builtin
+        ? [{ id: "builtin", label: "自带", dir: this.builtin, fixed: true }]
+        : []),
+      { id: "otter", label: "Otter", dir: this.dir, fixed: true },
+      ...this.external,
+    ];
   }
   scan() {
     fs.mkdirSync(this.dir, { recursive: true });
     const skills = [],
-      problems = [];
-    const roots = [
-      ...(this.builtin && fs.existsSync(this.builtin)
-        ? [{ root: this.builtin, builtin: true }]
-        : []),
-      { root: this.dir, builtin: false },
-    ];
-    for (const { root, builtin } of roots)
-      for (const entry of fs.readdirSync(root, { withFileTypes: true })) {
-        if (!entry.isDirectory() || entry.name.startsWith(".")) continue;
-        const folder = path.join(root, entry.name);
-        if (!fs.existsSync(path.join(folder, "SKILL.md"))) continue;
+      problems = [],
+      counts = {};
+    for (const source of this.sources()) {
+      counts[source.id] = 0;
+      if (!fs.existsSync(source.dir)) continue;
+      let entries;
+      try {
+        entries = fs.readdirSync(source.dir, { withFileTypes: true });
+      } catch {
+        continue;
+      }
+      for (const entry of entries) {
+        // Skill folders may be symbolic links (other tools share them).
+        if (entry.name.startsWith(".")) continue;
+        const folder = path.join(source.dir, entry.name);
+        let real;
         try {
-          const skill = { ...readSkill(folder), builtin };
-          const twin = skills.find((s) => s.name === skill.name);
+          if (!fs.statSync(folder).isDirectory()) continue;
+          if (!fs.existsSync(path.join(folder, "SKILL.md"))) continue;
+          real = fs.realpathSync(folder);
+        } catch {
+          continue;
+        }
+        counts[source.id]++;
+        try {
+          const skill = { ...readSkill(folder), real, source: source.id };
+          const twin = skills.find(
+            (s) => s.real === real || s.name === skill.name,
+          );
+          if (twin && !source.fixed) {
+            // The same skill seen again from another tool's folder.
+            if (!twin.alsoIn.includes(source.id)) twin.alsoIn.push(source.id);
+            continue;
+          }
           if (twin)
             throw new Error(
-              `和${twin.builtin ? "自带的" : "另一个"} skill 重名：${skill.name}`,
+              `和${twin.source === "builtin" ? "自带的" : "另一个"} skill 重名：${skill.name}`,
             );
-          skills.push(skill);
+          skills.push({ ...skill, alsoIn: [] });
         } catch (error) {
-          problems.push({ folder: entry.name, message: error.message });
+          problems.push({
+            source: source.id,
+            folder: entry.name,
+            message: error.message,
+          });
         }
       }
+    }
     this.skills = skills.sort((a, b) => a.name.localeCompare(b.name));
     this.problems = problems;
+    this.counts = counts;
     this.onChange(this.snapshot());
     return this.snapshot();
   }
+  // A skill is offered when it is switched on and at least one folder it
+  // was found in is switched on.
+  active(skill, settings = this.settings()) {
+    return (
+      !settings.disabled.includes(skill.name) &&
+      [skill.source, ...skill.alsoIn].some(
+        (id) => !settings.sourcesOff.includes(id),
+      )
+    );
+  }
   snapshot() {
-    const off = this.disabled();
+    const settings = this.settings();
+    const label = (id) => this.sources().find((s) => s.id === id)?.label || id;
     return {
       dir: this.dir,
-      items: this.skills.map(({ name, description, folder, builtin }) => ({
-        name,
-        description,
-        folder: path.basename(folder),
-        builtin,
-        enabled: !off.includes(name),
+      sources: this.sources().map(({ id, label, dir, fixed }) => ({
+        id,
+        label,
+        dir,
+        fixed: !!fixed,
+        exists: fs.existsSync(dir),
+        enabled: !settings.sourcesOff.includes(id),
+        count: this.counts[id] || 0,
+      })),
+      items: this.skills.map((skill) => ({
+        name: skill.name,
+        description: skill.description,
+        folder: path.basename(skill.folder),
+        source: skill.source,
+        alsoIn: skill.alsoIn.map(label),
+        builtin: skill.source === "builtin",
+        enabled: !settings.disabled.includes(skill.name),
+        active: this.active(skill, settings),
       })),
       problems: this.problems,
     };
@@ -120,12 +195,23 @@ class SkillLibrary {
     if (!this.skills.some((s) => s.name === name))
       throw new Error("没有这个 skill。");
     if (typeof enabled !== "boolean") throw new Error("设置无效。");
-    const rest = this.disabled().filter((n) => n !== name);
-    this.save({ disabled: enabled ? rest : [...rest, name] });
+    const settings = this.settings();
+    const rest = settings.disabled.filter((n) => n !== name);
+    this.save({ ...settings, disabled: enabled ? rest : [...rest, name] });
     this.onChange(this.snapshot());
     return this.snapshot();
   }
-  // Copies a chosen folder (with its SKILL.md) into the library.
+  setSource(id, enabled) {
+    const source = this.sources().find((s) => s.id === id);
+    if (!source || source.fixed) throw new Error("这个文件夹不能单独开关。");
+    if (typeof enabled !== "boolean") throw new Error("设置无效。");
+    const settings = this.settings();
+    const rest = settings.sourcesOff.filter((n) => n !== id);
+    this.save({ ...settings, sourcesOff: enabled ? rest : [...rest, id] });
+    this.onChange(this.snapshot());
+    return this.snapshot();
+  }
+  // Copies a chosen folder (with its SKILL.md) into the user's folder.
   import(source) {
     const skill = readSkill(source);
     let size = 0;
@@ -146,8 +232,8 @@ class SkillLibrary {
     return this.scan();
   }
   enabledSkills() {
-    const off = this.disabled();
-    return this.skills.filter((s) => !off.includes(s.name));
+    const settings = this.settings();
+    return this.skills.filter((s) => this.active(s, settings));
   }
   find(name) {
     const skill = this.enabledSkills().find((s) => s.name === name);
@@ -160,8 +246,14 @@ class SkillLibrary {
       list: () => {
         const skills = this.enabledSkills();
         if (!skills.length) return [];
+        // Every skill gets a line; with many, each description is shorter,
+        // so the whole offer stays within what the backend accepts.
+        const each = Math.max(
+          60,
+          Math.min(300, Math.floor(7000 / skills.length) - 30),
+        );
         const catalogue = skills
-          .map((s) => `${s.name}：${s.description.slice(0, 300)}`)
+          .map((s) => `${s.name}：${s.description.slice(0, each)}`)
           .join("\n")
           .slice(0, 8000);
         const names = skills.map((s) => s.name);
@@ -188,9 +280,12 @@ class SkillLibrary {
             run: ({ name }) => {
               const skill = this.find(name);
               const files = listFiles(skill.folder);
+              const body = skill.body.trim();
               return [
                 `# Skill：${skill.name}`,
-                skill.body.trim(),
+                body.length > PART
+                  ? `${body.slice(0, PART)}\n\n（这个 SKILL.md 很长，这里是开头。后面的内容用 read_skill_file 读 SKILL.md，part 从 2 开始。）`
+                  : body,
                 files.length
                   ? `\n这个 skill 附带的文件（可用 read_skill_file 读取文字内容；脚本不会运行）：\n${files.map((f) => "- " + f).join("\n")}`
                   : "",
@@ -213,10 +308,14 @@ class SkillLibrary {
                   type: "string",
                   description: "相对 skill 文件夹的路径",
                 },
+                part: {
+                  type: "integer",
+                  description: "长文件分段读，从 1 开始",
+                },
               },
               required: ["name", "file"],
             },
-            run: ({ name, file }) => {
+            run: ({ name, file, part = 1 }) => {
               const skill = this.find(name);
               if (typeof file !== "string") throw new Error("缺少文件路径。");
               const full = path.resolve(skill.folder, file);
@@ -229,10 +328,17 @@ class SkillLibrary {
               const stat = fs.statSync(full);
               if (!stat.isFile()) throw new Error("这不是文件。");
               if (stat.size > MAX_FILE)
-                throw new Error("文件太大（上限 50 KB）。");
+                throw new Error("文件太大（上限 512 KB）。");
               const text = fs.readFileSync(full, "utf8");
               if (text.includes("\u0000")) throw new Error("这不是文字文件。");
-              return text;
+              const parts = Math.max(1, Math.ceil(text.length / PART));
+              const n = Number.parseInt(part, 10) || 1;
+              if (n < 1 || n > parts)
+                throw new Error(`没有第 ${n} 段，一共 ${parts} 段。`);
+              const chunk = text.slice((n - 1) * PART, n * PART);
+              return parts > 1
+                ? `${chunk}\n\n（第 ${n}/${parts} 段${n < parts ? `，下一段 part=${n + 1}` : ""}）`
+                : chunk;
             },
           },
         ];

@@ -1122,12 +1122,17 @@ async function panelAction(event, name, value) {
     if (event.sender !== panel.webContents)
       throw new Error("请在设置里管理工具。");
     if (!extensions) throw new Error("工具尚未就绪。");
-    if (name === "extensions.get")
+    if (name === "extensions.get") {
+      // Opening the page picks up skills added in other tools since.
+      try {
+        skills?.scan();
+      } catch {}
       return {
         ...extensions.snapshot(),
         builtins: builtinTools.list().map((t) => t.label),
         skills: skills?.snapshot() || null,
       };
+    }
     if (name === "extensions.configure")
       return extensions.setTools(value?.tools);
     if (name === "extensions.preview") return extensions.preview(value?.text);
@@ -1146,6 +1151,8 @@ async function panelAction(event, name, value) {
     if (name === "skills.rescan") return skills.scan();
     if (name === "skills.toggle")
       return skills.setEnabled(value?.name, value?.enabled);
+    if (name === "skills.source")
+      return skills.setSource(value?.id, value?.enabled);
     if (name === "skills.open") {
       fs.mkdirSync(skills.dir, { recursive: true });
       await shell.openPath(skills.dir);
@@ -1741,6 +1748,20 @@ else {
       builtin: app.isPackaged
         ? path.join(process.resourcesPath, "skills")
         : path.join(__dirname, "../skills"),
+      // Other tools' skill folders, read where they are. OTTER_SKILLS_HOME
+      // points the tests at a fixture instead of the real home folder.
+      external: [
+        ["agents", "共享", ".agents/skills"],
+        ["claude", "Claude Code", ".claude/skills"],
+        ["codex", "Codex", ".codex/skills"],
+      ].map(([id, label, folder]) => ({
+        id,
+        label,
+        dir: path.join(
+          process.env.OTTER_SKILLS_HOME || app.getPath("home"),
+          folder,
+        ),
+      })),
       load: () => preferences.skills,
       save: (value) => {
         preferences.skills = value;

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import "./types";
+import { SkillsCard, type Skills } from "./SkillsCard";
 
 type Tool = {
   name: string;
@@ -24,17 +25,6 @@ type Server = Target & {
   status: "off" | "starting" | "ready" | "error";
   message: string;
   tools: Tool[];
-};
-type Skills = {
-  dir: string;
-  items: {
-    name: string;
-    description: string;
-    folder: string;
-    builtin?: boolean;
-    enabled: boolean;
-  }[];
-  problems: { folder: string; message: string }[];
 };
 type State = {
   tools: boolean;
@@ -330,81 +320,13 @@ export function ExtensionsPane() {
         </details>
       </section>
       {state.skills && (
-        <section className="settings-section skill-section" aria-label="Skill">
-          <h2>Skill</h2>
-          <p>
-            一个 skill 是一个文件夹，里面的 SKILL.md 写着什么时候用、怎么做，和
-            Claude 的 Agent Skills
-            格式一样。水獭需要时会读它；里面附带的脚本不会运行。
-          </p>
-          {!state.skills.items.length && (
-            <p className="card-empty">
-              还没有 skill。把 skill 放进 skill 文件夹，或者导入一个。
-            </p>
-          )}
-          {state.skills.items.map((k) => (
-            <label className="setting-line" key={k.name}>
-              <span>
-                {k.name}
-                {k.builtin && <em className="tag">自带</em>}
-                <small>{k.description}</small>
-              </span>
-              <input
-                type="checkbox"
-                className="toggle"
-                aria-label={`启用 skill ${k.name}`}
-                checked={k.enabled}
-                onChange={(e) => {
-                  const enabled = e.target.checked;
-                  setState({
-                    ...state,
-                    skills: {
-                      ...state.skills!,
-                      items: state.skills!.items.map((x) =>
-                        x.name === k.name ? { ...x, enabled } : x,
-                      ),
-                    },
-                  });
-                  void run<Skills>("skills.toggle", {
-                    name: k.name,
-                    enabled,
-                  }).then((next) =>
-                    next
-                      ? setState((c) => (c ? { ...c, skills: next } : c))
-                      : refresh(),
-                  );
-                }}
-              />
-            </label>
-          ))}
-          {state.skills.problems.map((p) => (
-            <p className="skill-problem" key={p.folder}>
-              {p.folder}：{p.message}
-            </p>
-          ))}
-          <div className="section-foot">
-            <button onClick={() => void run("skills.open")}>
-              打开 skill 文件夹
-            </button>
-            <button
-              onClick={async () => {
-                const next = await run<Skills>("skills.import");
-                if (next) setState((c) => (c ? { ...c, skills: next } : c));
-              }}
-            >
-              导入文件夹…
-            </button>
-            <button
-              className="chat-link"
-              onClick={async () => {
-                const next = await run<Skills>("skills.rescan");
-                if (next) setState((c) => (c ? { ...c, skills: next } : c));
-              }}
-            >
-              重新扫描
-            </button>
-          </div>
-        </section>
+        <SkillsCard
+          skills={state.skills}
+          run={run}
+          onChange={(skills) =>
+            setState((current) => (current ? { ...current, skills } : current))
+          }
+        />
       )}
     </>
   );

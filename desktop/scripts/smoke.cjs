@@ -17,6 +17,27 @@ const { execFileSync } = require("node:child_process");
     path.join(os.tmpdir(), "otter-desktop-smoke-"),
   );
   const output = path.resolve(__dirname, "../../output/playwright");
+  // A stand-in home folder with other tools' skills: a shared one that
+  // Claude Code links to, one only Claude Code has, one only Codex has, and
+  // a hidden system folder that is skipped.
+  const skillsHome = fs.mkdtempSync(
+    path.join(os.tmpdir(), "otter-skills-home-"),
+  );
+  const homeSkill = (folder, name) => {
+    fs.mkdirSync(path.join(skillsHome, folder, name), { recursive: true });
+    fs.writeFileSync(
+      path.join(skillsHome, folder, name, "SKILL.md"),
+      `---\nname: ${name}\ndescription: ${name} 的用法\n---\n做法\n`,
+    );
+  };
+  homeSkill(".agents/skills", "shared-tips");
+  homeSkill(".claude/skills", "claude-notes");
+  homeSkill(".codex/skills", "codex-helper");
+  homeSkill(".codex/skills/.system", "hidden-system");
+  fs.symlinkSync(
+    path.join(skillsHome, ".agents/skills/shared-tips"),
+    path.join(skillsHome, ".claude/skills/shared-tips"),
+  );
   fs.mkdirSync(output, { recursive: true });
   const requests = [];
   const memoryRequests = [];
@@ -451,7 +472,11 @@ const { execFileSync } = require("node:child_process");
     app = await electron.launch({
       args: process.env.OTTER_TEST_APP ? [] : [path.resolve(__dirname, "..")],
       executablePath: process.env.OTTER_TEST_APP || undefined,
-      env: { ...process.env, OTTER_DESKTOP_USER_DATA: userData },
+      env: {
+        ...process.env,
+        OTTER_DESKTOP_USER_DATA: userData,
+        OTTER_SKILLS_HOME: skillsHome,
+      },
       timeout: 30000,
     });
     let panel, pet;
@@ -1277,7 +1302,10 @@ const { execFileSync } = require("node:child_process");
       .body.tools.find((t) => t.function.name === "use_skill");
     assert.deepEqual(offeredSkill.function.parameters.properties.name.enum, [
       "add-mcp-server",
+      "claude-notes",
+      "codex-helper",
       "otter-haiku",
+      "shared-tips",
     ]);
     await panel.getByText("照着 skill：已读", { exact: true }).waitFor();
     await panel
@@ -1289,11 +1317,53 @@ const { execFileSync } = require("node:child_process");
     await skillSwitch.uncheck();
     await panel.keyboard.press("Escape");
     await chatSay("随便聊聊");
-    assert.deepEqual(
+    const offeredNames = () =>
       requests.at(-1).body.tools.find((t) => t.function.name === "use_skill")
-        .function.parameters.properties.name.enum,
-      ["add-mcp-server"],
+        .function.parameters.properties.name.enum;
+    assert(
+      !offeredNames().includes("otter-haiku"),
       "A switched-off skill is not offered",
+    );
+    // Other tools' folders: listed by source, a shared skill shown once with
+    // where else it is, a switch per folder and per skill.
+    await openTools();
+    await panel
+      .getByRole("checkbox", { name: "使用 Codex 的 skill" })
+      .waitFor();
+    const shared = panel.locator('.skill-source[aria-label="共享 的 skill"]');
+    await shared.locator("summary").click();
+    await shared.getByText("shared-tips 的用法（也在 Claude Code）").waitFor();
+    assert.equal(
+      await panel.getByText("hidden-system").count(),
+      0,
+      "Hidden system folders are skipped",
+    );
+    await panel.screenshot({
+      path: path.join(output, "otter-skills-sources.png"),
+    });
+    await panel
+      .getByRole("checkbox", { name: "使用 Codex 的 skill", exact: true })
+      .uncheck();
+    const claude = panel.locator(
+      '.skill-source[aria-label="Claude Code 的 skill"]',
+    );
+    await claude.locator("summary").click();
+    await claude
+      .getByRole("checkbox", { name: "启用 skill claude-notes", exact: true })
+      .uncheck();
+    await panel.keyboard.press("Escape");
+    await chatSay("随便聊聊，换个话题");
+    assert.deepEqual(offeredNames(), ["add-mcp-server", "shared-tips"]);
+    const skillPrefs = JSON.parse(
+      fs.readFileSync(path.join(userData, "desktop.json"), "utf8"),
+    ).skills;
+    assert.deepEqual(skillPrefs.sourcesOff, ["codex"]);
+    assert(skillPrefs.disabled.includes("claude-notes"));
+    assert(
+      fs.existsSync(
+        path.join(skillsHome, ".codex/skills/codex-helper/SKILL.md"),
+      ),
+      "Other tools' skills are read in place, never moved",
     );
     // The shipped add-mcp-server skill: the model reads it, then proposes a
     // server through otter_add_mcp_server; the card says it in words, has no
@@ -1370,7 +1440,7 @@ const { execFileSync } = require("node:child_process");
       await vscodeRemote.close();
     }
     console.log(
-      "PASS: reading a web page asks first and refuses this Mac and the local network; MCP server added from settings: preview first, its tools offered, a writing call waits for the card, 允许一次 runs it, 拒绝 does not, 不用再问 skips the card, disable and remove; servers added from chat after a card (a pasted command, and a remote HTTP server with a token whose tool then runs after 允许); a skill found by 重新扫描, read through use_skill, and not offered once off; the shipped add-mcp-server skill read, then a server proposed through otter_add_mcp_server and added after 允许一次; a VS Code-shaped remote config pasted into settings.",
+      "PASS: reading a web page asks first and refuses this Mac and the local network; MCP server added from settings: preview first, its tools offered, a writing call waits for the card, 允许一次 runs it, 拒绝 does not, 不用再问 skips the card, disable and remove; servers added from chat after a card (a pasted command, and a remote HTTP server with a token whose tool then runs after 允许); a skill found by 重新扫描, read through use_skill, and not offered once off; Codex, Claude Code and shared skill folders read in place, merged when linked, switched per folder and per skill; the shipped add-mcp-server skill read, then a server proposed through otter_add_mcp_server and added after 允许一次; a VS Code-shaped remote config pasted into settings.",
     );
     await panel.getByRole("button", { name: "新对话", exact: true }).click();
     await panel
@@ -2151,6 +2221,7 @@ const { execFileSync } = require("node:child_process");
     server.closeAllConnections();
     await new Promise((resolve) => server.close(resolve));
     fs.rmSync(userData, { recursive: true, force: true });
+    fs.rmSync(skillsHome, { recursive: true, force: true });
   }
 })().catch((e) => {
   console.error(e);

@@ -59,8 +59,11 @@ test("scan finds skills, explains broken ones, and offers two read-only tools", 
       name: "haiku",
       description: "写一首中文俳句时用",
       folder: "haiku",
+      source: "otter",
+      alsoIn: [],
       builtin: false,
       enabled: true,
+      active: true,
     },
   ]);
   assert.deepEqual(state.problems.map((p) => p.folder).sort(), [
@@ -156,4 +159,116 @@ test("skills shipped with the app sit beside the user's, and win a name clash", 
     save: () => {},
   });
   assert.deepEqual(missing.scan().items, []);
+});
+
+test("other tools' folders: read in place, merged when shared, each with a switch", (t) => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), "otter-home-"));
+  t.after(() => fs.rmSync(home, { recursive: true, force: true }));
+  const at = (p) => path.join(home, p);
+  const skill = (name, text = "做法") =>
+    `---\nname: ${name}\ndescription: ${name} 的说明\n---\n${text}`;
+  write(at(".agents/skills"), "shared", skill("shared"));
+  fs.mkdirSync(at(".claude/skills"), { recursive: true });
+  fs.symlinkSync(at(".agents/skills/shared"), at(".claude/skills/shared"));
+  write(at(".claude/skills"), "claude-only", skill("claude-only"));
+  write(at(".codex/skills"), "codex-only", skill("codex-only"));
+  write(at(".codex/skills"), "copy-of-shared", skill("shared", "另一份"));
+  write(at(".codex/skills/.system"), "hidden", skill("hidden"));
+  fs.writeFileSync(at(".claude/skills/SKILL.md"), skill("loose"));
+  let stored = {};
+  const lib = new SkillLibrary({
+    dir: at("otter"),
+    external: [
+      { id: "agents", label: "共享", dir: at(".agents/skills") },
+      { id: "claude", label: "Claude Code", dir: at(".claude/skills") },
+      { id: "codex", label: "Codex", dir: at(".codex/skills") },
+      { id: "none", label: "不存在", dir: at(".nothing/skills") },
+    ],
+    load: () => stored,
+    save: (v) => (stored = v),
+  });
+  const state = lib.scan();
+  assert.deepEqual(
+    state.items.map((i) => [i.name, i.source, i.alsoIn, i.active]),
+    [
+      ["claude-only", "claude", [], true],
+      ["codex-only", "codex", [], true],
+      ["shared", "agents", ["Claude Code", "Codex"], true],
+    ],
+  );
+  assert.deepEqual(
+    state.problems,
+    [],
+    "Duplicates in tools' folders are not problems",
+  );
+  assert.deepEqual(
+    state.sources.map((s) => [s.id, s.count, s.exists, s.enabled]),
+    [
+      ["otter", 0, true, true],
+      ["agents", 1, true, true],
+      ["claude", 2, true, true],
+      ["codex", 2, true, true],
+      ["none", 0, false, true],
+    ],
+  );
+  lib.setSource("codex", false);
+  const names = () =>
+    lib.source().list()[0].parameters.properties.name.enum.slice().sort();
+  assert.deepEqual(names(), ["claude-only", "shared"]);
+  lib.setSource("agents", false);
+  assert.deepEqual(
+    names(),
+    ["claude-only", "shared"],
+    "Still reachable through Claude Code",
+  );
+  lib.setSource("claude", false);
+  assert.deepEqual(lib.source().list(), []);
+  assert.throws(() => lib.setSource("otter", false), /不能单独开关/);
+  assert(
+    fs.existsSync(at(".codex/skills/codex-only/SKILL.md")),
+    "Nothing is moved or copied",
+  );
+});
+
+test("many skills still fit in one offer", (t) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "otter-many-"));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const lib = new SkillLibrary({
+    dir: path.join(root, "otter"),
+    load: () => ({}),
+    save: () => {},
+  });
+  for (let i = 0; i < 80; i++)
+    write(
+      lib.dir,
+      `s${i}`,
+      `---\nname: skill-${i}\ndescription: ${"很长的说明".repeat(80)}\n---\nx`,
+    );
+  lib.scan();
+  const [use] = lib.source().list();
+  assert.equal(use.parameters.properties.name.enum.length, 80);
+  assert(JSON.stringify(use.parameters).length < 11000);
+});
+
+test("a long SKILL.md is offered in parts", async (t) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "otter-long-"));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const lib = new SkillLibrary({
+    dir: path.join(root, "otter"),
+    load: () => ({}),
+    save: () => {},
+  });
+  const body = "甲".repeat(20000) + "乙".repeat(10000);
+  write(lib.dir, "long", `---\nname: long\ndescription: 很长\n---\n${body}`);
+  lib.scan();
+  const [use, read] = lib.source().list();
+  const first = await use.run({ name: "long" });
+  assert.match(first, /part 从 2 开始/);
+  assert(!first.includes("乙"));
+  const second = await read.run({ name: "long", file: "SKILL.md", part: 2 });
+  assert.match(second, /第 2\/3 段，下一段 part=3/);
+  assert.throws(
+    () => read.run({ name: "long", file: "SKILL.md", part: 9 }),
+    /没有第 9 段/,
+  );
 });
