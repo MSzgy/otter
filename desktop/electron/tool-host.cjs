@@ -4,9 +4,11 @@
 // tool with a time limit and hands the result back as text.
 //
 // A tool is { name, label, origin, description, parameters, readOnly, trusted,
-// autoApprove, run(args, context) }. Trusted read-only tools (Otter's own
-// look-ups) and tools the user marked 不用再问 (autoApprove) run without asking;
-// everything else waits for 允许一次 / 这段对话都允许 / 拒绝.
+// autoApprove, alwaysAsk, preview(args), run(args, context) }. Trusted
+// read-only tools (Otter's own look-ups) and tools the user marked 不用再问
+// (autoApprove) run without asking; everything else waits for 允许一次 /
+// 这段对话都允许 / 拒绝. An alwaysAsk tool asks every time, with no
+// this-conversation grant, and preview() puts the call into words on the card.
 const MAX_RESULT = 16000;
 
 function text(result) {
@@ -79,7 +81,7 @@ class ToolHost {
     for (const key of this.sessionGrants)
       if (key.startsWith(sessionId + "\n")) this.sessionGrants.delete(key);
   }
-  ask(call, tool) {
+  ask(call, tool, detail) {
     return new Promise((resolve) => {
       const entry = {
         id: call.call_id,
@@ -89,6 +91,8 @@ class ToolHost {
         label: tool.label,
         origin: tool.origin,
         arguments: call.arguments || {},
+        ...(detail ? { detail } : {}),
+        ...(tool.alwaysAsk ? { alwaysAsk: true } : {}),
         resolve: (decision) => {
           clearTimeout(entry.timer);
           if (!this.waiting.delete(entry.id)) return;
@@ -106,9 +110,22 @@ class ToolHost {
     if (!tool)
       return { ok: false, content: "没有这个工具。", label: call.name };
     const grant = `${call.session_id}\n${tool.name}`;
-    const free = tool.autoApprove || (tool.readOnly && tool.trusted);
-    if (!free && !this.sessionGrants.has(grant)) {
-      const decision = await this.ask(call, tool);
+    const free =
+      !tool.alwaysAsk && (tool.autoApprove || (tool.readOnly && tool.trusted));
+    if (!free && (tool.alwaysAsk || !this.sessionGrants.has(grant))) {
+      // A tool may describe the call in words for the card; if it cannot
+      // (bad arguments), the model hears why instead of the user seeing it.
+      let detail;
+      try {
+        detail = tool.preview ? await tool.preview(call.arguments || {}) : "";
+      } catch (error) {
+        return {
+          ok: false,
+          content: `没有执行：${error?.message || String(error)}`,
+          label: tool.label,
+        };
+      }
+      const decision = await this.ask(call, tool, detail);
       if (decision === "deny")
         return {
           ok: false,
@@ -116,7 +133,8 @@ class ToolHost {
             "用户没有允许这次调用，请不要再试同样的调用，可以换个方式帮忙。",
           label: tool.label,
         };
-      if (decision === "session") this.sessionGrants.add(grant);
+      if (decision === "session" && !tool.alwaysAsk)
+        this.sessionGrants.add(grant);
     }
     let timer;
     try {

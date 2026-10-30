@@ -228,9 +228,9 @@ def _pasted_config(text):
         return None
     if not isinstance(value, dict):
         return None
-    if "mcpServers" in value or (
-        "mcp" in text.lower() and any(k in value for k in ("command", "url", "serverUrl"))
-    ):
+    # Claude Desktop, Cursor, VS Code, Gemini CLI, OpenCode and Zed shapes.
+    keys = ("command", "url", "serverUrl", "httpUrl", "servers", "context_servers", "mcp")
+    if "mcpServers" in value or ("mcp" in text.lower() and any(k in value for k in keys)):
         return value
     return None
 

@@ -61,8 +61,13 @@ function cleanHeaders(name, headers) {
 }
 
 // A remote server: https anywhere, plain http only on this Mac.
+// The keys other apps use for a remote server's address.
+const URL_KEYS = ["url", "serverUrl", "httpUrl", "serverURL", "uri"];
+const remoteUrl = (value) =>
+  URL_KEYS.map((k) => value[k]).find((v) => typeof v === "string");
+
 function cleanRemote(name, value) {
-  const raw = value.url ?? value.serverUrl;
+  const raw = remoteUrl(value);
   let url;
   try {
     url = new URL(raw);
@@ -76,11 +81,11 @@ function cleanRemote(name, value) {
     throw new Error(`“${name}”要用 https 网址（本机服务可以用 http）。`);
   if (url.username || url.password)
     throw new Error(`“${name}”的网址里不要写账号密码，请放在 headers 里。`);
-  const type = String(value.type || value.transport || "").toLowerCase();
-  if (
-    type &&
-    !["http", "streamable-http", "streamablehttp", "sse"].includes(type)
-  )
+  // http, streamable-http, streamableHttp, streamable_http, remote, sse…
+  const type = String(value.type || value.transport || "")
+    .toLowerCase()
+    .replace(/[-_]/g, "");
+  if (type && !["http", "streamablehttp", "remote", "sse"].includes(type))
     throw new Error(`“${name}”的 type 只能是 http 或 sse。`);
   const transport =
     type === "sse" || (!type && /\/sse\/?$/.test(url.pathname))
@@ -100,12 +105,28 @@ function cleanServer(name, value) {
     throw new Error("服务名称要在 1–40 个字以内。");
   if (!value || typeof value !== "object" || Array.isArray(value))
     throw new Error(`“${name}”的配置不是对象。`);
-  if (value.url || value.serverUrl) return cleanRemote(name, value);
-  if (["http", "sse", "streamable-http"].includes(value.type))
-    throw new Error(`“${name}”是网络服务，要写上 url。`);
-  const { command, args = [], env = {} } = value;
+  if (remoteUrl(value)) return cleanRemote(name, value);
+  const type = String(value.type || "").toLowerCase();
+  if (/http|sse|remote/.test(type))
+    throw new Error(`“${name}”是网络服务，要写上 url（服务网址）。`);
+  // Zed writes the command as { path, args, env }.
+  const {
+    command,
+    args = [],
+    env = {},
+  } = value.command && typeof value.command === "object"
+    ? {
+        command: value.command.path,
+        args: value.command.args,
+        env: value.command.env,
+      }
+    : value;
+  if (command === undefined)
+    throw new Error(
+      `“${name}”里没有 command 也没有 url：本机服务写 command，网络服务写 url。`,
+    );
   if (typeof command !== "string" || !command.trim() || command.length > 500)
-    throw new Error(`“${name}”缺少要运行的 command。`);
+    throw new Error(`“${name}”的 command 要是一段命令文字。`);
   if (
     !Array.isArray(args) ||
     args.length > 50 ||
@@ -130,23 +151,65 @@ function cleanServer(name, value) {
 
 // Accepts {"mcpServers": {...}}, a bare {"name": {...}} map, or one server
 // object with a "name". Returns the server entries; changes nothing.
+// One entry that is a server itself, not a map of servers.
+const isServer = (v) =>
+  !!v &&
+  typeof v === "object" &&
+  !Array.isArray(v) &&
+  (typeof v.command === "string" ||
+    typeof v.command?.path === "string" ||
+    !!remoteUrl(v));
+// A name for a server known only by its address: mcp.notion.com → notion.
+function nameFromUrl(href) {
+  const parts = new URL(href).hostname
+    .split(".")
+    .filter(
+      (p) =>
+        ![
+          "www",
+          "mcp",
+          "api",
+          "com",
+          "org",
+          "net",
+          "io",
+          "ai",
+          "app",
+          "dev",
+          "cn",
+        ].includes(p),
+    );
+  return (parts[0] || new URL(href).hostname).slice(0, 40);
+}
+
 function parseConfig(text) {
   if (typeof text !== "string" || text.length > 20000)
     throw new Error("配置要是 20000 字以内的 JSON。");
+  const bare = text.trim();
+  // Just an address: a remote server named after its host.
+  if (/^https?:\/\/\S+$/i.test(bare))
+    return [cleanServer(nameFromUrl(bare), { url: bare })];
   let value;
   try {
     value = JSON.parse(text);
   } catch {
-    throw new Error("配置不是有效的 JSON。");
+    throw new Error("配置不是有效的 JSON，也不是一个网址。");
   }
   if (!value || typeof value !== "object" || Array.isArray(value))
     throw new Error("配置要是一个 JSON 对象。");
-  if (value.mcpServers) value = value.mcpServers;
-  else if (
-    ["command", "url", "serverUrl"].some((k) => typeof value[k] === "string")
-  ) {
+  // The wrappers other apps use: Claude Desktop and Cursor mcpServers,
+  // VS Code servers (or mcp.servers in its settings), OpenCode mcp, Zed
+  // context_servers.
+  for (let depth = 0; depth < 3; depth++) {
+    const key = ["mcpServers", "servers", "context_servers", "mcp"].find(
+      (k) => value[k] && typeof value[k] === "object" && !isServer(value[k]),
+    );
+    if (!key) break;
+    value = value[key];
+  }
+  if (isServer(value)) {
     const { name, ...rest } = value;
-    value = { [name || "mcp"]: rest };
+    value = { [typeof name === "string" && name ? name : "mcp"]: rest };
   }
   const entries = Object.entries(value);
   if (!entries.length) throw new Error("配置里没有 MCP 服务。");

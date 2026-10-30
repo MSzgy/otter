@@ -59,6 +59,7 @@ test("scan finds skills, explains broken ones, and offers two read-only tools", 
       name: "haiku",
       description: "写一首中文俳句时用",
       folder: "haiku",
+      builtin: false,
       enabled: true,
     },
   ]);
@@ -116,4 +117,43 @@ test("import copies a folder with a valid SKILL.md, once", (t) => {
   const bad = path.join(root, "from", "bad");
   write(path.dirname(bad), "bad", "no front matter");
   assert.throws(() => lib.import(bad), /缺少 name 或 description/);
+});
+
+test("skills shipped with the app sit beside the user's, and win a name clash", (t) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "otter-skills-"));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const shipped = path.join(root, "shipped");
+  write(
+    shipped,
+    "add-mcp",
+    "---\nname: add-mcp-server\ndescription: 添加 MCP\n---\n做法",
+  );
+  const lib = new SkillLibrary({
+    dir: path.join(root, "user"),
+    builtin: shipped,
+    load: () => ({}),
+    save: () => {},
+  });
+  write(lib.dir, "mine", haiku);
+  write(
+    lib.dir,
+    "copy",
+    "---\nname: add-mcp-server\ndescription: 我的版本\n---\nx",
+  );
+  const state = lib.scan();
+  assert.deepEqual(
+    state.items.map((i) => [i.name, i.builtin]),
+    [
+      ["add-mcp-server", true],
+      ["haiku", false],
+    ],
+  );
+  assert.match(state.problems[0].message, /和自带的 skill 重名/);
+  const missing = new SkillLibrary({
+    dir: path.join(root, "u2"),
+    builtin: path.join(root, "nowhere"),
+    load: () => ({}),
+    save: () => {},
+  });
+  assert.deepEqual(missing.scan().items, []);
 });

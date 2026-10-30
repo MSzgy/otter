@@ -1,4 +1,5 @@
 const { randomUUID } = require("node:crypto");
+const { summary } = require("./extensions.cjs");
 const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 // Values of env and headers in an MCP config: tokens, as a rule. They are
 // blanked out of what the chat keeps, so later turns never send them on.
@@ -331,19 +332,8 @@ class TaskAssistant {
           } catch (e) {
             return await this.receipt(request, `没有添加：${e.message}`);
           }
-          const line = (s) =>
-            s.url
-              ? `${s.name}：连接 ${s.url}${s.headerKeys?.length ? `（请求头：${s.headerKeys.join("、")}）` : ""}`
-              : `${s.name}：运行 ${[s.command, ...s.args].join(" ")}${s.envKeys?.length ? `（环境变量：${s.envKeys.join("、")}）` : ""}`;
           title = "确认添加 MCP 服务";
-          detail = `${servers.map(line).join("\n")}\n\n${[
-            servers.some((s) => !s.url) &&
-              "这会在你的 Mac 上运行上面的命令，只添加你信任的服务。",
-            servers.some((s) => s.url) &&
-              "你允许的工具调用会把参数发给这个网络服务。",
-          ]
-            .filter(Boolean)
-            .join("\n")}`;
+          detail = summary(servers);
           plan = { ...plan, config, names: servers.map((s) => s.name) };
           break;
         }

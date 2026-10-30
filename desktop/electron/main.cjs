@@ -32,7 +32,7 @@ const {
 const { SettingsRegistry } = require("./settings-registry.cjs");
 const { ToolHost } = require("./tool-host.cjs");
 const { WebReader } = require("./web-reader.cjs");
-const { Extensions } = require("./extensions.cjs");
+const { Extensions, summary } = require("./extensions.cjs");
 const { SkillLibrary } = require("./skills.cjs");
 const actionGate = new ActionGate({
   resolveApp: (id) => nativeRead("resolve-app", id),
@@ -405,6 +405,40 @@ const builtinTools = {
         required: ["url"],
       },
       run: ({ url }) => webReader.read(String(url || "")),
+    },
+    // Adds an MCP server the model put together (say, from a service's docs
+    // or another app's config). Asks every time, in words, never "for the
+    // whole conversation".
+    {
+      name: "otter_add_mcp_server",
+      label: "添加 MCP 服务",
+      origin: "Otter",
+      alwaysAsk: true,
+      description:
+        '替用户添加 MCP 服务。config 用 {"mcpServers":{"名字":{...}}}：本机服务写 command、args、env，网络服务写 url（可带 headers）。会弹卡片列出要运行的命令或要连接的地址，用户允许后才添加。命令、包名和网址必须来自用户或服务的官方说明，不要凭记忆猜。',
+      parameters: {
+        type: "object",
+        properties: {
+          config: {
+            type: "object",
+            description: "Claude Desktop 格式的 MCP 配置",
+          },
+        },
+        required: ["config"],
+      },
+      preview: ({ config }) =>
+        summary(
+          extensions.preview(JSON.stringify(config ?? null)),
+          "这份配置是水獭整理的，请确认命令或网址来自你信任的来源。",
+        ),
+      run: ({ config }) => {
+        const before = new Set(extensions.snapshot().servers.map((s) => s.id));
+        const added = extensions
+          .add(JSON.stringify(config))
+          .servers.filter((s) => !before.has(s.id))
+          .map((s) => s.name);
+        return `已添加：${added.join("、")}。服务正在启动，几秒后可以在 设置 → 工具与扩展 里看状态；它的工具会在下一条消息里出现。`;
+      },
     },
     lookup({
       name: "otter_time",
@@ -1703,6 +1737,10 @@ else {
     extensions.init();
     skills = new SkillLibrary({
       dir: path.join(app.getPath("userData"), "skills"),
+      // Skills shipped with the app (add-mcp-server…), outside the asar.
+      builtin: app.isPackaged
+        ? path.join(process.resourcesPath, "skills")
+        : path.join(__dirname, "../skills"),
       load: () => preferences.skills,
       save: (value) => {
         preferences.skills = value;

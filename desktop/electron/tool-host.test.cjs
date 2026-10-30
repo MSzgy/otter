@@ -113,3 +113,50 @@ test("tools the backend would refuse are left out of the offer", () => {
   assert.equal(names.length, 64);
   assert(!names.includes("bad name") && !names.includes("huge"));
 });
+
+test("an always-ask tool describes the call in words and never grants the conversation", async () => {
+  let ran = 0;
+  const add = {
+    name: "otter_add_mcp_server",
+    label: "添加 MCP 服务",
+    alwaysAsk: true,
+    readOnly: true,
+    trusted: true,
+    autoApprove: true,
+    preview: ({ config }) => {
+      if (!config) throw new Error("缺少 config");
+      return `会添加 ${config}`;
+    },
+    run: () => ++ran,
+  };
+  const { h } = host([add]);
+  const tick = () => new Promise((r) => setImmediate(r));
+  const first = h.handle(
+    call("otter_add_mcp_server", { arguments: { config: "a" } }),
+  );
+  await tick();
+  assert.equal(h.pending()[0].detail, "会添加 a");
+  assert.equal(h.pending()[0].alwaysAsk, true);
+  h.decide(h.pending()[0].id, "session");
+  await first;
+  const second = h.handle(
+    call("otter_add_mcp_server", { arguments: { config: "b" } }),
+  );
+  await tick();
+  assert.equal(
+    h.pending().length,
+    1,
+    "Still asks: no grant for the conversation",
+  );
+  h.decide(h.pending()[0].id, "once");
+  await second;
+  assert.equal(ran, 2);
+  const bad = await h.handle(call("otter_add_mcp_server", { arguments: {} }));
+  assert.equal(bad.ok, false);
+  assert.equal(bad.content, "没有执行：缺少 config");
+  assert.equal(
+    h.pending().length,
+    0,
+    "A call it cannot describe never reaches a card",
+  );
+});

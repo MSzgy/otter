@@ -217,6 +217,51 @@ const { execFileSync } = require("node:child_process");
       const lastUser =
         [...(body.messages || [])].reverse().find((m) => m.role === "user")
           ?.content || "";
+      if (body.stream && lastUser.startsWith("用 skill 帮我添加")) {
+        // Read the add-mcp-server skill, then propose a server, then report.
+        res.setHeader("Content-Type", "text/event-stream");
+        const results = body.messages.filter((m) => m.role === "tool");
+        const call = (name, args) => ({
+          choices: [
+            {
+              delta: {
+                tool_calls: [
+                  {
+                    index: 0,
+                    id: `call_${results.length}`,
+                    function: { name, arguments: JSON.stringify(args) },
+                  },
+                ],
+              },
+              finish_reason: "tool_calls",
+            },
+          ],
+        });
+        const chunk =
+          results.length === 0
+            ? call("use_skill", { name: "add-mcp-server" })
+            : results.length === 1
+              ? call("otter_add_mcp_server", {
+                  config: {
+                    mcpServers: {
+                      viatool: {
+                        command: process.execPath,
+                        args: [path.join(__dirname, "fake-mcp-server.cjs")],
+                      },
+                    },
+                  },
+                })
+              : {
+                  choices: [
+                    {
+                      delta: { content: `添加结果：${results.at(-1).content}` },
+                      finish_reason: "stop",
+                    },
+                  ],
+                };
+        res.end(`data: ${JSON.stringify(chunk)}\n\ndata: [DONE]\n\n`);
+        return;
+      }
       if (body.stream && lastUser.startsWith("用 skill 写俳句")) {
         res.setHeader("Content-Type", "text/event-stream");
         const result = body.messages.find((m) => m.role === "tool");
@@ -988,10 +1033,14 @@ const { execFileSync } = require("node:child_process");
       toolTurns[0].body.tools.map((t) => t.function.name),
       [
         "otter_read_webpage",
+        "otter_add_mcp_server",
         "otter_time",
         "otter_reminders",
         "otter_todos",
         "otter_settings",
+        // The add-mcp-server skill ships with the app.
+        "use_skill",
+        "read_skill_file",
       ],
     );
     assert.equal(toolTurns[1].body.messages.at(-1).role, "tool");
@@ -1227,6 +1276,7 @@ const { execFileSync } = require("node:child_process");
       .at(-2)
       .body.tools.find((t) => t.function.name === "use_skill");
     assert.deepEqual(offeredSkill.function.parameters.properties.name.enum, [
+      "add-mcp-server",
       "otter-haiku",
     ]);
     await panel.getByText("照着 skill：已读", { exact: true }).waitFor();
@@ -1239,14 +1289,88 @@ const { execFileSync } = require("node:child_process");
     await skillSwitch.uncheck();
     await panel.keyboard.press("Escape");
     await chatSay("随便聊聊");
-    assert(
-      !requests
-        .at(-1)
-        .body.tools.some((t) => t.function.name.includes("skill")),
+    assert.deepEqual(
+      requests.at(-1).body.tools.find((t) => t.function.name === "use_skill")
+        .function.parameters.properties.name.enum,
+      ["add-mcp-server"],
       "A switched-off skill is not offered",
     );
+    // The shipped add-mcp-server skill: the model reads it, then proposes a
+    // server through otter_add_mcp_server; the card says it in words, has no
+    // "for this conversation", and nothing is added before 允许一次.
+    await panel
+      .getByRole("textbox", { name: "聊天输入" })
+      .fill("用 skill 帮我添加笔记服务");
+    await panel.getByRole("button", { name: "发送", exact: true }).click();
+    const viaTool = panel.getByRole("region", {
+      name: "工具请求：添加 MCP 服务",
+    });
+    await viaTool.getByText(/viatool：运行 .*fake-mcp-server\.cjs/).waitFor();
+    await viaTool.getByText(/这份配置是水獭整理的/).waitFor();
+    assert.equal(
+      await viaTool.getByRole("button", { name: "这段对话都允许" }).count(),
+      0,
+    );
+    await panel.screenshot({
+      path: path.join(output, "otter-mcp-skill-card.png"),
+    });
+    await viaTool
+      .getByRole("button", { name: "允许一次", exact: true })
+      .click();
+    await panel.getByText(/^添加结果：已添加：viatool/).waitFor();
+    const usedSkill = requests.filter(
+      (r) =>
+        r.body.stream && lastUserOf(r.body).startsWith("用 skill 帮我添加"),
+    );
+    assert.match(
+      usedSkill[1].body.messages.at(-1).content,
+      /# Skill：add-mcp-server/,
+      "The model read the skill before adding",
+    );
+    // A remote config in VS Code's shape (servers, type http) pasted into
+    // settings: read as a network server, not as a missing command.
+    const vscodeRemote = await startFakeHttpMcp({});
+    try {
+      await openTools();
+      await panel
+        .getByRole("article", { name: "MCP 服务：viatool" })
+        .getByText("运行中 · 2 个工具", { exact: true })
+        .waitFor();
+      await panel
+        .getByRole("region", { name: "MCP 服务" })
+        .getByText("添加 MCP 服务", { exact: true })
+        .click();
+      await panel.getByRole("textbox", { name: "MCP 配置" }).fill(
+        JSON.stringify({
+          servers: { vscode: { type: "http", url: vscodeRemote.url } },
+        }),
+      );
+      await panel
+        .getByRole("button", { name: "检查配置", exact: true })
+        .click();
+      await panel.getByText(`vscode：${vscodeRemote.url}（HTTP）`).waitFor();
+      await panel
+        .getByRole("button", { name: "确认添加", exact: true })
+        .click();
+      await panel
+        .getByRole("article", { name: "MCP 服务：vscode" })
+        .getByText("运行中 · 2 个工具", { exact: true })
+        .waitFor();
+      for (const name of ["viatool", "vscode"]) {
+        await panel
+          .getByRole("button", { name: `删除 ${name}`, exact: true })
+          .click();
+        await panel
+          .getByRole("button", { name: "确认删除", exact: true })
+          .click();
+      }
+      await panel.getByText("还没有接上 MCP 服务。").waitFor();
+      await panel.keyboard.press("Escape");
+    } finally {
+      await vscodeRemote.close();
+    }
     console.log(
-      "PASS: reading a web page asks first and refuses this Mac and the local network; MCP server added from settings: preview first, its tools offered, a writing call waits for the card, 允许一次 runs it, 拒绝 does not, 不用再问 skips the card, disable and remove; servers added from chat after a card (a pasted command, and a remote HTTP server with a token whose tool then runs after 允许); a skill found by 重新扫描, read through use_skill, and not offered once off.",
+      "PASS: reading a web page asks first and refuses this Mac and the local network; MCP server added from settings: preview first, its tools offered, a writing call waits for the card, 允许一次 runs it, 拒绝 does not, 不用再问 skips the card, disable and remove; servers added from chat after a card (a pasted command, and a remote HTTP server with a token whose tool then runs after 允许); a skill found by 重新扫描, read through use_skill, and not offered once off; the shipped add-mcp-server skill read, then a server proposed through otter_add_mcp_server and added after 允许一次; a VS Code-shaped remote config pasted into settings.",
     );
     await panel.getByRole("button", { name: "新对话", exact: true }).click();
     await panel

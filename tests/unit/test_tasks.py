@@ -305,3 +305,13 @@ def test_named_but_unspecified_mcp_server_asks_for_the_config():
     )
     assert plan["kind"] == "clarify"
     assert "原样发给我" in plan["message"]
+
+
+def test_pasted_configs_from_other_apps_are_recognised():
+    from otter.companion.tasks import _pasted_config
+
+    vscode = '帮我添加这个 MCP {"servers": {"n": {"type": "http", "url": "https://a.example/mcp"}}}'
+    gemini = '接上 mcp：{"httpUrl": "https://a.example/mcp"}'
+    assert _pasted_config(vscode)["servers"]["n"]["url"] == "https://a.example/mcp"
+    assert _pasted_config(gemini) == {"httpUrl": "https://a.example/mcp"}
+    assert _pasted_config('看看这段 JSON {"servers": 1}') is None, "Needs the word MCP"

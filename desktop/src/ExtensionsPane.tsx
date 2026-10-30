@@ -31,6 +31,7 @@ type Skills = {
     name: string;
     description: string;
     folder: string;
+    builtin?: boolean;
     enabled: boolean;
   }[];
   problems: { folder: string; message: string }[];
@@ -345,6 +346,7 @@ export function ExtensionsPane() {
             <label className="setting-line" key={k.name}>
               <span>
                 {k.name}
+                {k.builtin && <em className="tag">自带</em>}
                 <small>{k.description}</small>
               </span>
               <input

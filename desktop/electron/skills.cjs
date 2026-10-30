@@ -59,8 +59,10 @@ function listFiles(folder, base = folder, found = []) {
 }
 
 class SkillLibrary {
-  constructor({ dir, load, save, onChange = () => {} }) {
-    Object.assign(this, { dir, load, save, onChange });
+  // dir is the user's folder; builtin is the folder of skills shipped with
+  // the app (read-only, can be switched off like any other).
+  constructor({ dir, builtin = null, load, save, onChange = () => {} }) {
+    Object.assign(this, { dir, builtin, load, save, onChange });
     this.skills = [];
     this.problems = [];
   }
@@ -72,19 +74,29 @@ class SkillLibrary {
     fs.mkdirSync(this.dir, { recursive: true });
     const skills = [],
       problems = [];
-    for (const entry of fs.readdirSync(this.dir, { withFileTypes: true })) {
-      if (!entry.isDirectory() || entry.name.startsWith(".")) continue;
-      const folder = path.join(this.dir, entry.name);
-      if (!fs.existsSync(path.join(folder, "SKILL.md"))) continue;
-      try {
-        const skill = readSkill(folder);
-        if (skills.some((s) => s.name === skill.name))
-          throw new Error(`和另一个 skill 重名：${skill.name}`);
-        skills.push(skill);
-      } catch (error) {
-        problems.push({ folder: entry.name, message: error.message });
+    const roots = [
+      ...(this.builtin && fs.existsSync(this.builtin)
+        ? [{ root: this.builtin, builtin: true }]
+        : []),
+      { root: this.dir, builtin: false },
+    ];
+    for (const { root, builtin } of roots)
+      for (const entry of fs.readdirSync(root, { withFileTypes: true })) {
+        if (!entry.isDirectory() || entry.name.startsWith(".")) continue;
+        const folder = path.join(root, entry.name);
+        if (!fs.existsSync(path.join(folder, "SKILL.md"))) continue;
+        try {
+          const skill = { ...readSkill(folder), builtin };
+          const twin = skills.find((s) => s.name === skill.name);
+          if (twin)
+            throw new Error(
+              `和${twin.builtin ? "自带的" : "另一个"} skill 重名：${skill.name}`,
+            );
+          skills.push(skill);
+        } catch (error) {
+          problems.push({ folder: entry.name, message: error.message });
+        }
       }
-    }
     this.skills = skills.sort((a, b) => a.name.localeCompare(b.name));
     this.problems = problems;
     this.onChange(this.snapshot());
@@ -94,10 +106,11 @@ class SkillLibrary {
     const off = this.disabled();
     return {
       dir: this.dir,
-      items: this.skills.map(({ name, description, folder }) => ({
+      items: this.skills.map(({ name, description, folder, builtin }) => ({
         name,
         description,
         folder: path.basename(folder),
+        builtin,
         enabled: !off.includes(name),
       })),
       problems: this.problems,

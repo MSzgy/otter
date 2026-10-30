@@ -24,6 +24,23 @@ function describe(s) {
       };
 }
 
+// What a confirmation card says about servers about to be added: what runs
+// or where it connects, names (never values) of env and headers, and why
+// to be careful.
+function summary(servers, note = "") {
+  const line = (s) =>
+    s.url
+      ? `${s.name}：连接 ${s.url}${s.headerKeys?.length ? `（请求头：${s.headerKeys.join("、")}）` : ""}`
+      : `${s.name}：运行 ${[s.command, ...s.args].join(" ")}${s.envKeys?.length ? `（环境变量：${s.envKeys.join("、")}）` : ""}`;
+  const warnings = [
+    servers.some((s) => !s.url) &&
+      "这会在你的 Mac 上运行上面的命令，只添加你信任的服务。",
+    servers.some((s) => s.url) && "你允许的工具调用会把参数发给这个网络服务。",
+    note,
+  ].filter(Boolean);
+  return `${servers.map(line).join("\n")}\n\n${warnings.join("\n")}`;
+}
+
 class Extensions extends EventEmitter {
   constructor({
     load,
@@ -198,4 +215,4 @@ class Extensions extends EventEmitter {
     };
   }
 }
-module.exports = { Extensions };
+module.exports = { Extensions, summary };

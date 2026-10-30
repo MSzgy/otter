@@ -28,6 +28,10 @@
     ],
     "extraResources": [
       {
+        "from": "skills",
+        "to": "skills"
+      },
+      {
         "from": "build/backend/otter-runtime",
         "to": "backend/otter-runtime"
       },

@@ -3651,3 +3651,14 @@ button.danger {
   font-size: 12px;
   color: var(--danger);
 }
+.tool-request .tool-detail {
+  white-space: pre-wrap;
+  font-size: 13px;
+  line-height: 1.6;
+  margin: 8px 0;
+}
+.skill-section .tag {
+  margin-left: 6px;
+  font-style: normal;
+  vertical-align: 1px;
+}

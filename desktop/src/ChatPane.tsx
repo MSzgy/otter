@@ -764,8 +764,12 @@ export function ChatPane({
               水獭想用「{r.label}」
               {r.origin && <small> · 来自 {r.origin}</small>}
             </strong>
-            {Object.keys(r.arguments || {}).length > 0 && (
-              <pre>{JSON.stringify(r.arguments, null, 1)}</pre>
+            {r.detail ? (
+              <p className="tool-detail">{r.detail}</p>
+            ) : (
+              Object.keys(r.arguments || {}).length > 0 && (
+                <pre>{JSON.stringify(r.arguments, null, 1)}</pre>
+              )
             )}
             <div className="button-row">
               <button
@@ -774,9 +778,11 @@ export function ChatPane({
               >
                 允许一次
               </button>
-              <button onClick={() => decideTool(r.id, "session")}>
-                这段对话都允许
-              </button>
+              {!r.alwaysAsk && (
+                <button onClick={() => decideTool(r.id, "session")}>
+                  这段对话都允许
+                </button>
+              )}
               <button onClick={() => decideTool(r.id, "deny")}>拒绝</button>
             </div>
           </section>

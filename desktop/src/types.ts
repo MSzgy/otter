@@ -62,6 +62,10 @@ export type ToolRequest = {
   label: string;
   origin?: string;
   arguments: Record<string, unknown>;
+  // The call in words, for tools that can say it (instead of raw arguments).
+  detail?: string;
+  // No "这段对话都允许" for these.
+  alwaysAsk?: boolean;
 };
 export type PetSnapshot = {
   asleep: boolean;

@@ -33,7 +33,7 @@ test("configs in Claude Desktop form, a bare map or one server all parse", () =>
     ['{"x":{"url":"https://a.com","type":"ws"}}', /只能是 http 或 sse/],
     ['{"x":{"url":"https://a.com","headers":{"Host":"b"}}}', /headers/],
     ['{"x":{"type":"http"}}', /要写上 url/],
-    ['{"x":{"args":[]}}', /缺少要运行的 command/],
+    ['{"x":{"args":[]}}', /没有 command 也没有 url/],
     ['{"x":{"command":"a","args":"b"}}', /字符串列表/],
     ['{"x":{"command":"a","env":{"bad key":"v"}}}', /env/],
   ])
@@ -65,6 +65,48 @@ test("remote servers: https or this Mac's http, transport from type or /sse", ()
     parseConfig('{"name":"one","url":"https://a.com/mcp"}')[0].name,
     "one",
   );
+});
+
+test("other apps' formats and a bare address are understood", () => {
+  const url = "https://mcp.notion.com/mcp";
+  const read = (value) =>
+    parseConfig(typeof value === "string" ? value : JSON.stringify(value)).map(
+      (s) => [s.name, s.url || s.command, s.transport || s.args.join(" ")],
+    );
+  const remote = [["notion", url, "http"]];
+  assert.deepEqual(
+    read({ servers: { notion: { type: "http", url } } }),
+    remote,
+  );
+  assert.deepEqual(
+    read({ mcp: { servers: { notion: { type: "http", url } } } }),
+    remote,
+  );
+  assert.deepEqual(read({ mcpServers: { notion: { httpUrl: url } } }), remote);
+  assert.deepEqual(read({ mcp: { notion: { type: "remote", url } } }), remote);
+  assert.deepEqual(
+    read({ mcpServers: { notion: { type: "streamable_http", url } } }),
+    remote,
+  );
+  assert.deepEqual(read(url), remote, "A bare address is named after its host");
+  assert.deepEqual(
+    read({
+      context_servers: {
+        git: { command: { path: "uvx", args: ["mcp-server-git"] } },
+      },
+    }),
+    [["git", "uvx", "mcp-server-git"]],
+  );
+  assert.deepEqual(
+    read({ mcpServers: { mcp: { command: "node", args: ["s.js"] } } }),
+    [["mcp", "node", "s.js"]],
+    "A server named like a wrapper is still a server",
+  );
+  assert.throws(
+    () => parseConfig('{"mcpServers":{"x":{"foo":1}}}'),
+    /没有 command 也没有 url/,
+  );
+  assert.throws(() => parseConfig('{"x":{"type":"http"}}'), /要写上 url/);
 });
 
 test("tool names are unique, safe and within 64 characters", () => {
