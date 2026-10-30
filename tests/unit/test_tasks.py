@@ -236,6 +236,44 @@ def test_setting_changes_outside_the_list_or_range_are_rejected(plan):
         snorm(plan)
 
 
+BACKDROP = {
+    "id": "backdrop.image",
+    "label": "背景图",
+    "type": "text",
+    "max": 1000,
+    "empty": True,
+    "path": True,
+    "current": "/data/backgrounds/0123456789abcdef.jpg",
+}
+
+
+def test_a_picture_setting_takes_only_a_path_the_user_named_or_none():
+    def plan(value, text, recent=None):
+        state = {**STATE, "settings": [BACKDROP], "recent_target": recent}
+        return normalize(
+            {"kind": "setting_change", "id": "backdrop.image", "value": value},
+            text,
+            state,
+            NOW,
+            "Asia/Shanghai",
+        )["value"]
+
+    assert plan("~/Pictures/海边.jpg", "背景换成 ~/Pictures/海边.jpg") == "~/Pictures/海边.jpg"
+    assert plan("", "不要背景图了") == ""
+    assert plan("  ", "去掉背景图") == ""
+    with pytest.raises(ValueError):
+        plan("~/Pictures/beach.jpg", "背景换成海边那张")
+    # 改回来 puts back the copy the app reported as previous.
+    previous = "/data/backgrounds/fedcba9876543210.png"
+    recent = {"id": "backdrop.image", "kind": "setting", "previous": previous}
+    assert plan(previous, "改回来", recent) == previous
+    with pytest.raises(ValueError):
+        plan(previous, "改回来", {**recent, "id": "theme"})
+    # Without empty, a blank text setting is still refused.
+    with pytest.raises(ValueError):
+        snorm({"kind": "setting_change", "id": "memory.nickname", "value": ""})
+
+
 def test_rejected_setting_change_asks_instead_of_guessing():
     async def stream(config, messages, resolver):
         yield json.dumps({"kind": "setting_change", "id": "models.api_key", "value": "x"})

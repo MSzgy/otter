@@ -23,10 +23,17 @@ export type Report = {
   llm_model: string;
   generated_at: string;
 };
+export type BackdropImage = { file: string; name: string; url: string };
+export type Backdrop = {
+  current: BackdropImage | null;
+  transparency: number;
+  recent: BackdropImage[];
+};
 export type Prefs = {
   quiet: boolean;
   hidden: boolean;
   theme?: string;
+  backdrop?: Backdrop | null;
   config: string;
   envConfig?: boolean;
 };

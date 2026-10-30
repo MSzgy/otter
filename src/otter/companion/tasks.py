@@ -57,7 +57,8 @@ VS Code 是 com.microsoft.VSCode。
 设置：tasks.settings 列出能在聊天里修改的设置（id、名称、类型、可选值或范围、当前值）。
 用户明确要求打开、关闭或改成某个值时返回 {"kind":"setting_change","id":"设置 id","value":新值}。
 switch 的 value 是 true/false；choice 只能取 options 里的 value；
-number 是范围内整数；text 是简短文字。
+number 是范围内整数；text 是简短文字，标了 empty 的可以用 "" 表示清空；
+有 hint 的按 hint 填；标了 path 的只能填用户原话里的文件路径。
 问某项设置现在怎样返回 {"kind":"setting_query","id":"设置 id"}；
 问能改哪些设置返回 {"kind":"setting_query"}。
 “改回来/撤销刚才的设置”使用 recent_target 中 kind 为 setting 的 id 和 previous。
@@ -84,7 +85,7 @@ def clean_text(value, limit=200):
     return value.strip()
 
 
-def setting_value(setting, value):
+def setting_value(setting, value, text="", previous=None):
     """The value a setting will take, checked against what the app offered."""
     kind = setting.get("type")
     if kind == "switch" and isinstance(value, bool):
@@ -99,7 +100,13 @@ def setting_value(setting, value):
     ):
         return value
     if kind == "text":
-        return clean_text(value, setting.get("max", 40))
+        if setting.get("empty") and isinstance(value, str) and not value.strip():
+            return ""
+        value = clean_text(value, setting.get("max", 40))
+        # A file must be one the user named, or the one being put back.
+        if setting.get("path") and value not in text and value != previous:
+            raise ValueError("Unnamed path")
+        return value
     raise ValueError("Invalid setting value")
 
 
@@ -122,10 +129,16 @@ def normalize(result, text, state, now, timezone):
             raise ValueError("Unknown setting")
         if kind == "setting_query":
             return {"kind": kind, "id": setting["id"]}
+        recent = state.get("recent_target") or {}
+        previous = (
+            recent.get("previous")
+            if recent.get("kind") == "setting" and recent.get("id") == setting["id"]
+            else None
+        )
         return {
             "kind": kind,
             "id": setting["id"],
-            "value": setting_value(setting, result.get("value")),
+            "value": setting_value(setting, result.get("value"), text, previous),
         }
     if kind == "clarify":
         return {"kind": kind, "message": clean_text(result.get("message"), 500)}

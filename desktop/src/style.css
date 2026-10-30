@@ -3507,6 +3507,176 @@ details.settings-section[open] > summary {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }
+/* 背景图片: the user's picture under everything, faded by its transparency
+   so the theme's own base shows through. */
+.panel-mode .app-shell {
+  position: relative;
+  isolation: isolate;
+}
+.panel-mode .app-shell::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background: var(--backdrop-image, none) center / cover no-repeat;
+  opacity: 0;
+  transition: opacity 0.35s var(--ease);
+}
+:root[data-backdrop="on"] .panel-mode .app-shell::before {
+  opacity: var(--backdrop-opacity, 0.6);
+}
+.backdrop-current {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-top: 14px;
+}
+.backdrop-preview {
+  flex: none;
+  width: 148px;
+  height: 92px;
+  border-radius: 12px;
+  overflow: hidden;
+  background: var(--cream);
+  box-shadow: 0 0 0 1px rgba(var(--shade), 0.12) inset;
+}
+.backdrop-preview img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.backdrop-controls {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+}
+.backdrop-controls strong {
+  max-width: 100%;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: 13px;
+}
+.backdrop-slider {
+  width: 100%;
+  max-width: 360px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 12.5px;
+  color: var(--ink-2);
+}
+.backdrop-slider input {
+  flex: 1;
+  height: 18px;
+  margin: 0;
+  background: transparent;
+  appearance: none;
+}
+.backdrop-slider input::-webkit-slider-runnable-track {
+  height: 6px;
+  border-radius: 3px;
+  background: linear-gradient(
+    to right,
+    var(--clay) var(--fill, 0%),
+    var(--tint-3) var(--fill, 0%)
+  );
+}
+.backdrop-slider input::-webkit-slider-thumb {
+  width: 18px;
+  height: 18px;
+  margin-top: -6px;
+  border-radius: 50%;
+  background: var(--surface);
+  box-shadow:
+    0 0 0 2px var(--clay) inset,
+    0 1px 4px rgba(var(--shade), 0.3);
+  appearance: none;
+  transition: transform 0.15s var(--ease);
+}
+.backdrop-slider input:hover::-webkit-slider-thumb {
+  transform: scale(1.1);
+}
+.backdrop-slider input:focus-visible {
+  outline: none;
+}
+.backdrop-slider input:focus-visible::-webkit-slider-thumb {
+  box-shadow:
+    0 0 0 2px var(--clay) inset,
+    0 0 0 4px var(--ring);
+}
+.backdrop-slider output {
+  min-width: 3em;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+}
+.backdrop-recent {
+  margin-top: 14px;
+}
+.backdrop-recent small {
+  color: var(--ink-3);
+  font-size: 11.5px;
+}
+.backdrop-recent ul {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 6px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.backdrop-recent li {
+  position: relative;
+}
+.backdrop-thumb {
+  display: block;
+  width: 72px;
+  height: 46px;
+  padding: 0;
+  border: 0;
+  border-radius: 9px;
+  overflow: hidden;
+  background: var(--cream);
+  box-shadow: 0 0 0 1px rgba(var(--shade), 0.12) inset;
+  transition: transform 0.15s var(--ease);
+}
+.backdrop-thumb:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 0 0 2px var(--clay);
+}
+.backdrop-thumb img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.backdrop-forget {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--ink-2);
+  background: var(--surface);
+  box-shadow: 0 1px 3px rgba(var(--shade), 0.3);
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+.backdrop-recent li:hover .backdrop-forget,
+.backdrop-forget:focus-visible {
+  opacity: 1;
+}
 /* After a setting changed from chat: one line to put it back. */
 .undo-bar {
   flex: none;

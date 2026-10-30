@@ -2,7 +2,8 @@
 // mock data (no model, no device) like the smoke tests; writes PNGs to
 // OTTER_UI_OUTPUT (default /tmp/otter-ui). Build first: npm run build.
 // Pass place names to shoot only those, or "states" for in-progress screens;
-// OTTER_UI_THEME picks a theme, OTTER_UI_SIZE a window size.
+// OTTER_UI_THEME picks a theme, OTTER_UI_SIZE a window size, OTTER_UI_BACKDROP
+// an image to lay behind the panel (OTTER_UI_TRANSPARENCY, 0–95, its fade).
 const { _electron: electron } = require("playwright");
 const http = require("node:http");
 const fs = require("node:fs"),
@@ -195,6 +196,13 @@ const SETTINGS = [
       OTTER_DESKTOP_USER_DATA: userData,
       OTTER_DESKTOP_CONFIG: config,
       OTTER_PROJECT_ROOT: fixture,
+      ...(process.env.OTTER_UI_BACKDROP
+        ? {
+            OTTER_TEST_BACKDROP_PICK: path.resolve(
+              process.env.OTTER_UI_BACKDROP,
+            ),
+          }
+        : {}),
     },
     timeout: 30000,
   });
@@ -298,6 +306,14 @@ const SETTINGS = [
         (theme) => window.otter.action("theme", theme),
         process.env.OTTER_UI_THEME,
       );
+    if (process.env.OTTER_UI_BACKDROP) {
+      await panel.evaluate(() => window.otter.action("backdrop.pick"));
+      if (process.env.OTTER_UI_TRANSPARENCY)
+        await panel.evaluate(
+          (value) => window.otter.action("backdrop.transparency", value),
+          Number(process.env.OTTER_UI_TRANSPARENCY),
+        );
+    }
     await panel.reload();
     await panel.waitForFunction(
       async () => !!(await window.otter.action("snapshot")).health,

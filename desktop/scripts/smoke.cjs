@@ -31,6 +31,33 @@ const { execFileSync } = require("node:child_process");
       `---\nname: ${name}\ndescription: ${name} 的用法\n---\n做法\n`,
     );
   };
+  // 背景图片: real pictures made with sips from macOS's own wallpapers (a
+  // PNG for the settings picker, which reads whatever sits at backdropPick
+  // since the test cannot drive the open panel, and a large HEIC for chat).
+  const backdropDir = fs.mkdtempSync(
+    path.join(os.tmpdir(), "otter-backdrop-smoke-"),
+  );
+  const wallpaper = (name) =>
+    [
+      `/System/Library/Desktop Pictures/${name}`,
+      "/System/Library/CoreServices/CoreTypes.bundle/Contents/Resources/FinderIcon.icns",
+    ].find((f) => fs.existsSync(f));
+  const backdropPick = path.join(backdropDir, "橘子海.png");
+  execFileSync(
+    "/usr/bin/sips",
+    [
+      "-s",
+      "format",
+      "png",
+      "-Z",
+      "1200",
+      wallpaper("iMac Orange.heic"),
+      "--out",
+      backdropPick,
+    ],
+    { stdio: "pipe" },
+  );
+  const backdropHeic = wallpaper("Sonoma.heic");
   // SSH: a real sshd for key logins, a stand-in home with ~/.ssh/config, and
   // a scratch keychain, so no test password touches the user's own.
   const sshd = await startSshd();
@@ -177,6 +204,24 @@ const { execFileSync } = require("node:child_process");
           plan = { kind: "clarify", message: "请告诉我提醒的具体时间和内容。" };
         } else if (request === "换成夜里小窝主题") {
           plan = { kind: "setting_change", id: "theme", value: "night" };
+        } else if (request.startsWith("背景换成 ")) {
+          plan = {
+            kind: "setting_change",
+            id: "backdrop.image",
+            value: request.slice("背景换成 ".length),
+          };
+        } else if (request === "背景换成海边那张") {
+          plan = {
+            kind: "setting_change",
+            id: "backdrop.image",
+            value: "~/Pictures/海边.jpg",
+          };
+        } else if (request === "背景图透明度调到 80") {
+          plan = {
+            kind: "setting_change",
+            id: "backdrop.transparency",
+            value: 80,
+          };
         } else if (request === "安静模式现在开着吗") {
           plan = { kind: "setting_query", id: "quiet" };
         } else if (request === "把模型密钥改成 abc") {
@@ -571,6 +616,7 @@ const { execFileSync } = require("node:child_process");
         OTTER_SSH_HOME: sshHome,
         OTTER_SSH_KEYCHAIN: sshKeychain,
         OTTER_TEST_NO_TERMINAL: "1",
+        OTTER_TEST_BACKDROP_PICK: backdropPick,
       },
       timeout: 30000,
     });
@@ -2002,6 +2048,241 @@ const { execFileSync } = require("node:child_process");
       0,
       "No card for a setting chat may not change",
     );
+    // 背景图片: picked in settings, served only through otter-backdrop:,
+    // faded by the slider, switched back from 用过的, changed from chat after
+    // a card and undone; a path the user never named is not offered.
+    const backdropState = () =>
+      JSON.parse(fs.readFileSync(path.join(userData, "desktop.json"), "utf8"))
+        .backdrop;
+    const layer = () =>
+      panel.evaluate(() => {
+        const style = getComputedStyle(
+          document.querySelector(".app-shell"),
+          "::before",
+        );
+        return {
+          on: document.documentElement.dataset.backdrop === "on",
+          image: style.backgroundImage,
+          opacity: Number(style.opacity),
+        };
+      });
+    const loads = (url) =>
+      panel.evaluate(
+        (url) =>
+          new Promise((resolve) => {
+            const img = new Image();
+            img.onload = () => resolve(img.naturalWidth);
+            img.onerror = () => resolve(0);
+            img.src = url;
+          }),
+        url,
+      );
+    await go(panel, "偏好设置");
+    const backdropSection = panel.getByRole("region", { name: "背景图片" });
+    assert.equal((await layer()).on, false);
+    await backdropSection
+      .getByRole("button", { name: "选一张图片…", exact: true })
+      .click();
+    await panel.waitForFunction(
+      () => document.documentElement.dataset.backdrop === "on",
+    );
+    await backdropSection.getByText("橘子海.png", { exact: true }).waitFor();
+    const picked = backdropState();
+    assert.equal(picked.transparency, 40);
+    assert.match(picked.current, /^[0-9a-f]{16}\.png$/);
+    assert.deepEqual(
+      fs.readFileSync(path.join(userData, "backgrounds", picked.current)),
+      fs.readFileSync(backdropPick),
+      "A PNG within size is kept byte for byte",
+    );
+    const pickedUrl = `otter-backdrop://image/${picked.current}`;
+    assert.equal(await loads(pickedUrl), 1200, "The page can draw the copy");
+    assert.equal(
+      await loads("otter-backdrop://image/0123456789abcdef.png"),
+      0,
+      "Files that are not listed are not served",
+    );
+    await panel.waitForFunction(
+      () =>
+        Number(
+          getComputedStyle(document.querySelector(".app-shell"), "::before")
+            .opacity,
+        ) === 0.6,
+    );
+    assert((await layer()).image.includes(pickedUrl));
+    // Four steps right on the slider: 40% → 60%, so 0.4 of the picture shows.
+    const slider = backdropSection.getByRole("slider", {
+      name: "背景图透明度",
+    });
+    await slider.focus();
+    for (let i = 0; i < 4; i++) await panel.keyboard.press("ArrowRight");
+    await backdropSection.getByText("60%", { exact: true }).waitFor();
+    await panel.waitForFunction(
+      () =>
+        Number(
+          getComputedStyle(document.querySelector(".app-shell"), "::before")
+            .opacity,
+        ) === 0.4,
+    );
+    for (let i = 0; i < 50 && backdropState().transparency !== 60; i++)
+      await new Promise((r) => setTimeout(r, 100));
+    assert.equal(backdropState().transparency, 60, "The slider is saved");
+    await panel.screenshot({
+      path: path.join(output, "otter-backdrop-settings.png"),
+    });
+    assert(
+      await pet.evaluate(async () => {
+        try {
+          await window.otter.action("backdrop.clear");
+          return false;
+        } catch {
+          return true;
+        }
+      }),
+      "The pet window cannot change the background",
+    );
+    await panel.keyboard.press("Escape");
+    // From chat: a large HEIC is converted and scaled after 确认.
+    await taskSend(`背景换成 ${backdropHeic}`);
+    const heicName = path.basename(backdropHeic);
+    await settingCard
+      .getByText(`背景图：橘子海.png → ${heicName}`, { exact: true })
+      .waitFor();
+    const offeredBackdrop = taskRequests
+      .at(-1)
+      .tasks.settings.filter((r) => r.id.startsWith("backdrop."));
+    assert.deepEqual(
+      offeredBackdrop.map((r) => [r.id, r.type, r.current]),
+      [
+        [
+          "backdrop.image",
+          "text",
+          path.join(userData, "backgrounds", picked.current),
+        ],
+        ["backdrop.transparency", "number", 60],
+      ],
+    );
+    assert(offeredBackdrop[0].path && offeredBackdrop[0].empty);
+    assert.equal(backdropState().current, picked.current, "Not before 确认");
+    await settingCard
+      .getByRole("button", { name: "确认执行", exact: true })
+      .click();
+    await panel
+      .getByText(`已把背景图改为${heicName}。`, { exact: true })
+      .waitFor();
+    const converted = backdropState().current;
+    assert.match(converted, /^[0-9a-f]{16}\.jpg$/);
+    const size = execFileSync("/usr/bin/sips", [
+      "-g",
+      "pixelWidth",
+      path.join(userData, "backgrounds", converted),
+    ]).toString();
+    assert(
+      Number(/pixelWidth: (\d+)/.exec(size)[1]) <= 3200,
+      "Large pictures are scaled down",
+    );
+    await panel.waitForFunction(
+      (file) =>
+        getComputedStyle(
+          document.querySelector(".app-shell"),
+          "::before",
+        ).backgroundImage.includes(file),
+      converted,
+    );
+    await panel.screenshot({
+      path: path.join(output, "otter-backdrop-chat.png"),
+    });
+    await panel.getByRole("button", { name: "撤销", exact: true }).click();
+    await panel
+      .getByText("已撤销：背景图改回橘子海.png。", { exact: true })
+      .waitFor();
+    assert.equal(backdropState().current, picked.current);
+    await taskSend("背景图透明度调到 80");
+    await settingCard
+      .getByText("背景图透明度：60% → 80%", { exact: true })
+      .waitFor();
+    await settingCard
+      .getByRole("button", { name: "确认执行", exact: true })
+      .click();
+    await panel
+      .getByText("已把背景图透明度改为80%。", { exact: true })
+      .waitFor();
+    await panel.waitForFunction(
+      () =>
+        Number(
+          getComputedStyle(document.querySelector(".app-shell"), "::before")
+            .opacity,
+        ) === 0.2,
+    );
+    const refusals = panel.getByText(/模型和密钥请到设置里手动改/);
+    const refused = await refusals.count();
+    await taskSend("背景换成海边那张");
+    await refusals.nth(refused).waitFor();
+    assert.equal(
+      await settingCard.count(),
+      0,
+      "No card for a picture the user never named",
+    );
+    // Back in settings: 用过的 switches back, 不用背景图 turns it off but
+    // keeps the copies, and × deletes one.
+    await go(panel, "偏好设置");
+    await backdropSection
+      .getByRole("button", { name: `用 ${heicName} 做背景`, exact: true })
+      .click();
+    await panel.waitForFunction(
+      (file) =>
+        getComputedStyle(
+          document.querySelector(".app-shell"),
+          "::before",
+        ).backgroundImage.includes(file),
+      converted,
+    );
+    await backdropSection
+      .getByRole("button", { name: "不用背景图", exact: true })
+      .click();
+    await panel.waitForFunction(
+      () => document.documentElement.dataset.backdrop !== "on",
+    );
+    assert.equal(backdropState().current, null);
+    assert.equal(backdropState().recent.length, 2);
+    await backdropSection
+      .getByRole("button", { name: "删除 橘子海.png", exact: true })
+      .click();
+    await backdropSection
+      .getByRole("button", { name: "删除 橘子海.png", exact: true })
+      .waitFor({ state: "detached" });
+    assert.deepEqual(fs.readdirSync(path.join(userData, "backgrounds")), [
+      converted,
+    ]);
+    await backdropSection
+      .getByRole("button", { name: `用 ${heicName} 做背景`, exact: true })
+      .click();
+    await panel.waitForFunction(
+      () => document.documentElement.dataset.backdrop === "on",
+    );
+    await panel.reload();
+    await panel.waitForFunction(
+      (file) =>
+        document.documentElement.dataset.backdrop === "on" &&
+        getComputedStyle(
+          document.querySelector(".app-shell"),
+          "::before",
+        ).backgroundImage.includes(file),
+      converted,
+    );
+    await go(panel, "偏好设置");
+    await panel
+      .getByRole("region", { name: "背景图片" })
+      .getByRole("button", { name: "不用背景图", exact: true })
+      .click();
+    await panel.waitForFunction(
+      () => document.documentElement.dataset.backdrop !== "on",
+    );
+    await panel.keyboard.press("Escape");
+    await go(panel, "与水獭聊天");
+    console.log(
+      "PASS: background picture picked in settings and kept byte for byte, drawn only through otter-backdrop:, faded by the transparency slider and saved; a large HEIC set from chat after a card, converted and scaled, then undone; transparency changed from chat; a path never named refused; switched back from 用过的, turned off, one deleted, and kept after a reload; the pet cannot change it.",
+    );
     if (process.env.OTTER_TEST_TASK_ACTIONS === "1") {
       const calculatorAlreadyRunning = (await nativeRead("apps")).apps.some(
         (a) => a.bundleId === "com.apple.calculator",
@@ -2469,6 +2750,7 @@ const { execFileSync } = require("node:child_process");
     fs.rmSync(skillsHome, { recursive: true, force: true });
     sshd.stop();
     fs.rmSync(sshHome, { recursive: true, force: true });
+    fs.rmSync(backdropDir, { recursive: true, force: true });
     execFileSync("/usr/bin/security", ["delete-keychain", sshKeychain]);
     if (keychains() !== keychainsBefore)
       console.error("The keychain search list changed during the smoke test.");

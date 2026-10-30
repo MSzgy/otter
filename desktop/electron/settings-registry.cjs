@@ -31,14 +31,18 @@ class SettingsRegistry {
     if (
       item.type === "text" &&
       typeof value === "string" &&
-      value.trim() &&
+      (value.trim() || item.empty) &&
       value.trim().length <= item.max
-    )
+    ) {
+      // An entry may look further (a picture's file must exist, say).
+      item.check?.(value.trim());
       return value.trim();
+    }
     throw new Error(`${item.label}不能设成这个值。`);
   }
   format(id, value) {
     const item = this.get(id);
+    if (item.format) return item.format(value);
     if (item.type === "switch") return value ? "开" : "关";
     if (item.type === "choice")
       return (
@@ -61,7 +65,8 @@ class SettingsRegistry {
       } catch {
         continue;
       }
-      const { id, label, type, options, min, max, unit } = item;
+      const { id, label, type, options, min, max, unit, empty, hint, path } =
+        item;
       rows.push({
         id,
         label,
@@ -69,6 +74,9 @@ class SettingsRegistry {
         ...(options ? { options } : {}),
         ...(type === "number" ? { min, max, unit } : {}),
         ...(type === "text" ? { max } : {}),
+        ...(empty ? { empty } : {}),
+        ...(path ? { path } : {}),
+        ...(hint ? { hint } : {}),
         current,
       });
     }

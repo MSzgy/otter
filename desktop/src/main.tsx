@@ -24,6 +24,7 @@ import { ExtensionsPane } from "./ExtensionsPane";
 import { SshPane } from "./SshPane";
 import { SettingsSheet, type SettingsSection } from "./SettingsSheet";
 import { ThemePicker, applyTheme, isTheme, useTheme } from "./ThemePicker";
+import { BackdropPicker, useBackdrop } from "./BackdropPicker";
 const api = window.otter;
 function message(error: unknown) {
   return error instanceof Error
@@ -47,6 +48,7 @@ function useRuntime() {
   const [error, setError] = useState("");
   const [connecting, setConnecting] = useState(true);
   useTheme(prefs.theme);
+  useBackdrop(prefs.backdrop);
   useEffect(() => {
     let active = true;
     let revision = 0;
@@ -664,6 +666,12 @@ function Panel() {
                         setError(message(error));
                       });
                     }}
+                  />
+                  <BackdropPicker
+                    value={prefs.backdrop}
+                    onChange={(backdrop) =>
+                      setPrefs((previous) => ({ ...previous, backdrop }))
+                    }
                   />
                   <section className="settings-section">
                     <div className="setting-row">

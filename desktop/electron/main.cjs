@@ -13,6 +13,7 @@ const {
   powerMonitor,
   clipboard,
   nativeTheme,
+  protocol,
 } = require("electron");
 const fs = require("node:fs");
 const { createHash, randomUUID } = require("node:crypto");
@@ -30,6 +31,7 @@ const {
   windowColor,
 } = require("./theme.cjs");
 const { SettingsRegistry } = require("./settings-registry.cjs");
+const { Backdrop, SCHEME, MAX_TRANSPARENCY } = require("./backdrop.cjs");
 const { ToolHost } = require("./tool-host.cjs");
 const { WebReader } = require("./web-reader.cjs");
 const { Extensions, summary } = require("./extensions.cjs");
@@ -242,6 +244,30 @@ const chatSettings = new SettingsRegistry([
     ],
     read: () => normalizeTheme(preferences.theme),
     write: (value) => asPanel("theme", value),
+  },
+  {
+    id: "backdrop.image",
+    label: "背景图",
+    type: "text",
+    max: 1000,
+    empty: true,
+    path: true,
+    hint: '图片文件的路径；"" 表示不用背景图',
+    check: (value) => backdrop.chatCheck(value),
+    format: (value) => backdrop.label(value),
+    read: () => backdrop.chatValue(),
+    write: (value) => asPanel("backdrop.chat", value),
+  },
+  {
+    id: "backdrop.transparency",
+    label: "背景图透明度",
+    type: "number",
+    min: 0,
+    max: MAX_TRANSPARENCY,
+    unit: "%",
+    hint: "越大图片越淡、越透出主题底色",
+    read: () => backdrop.snapshot().transparency,
+    write: (value) => asPanel("backdrop.transparency", value),
   },
   {
     id: "ambient.enabled",
@@ -535,6 +561,12 @@ let extensions;
 let skills;
 // SSH 服务器: saved logins (passwords in the keychain) and ~/.ssh/config.
 let ssh;
+// The panel's background picture and how see-through it is.
+let backdrop;
+// Pictures load as otter-backdrop://image/<file>; registered before ready.
+protocol.registerSchemesAsPrivileged([
+  { scheme: SCHEME, privileges: { standard: true, secure: true } },
+]);
 const PASSWORD_HELD =
   "这条消息里像是有密码，Otter 没有把它发给模型。要保存服务器登录，请打开“理解办事请求”后说“保存服务器 名字：用户@主机 密码：……”，或者到 设置 → SSH 服务器 里填。";
 const sshWhere = (h) =>
@@ -630,6 +662,7 @@ function preferencesPublic() {
     quiet: !!preferences.quiet,
     hidden: !!preferences.hidden,
     theme: normalizeTheme(preferences.theme),
+    backdrop: backdrop?.snapshot() ?? null,
     config: selection().config,
     envConfig: !!process.env.OTTER_DESKTOP_CONFIG,
   };
@@ -1247,6 +1280,49 @@ async function panelAction(event, name, value) {
     if (name === "extensions.allow")
       return extensions.setAllow(value?.id, value?.tool, value?.allow);
     throw new Error("不支持的工具设置。");
+  }
+  if (name.startsWith("backdrop.")) {
+    if (event.sender !== panel.webContents)
+      throw new Error("请在设置里更换背景图。");
+    if (!backdrop) throw new Error("背景图尚未就绪。");
+    if (name === "backdrop.pick") {
+      // The smoke test cannot drive the open panel, so it names a file.
+      const picked = process.env.OTTER_TEST_BACKDROP_PICK
+        ? { canceled: false, filePaths: [process.env.OTTER_TEST_BACKDROP_PICK] }
+        : await dialog.showOpenDialog(panel, {
+            title: "选择背景图片",
+            defaultPath: app.getPath("pictures"),
+            properties: ["openFile"],
+            filters: [
+              {
+                name: "图片",
+                extensions: [
+                  "jpg",
+                  "jpeg",
+                  "png",
+                  "heic",
+                  "heif",
+                  "webp",
+                  "gif",
+                  "avif",
+                  "tif",
+                  "tiff",
+                  "bmp",
+                ],
+              },
+            ],
+          });
+      return picked.canceled
+        ? backdrop.snapshot()
+        : backdrop.add(picked.filePaths[0]);
+    }
+    if (name === "backdrop.use") return backdrop.use(value?.file);
+    if (name === "backdrop.clear") return backdrop.clear();
+    if (name === "backdrop.forget") return backdrop.forget(value?.file);
+    if (name === "backdrop.transparency")
+      return backdrop.setTransparency(value);
+    if (name === "backdrop.chat") return backdrop.chatSet(value);
+    throw new Error("不支持的背景图操作。");
   }
   if (name.startsWith("ssh.")) {
     if (event.sender !== panel.webContents)
@@ -1866,6 +1942,29 @@ else {
     }
     evolution.restore(preferences.evolution);
     nativeTheme.themeSource = themeSource(preferences.theme);
+    backdrop = new Backdrop({
+      dir: path.join(app.getPath("userData"), "backgrounds"),
+      load: () => preferences.backdrop,
+      save: (value) => {
+        preferences.backdrop = value;
+        save();
+      },
+      onChange: () =>
+        broadcast({ type: "preferences", data: preferencesPublic() }),
+    });
+    protocol.handle(SCHEME, async (request) => {
+      const url = new URL(request.url);
+      const name = decodeURIComponent(url.pathname.slice(1));
+      const file = url.hostname === "image" && backdrop.locate(name);
+      if (!file) return new Response("", { status: 404 });
+      try {
+        return new Response(await fs.promises.readFile(file), {
+          headers: { "content-type": backdrop.mime(file) },
+        });
+      } catch {
+        return new Response("", { status: 404 });
+      }
+    });
     extensions = new Extensions({
       load: () => preferences.extensions,
       save: (value) => {
