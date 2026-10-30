@@ -272,3 +272,92 @@ test("a long SKILL.md is offered in parts", async (t) => {
     /没有第 9 段/,
   );
 });
+
+test("listing reads only the head of SKILL.md; the body is read when used", async (t) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "otter-head-"));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const lib = new SkillLibrary({
+    dir: path.join(root, "otter"),
+    load: () => ({}),
+    save: () => {},
+  });
+  // Front matter, then 600 KB of body: listing must not need any of it.
+  write(
+    lib.dir,
+    "big",
+    "\uFEFF---\nname: big\ndescription: 很大\n---\n" + "正".repeat(200000),
+  );
+  const longHead =
+    "---\nname: long-head\ndescription: |\n" +
+    "  一行说明\n".repeat(1500) +
+    "---\n做法";
+  write(lib.dir, "long-head", longHead);
+  const reads = [];
+  const original = fs.readFileSync;
+  fs.readFileSync = (file, ...rest) => {
+    reads.push(String(file));
+    return original(file, ...rest);
+  };
+  try {
+    lib.scan();
+  } finally {
+    fs.readFileSync = original;
+  }
+  assert.deepEqual(
+    lib.snapshot().items.map((i) => i.name),
+    ["big", "long-head"],
+    "A front matter longer than 8 KB is still read",
+  );
+  assert(
+    !reads.some((f) => f.endsWith("SKILL.md")),
+    "No whole SKILL.md read to list",
+  );
+  assert(!("body" in lib.skills[0]), "No body kept in memory");
+  const [use] = lib.source().list();
+  await assert.rejects(
+    async () => use.run({ name: "big" }),
+    /太大（上限 512 KB）/,
+  );
+  fs.writeFileSync(
+    path.join(lib.dir, "long-head", "SKILL.md"),
+    longHead.replace("做法", "改过的做法"),
+  );
+  assert.match(
+    await use.run({ name: "long-head" }),
+    /改过的做法/,
+    "Always the current text",
+  );
+});
+
+test("refresh picks up new, removed and edited skills and stays quiet otherwise", (t) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "otter-refresh-"));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const changes = [];
+  const lib = new SkillLibrary({
+    dir: path.join(root, "otter"),
+    external: [{ id: "codex", label: "Codex", dir: path.join(root, "codex") }],
+    load: () => ({}),
+    save: () => {},
+    onChange: (s) => changes.push(s.items.map((i) => i.name)),
+  });
+  lib.scan();
+  assert.equal(lib.refresh(), false);
+  assert.equal(changes.length, 1, "Nothing new, nothing said");
+  write(
+    path.join(root, "codex"),
+    "fresh",
+    "---\nname: fresh\ndescription: 新装的\n---\nx",
+  );
+  assert.equal(lib.refresh(), true);
+  assert.deepEqual(changes.at(-1), ["fresh"]);
+  write(
+    path.join(root, "codex"),
+    "fresh",
+    "---\nname: fresh\ndescription: 改了说明\n---\nx",
+  );
+  assert.equal(lib.refresh(), true, "An edited description counts");
+  assert.equal(lib.snapshot().items[0].description, "改了说明");
+  fs.rmSync(path.join(root, "codex", "fresh"), { recursive: true });
+  assert.equal(lib.refresh(), true);
+  assert.deepEqual(lib.source().list(), []);
+});

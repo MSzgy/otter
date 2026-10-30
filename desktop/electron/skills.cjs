@@ -1,12 +1,15 @@
 // Skills: folders with a SKILL.md, in the same shape as Claude's Agent
 // Skills (front matter with name and description, then instructions). They
-// live in <userData>/skills. The chat model sees each skill's name and
-// description and loads one with use_skill when it needs it; it can read the
-// skill's other text files with read_skill_file. Nothing in a skill is run.
+// live in <userData>/skills, ship with the app, or sit in other tools'
+// folders. Listing a skill reads only the head of its SKILL.md (name and
+// description); the chat model sees those, and the instructions are read
+// from disk only when it loads one with use_skill. It can read the skill's
+// other text files with read_skill_file. Nothing in a skill is run.
 const fs = require("node:fs");
 const path = require("node:path");
 
-const MAX_SKILL = 256 * 1024;
+// Front matter is looked for in the first 8 KB, or 64 KB if it runs long.
+const HEAD = [8 * 1024, 64 * 1024];
 const MAX_FILE = 512 * 1024;
 // What one tool answer carries; longer text is read in parts.
 const PART = 14000;
@@ -15,6 +18,7 @@ const MAX_IMPORT = 5 * 1024 * 1024;
 // The small part of YAML front matter skills use: `key: value`, quoted
 // values, and `key: |` or `key: >` blocks.
 function frontMatter(text) {
+  text = text.replace(/^\uFEFF/, "");
   const match = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?/.exec(text);
   if (!match) return { meta: {}, body: text };
   const meta = {};
@@ -34,18 +38,45 @@ function frontMatter(text) {
   return { meta, body: text.slice(match[0].length) };
 }
 
+// The start of a file, without reading the rest.
+function readHead(file, bytes) {
+  const handle = fs.openSync(file, "r");
+  try {
+    const buffer = Buffer.alloc(bytes);
+    const read = fs.readSync(handle, buffer, 0, bytes, 0);
+    return {
+      text: buffer.subarray(0, read).toString("utf8"),
+      whole: read < bytes,
+    };
+  } finally {
+    fs.closeSync(handle);
+  }
+}
+
+// Name and description from the head of SKILL.md; the body stays on disk.
 function readSkill(folder) {
   const file = path.join(folder, "SKILL.md");
-  const stat = fs.statSync(file);
-  if (stat.size > MAX_SKILL) throw new Error("SKILL.md 太大（上限 256 KB）");
-  const { meta, body } = frontMatter(fs.readFileSync(file, "utf8"));
+  let meta = {};
+  for (const bytes of HEAD) {
+    const head = readHead(file, bytes);
+    meta = frontMatter(head.text).meta;
+    if (meta.name || head.whole) break;
+  }
   const name = String(meta.name || "").trim();
   const description = String(meta.description || "").trim();
   if (!name || !description)
     throw new Error("SKILL.md 缺少 name 或 description");
   if (!/^[\w一-鿿][\w一-鿿 .-]{0,63}$/.test(name))
     throw new Error("name 只能用字母、数字、汉字、空格、点和横线，64 字以内");
-  return { name, description: description.slice(0, 600), body, folder };
+  return { name, description: description.slice(0, 600), folder };
+}
+
+// The instructions, read when the model asks for them, so always current.
+function readBody(folder) {
+  const file = path.join(folder, "SKILL.md");
+  if (fs.statSync(file).size > MAX_FILE)
+    throw new Error("SKILL.md 太大（上限 512 KB）。");
+  return frontMatter(fs.readFileSync(file, "utf8")).body;
 }
 
 // Text files a skill may show the model, relative to its folder.
@@ -97,7 +128,9 @@ class SkillLibrary {
       ...this.external,
     ];
   }
-  scan() {
+  // quiet: tell listeners only if something changed (for the check before
+  // every chat message).
+  scan({ quiet = false } = {}) {
     fs.mkdirSync(this.dir, { recursive: true });
     const skills = [],
       problems = [],
@@ -151,8 +184,19 @@ class SkillLibrary {
     this.skills = skills.sort((a, b) => a.name.localeCompare(b.name));
     this.problems = problems;
     this.counts = counts;
-    this.onChange(this.snapshot());
-    return this.snapshot();
+    const snapshot = this.snapshot();
+    const seen = JSON.stringify(snapshot);
+    if (!quiet || seen !== this.seen) this.onChange(snapshot);
+    this.seen = seen;
+    return snapshot;
+  }
+  // Picks up skills added, removed or edited in any folder since the last
+  // look. Only heads of SKILL.md are read, so this is cheap enough to run
+  // before every chat message. Returns whether anything changed.
+  refresh() {
+    const before = this.seen;
+    this.scan({ quiet: true });
+    return this.seen !== before;
   }
   // A skill is offered when it is switched on and at least one folder it
   // was found in is switched on.
@@ -198,8 +242,10 @@ class SkillLibrary {
     const settings = this.settings();
     const rest = settings.disabled.filter((n) => n !== name);
     this.save({ ...settings, disabled: enabled ? rest : [...rest, name] });
-    this.onChange(this.snapshot());
-    return this.snapshot();
+    const snapshot = this.snapshot();
+    this.seen = JSON.stringify(snapshot);
+    this.onChange(snapshot);
+    return snapshot;
   }
   setSource(id, enabled) {
     const source = this.sources().find((s) => s.id === id);
@@ -208,8 +254,10 @@ class SkillLibrary {
     const settings = this.settings();
     const rest = settings.sourcesOff.filter((n) => n !== id);
     this.save({ ...settings, sourcesOff: enabled ? rest : [...rest, id] });
-    this.onChange(this.snapshot());
-    return this.snapshot();
+    const snapshot = this.snapshot();
+    this.seen = JSON.stringify(snapshot);
+    this.onChange(snapshot);
+    return snapshot;
   }
   // Copies a chosen folder (with its SKILL.md) into the user's folder.
   import(source) {
@@ -280,7 +328,7 @@ class SkillLibrary {
             run: ({ name }) => {
               const skill = this.find(name);
               const files = listFiles(skill.folder);
-              const body = skill.body.trim();
+              const body = readBody(skill.folder).trim();
               return [
                 `# Skill：${skill.name}`,
                 body.length > PART

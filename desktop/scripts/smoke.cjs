@@ -1365,6 +1365,11 @@ const { execFileSync } = require("node:child_process");
       ),
       "Other tools' skills are read in place, never moved",
     );
+    // A skill installed in another tool while Otter runs is offered with the
+    // next message, without opening settings.
+    homeSkill(".agents/skills", "installed-later");
+    await chatSay("刚装了一个 skill");
+    assert(offeredNames().includes("installed-later"));
     // The shipped add-mcp-server skill: the model reads it, then proposes a
     // server through otter_add_mcp_server; the card says it in words, has no
     // "for this conversation", and nothing is added before 允许一次.
@@ -1440,7 +1445,7 @@ const { execFileSync } = require("node:child_process");
       await vscodeRemote.close();
     }
     console.log(
-      "PASS: reading a web page asks first and refuses this Mac and the local network; MCP server added from settings: preview first, its tools offered, a writing call waits for the card, 允许一次 runs it, 拒绝 does not, 不用再问 skips the card, disable and remove; servers added from chat after a card (a pasted command, and a remote HTTP server with a token whose tool then runs after 允许); a skill found by 重新扫描, read through use_skill, and not offered once off; Codex, Claude Code and shared skill folders read in place, merged when linked, switched per folder and per skill; the shipped add-mcp-server skill read, then a server proposed through otter_add_mcp_server and added after 允许一次; a VS Code-shaped remote config pasted into settings.",
+      "PASS: reading a web page asks first and refuses this Mac and the local network; MCP server added from settings: preview first, its tools offered, a writing call waits for the card, 允许一次 runs it, 拒绝 does not, 不用再问 skips the card, disable and remove; servers added from chat after a card (a pasted command, and a remote HTTP server with a token whose tool then runs after 允许); a skill found by 重新扫描, read through use_skill, and not offered once off; Codex, Claude Code and shared skill folders read in place, merged when linked, switched per folder and per skill, and one installed later offered with the next message; the shipped add-mcp-server skill read, then a server proposed through otter_add_mcp_server and added after 允许一次; a VS Code-shaped remote config pasted into settings.",
     );
     await panel.getByRole("button", { name: "新对话", exact: true }).click();
     await panel

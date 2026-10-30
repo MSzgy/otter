@@ -1061,7 +1061,13 @@ ipcMain.handle("otter:call", async (event, method, params) => {
   )
     throw new Error("参数无效。");
   if (!backend || switching) throw new Error("后台尚未就绪。");
-  // The renderer never chooses tools; the host offers what is enabled.
+  // The renderer never chooses tools; the host offers what is enabled,
+  // including skills installed in other tools since the last message.
+  if (method === "chat.send") {
+    try {
+      skills?.refresh();
+    } catch {}
+  }
   if (method === "chat.send")
     params = {
       ...params,
