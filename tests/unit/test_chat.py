@@ -513,3 +513,36 @@ def test_streamed_tool_call_pieces_are_joined():
 
     with pytest.raises(ToolsUnsupported):
         asyncio.run(collect())
+
+
+def test_system_prompt_states_what_otter_can_do_and_whether_tools_are_on(tmp_path):
+    from otter.companion.chat import NO_TOOLS_SYSTEM, SYSTEM, TOOLS_SYSTEM
+
+    for ability in (
+        "添加 MCP 服务",
+        "改 Otter 的设置",
+        "Skill",
+        "确认卡片",
+        "不要把能做的事说成做不到",
+    ):
+        assert ability in SYSTEM
+    assert "当前自由聊天回复不能执行操作" not in SYSTEM
+    assert "读公开网页" in TOOLS_SYSTEM
+    seen = []
+
+    async def stream(_config, messages, _resolver, tools=None):
+        seen.append(messages[0]["content"])
+        yield "好"
+
+    service, done, _ = tool_service(tmp_path, stream)
+    session = service.store.new()["id"]
+    try:
+        service.send({**request(session), "tools": TOOLS}, llm())
+        assert done.wait(3)
+        done.clear()
+        service.send(request(session), llm())
+        assert done.wait(3)
+    finally:
+        service.close()
+    assert seen[0].endswith(TOOLS_SYSTEM)
+    assert seen[1].endswith(NO_TOOLS_SYSTEM), "Without tools it says so"

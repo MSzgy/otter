@@ -31,6 +31,7 @@ const {
 } = require("./theme.cjs");
 const { SettingsRegistry } = require("./settings-registry.cjs");
 const { ToolHost } = require("./tool-host.cjs");
+const { WebReader } = require("./web-reader.cjs");
 const { Extensions } = require("./extensions.cjs");
 const { SkillLibrary } = require("./skills.cjs");
 const actionGate = new ActionGate({
@@ -381,8 +382,30 @@ const statusFilter = {
     },
   },
 };
+const webReader = new WebReader();
 const builtinTools = {
   list: () => [
+    // Not a trusted look-up: it reaches out to a website, so each read asks
+    // first and the card shows the address.
+    {
+      name: "otter_read_webpage",
+      label: "读网页",
+      origin: "Otter",
+      readOnly: true,
+      description:
+        "读取一个公开网页（http 或 https）的标题和正文文字。用户给出网址或网站名、想让你看网页内容时使用；会先请用户确认网址。不能登录、不能提交表单，读不了本机和局域网地址。",
+      parameters: {
+        type: "object",
+        properties: {
+          url: {
+            type: "string",
+            description: "完整网址；用户只说域名时补上 https://",
+          },
+        },
+        required: ["url"],
+      },
+      run: ({ url }) => webReader.read(String(url || "")),
+    },
     lookup({
       name: "otter_time",
       label: "看时间",

@@ -253,6 +253,43 @@ const { execFileSync } = require("node:child_process");
         res.end(`data: ${JSON.stringify(chunk)}\n\ndata: [DONE]\n\n`);
         return;
       }
+      if (body.stream && lastUser.startsWith("读一下这个网页")) {
+        // Ask to read a page on this Mac, then report what came back.
+        res.setHeader("Content-Type", "text/event-stream");
+        const result = body.messages.find((m) => m.role === "tool");
+        const chunk = result
+          ? {
+              choices: [
+                {
+                  delta: { content: `网页结果：${result.content}` },
+                  finish_reason: "stop",
+                },
+              ],
+            }
+          : {
+              choices: [
+                {
+                  delta: {
+                    tool_calls: [
+                      {
+                        index: 0,
+                        id: "call_web",
+                        function: {
+                          name: "otter_read_webpage",
+                          arguments: JSON.stringify({
+                            url: lastUser.slice("读一下这个网页".length).trim(),
+                          }),
+                        },
+                      },
+                    ],
+                  },
+                  finish_reason: "tool_calls",
+                },
+              ],
+            };
+        res.end(`data: ${JSON.stringify(chunk)}\n\ndata: [DONE]\n\n`);
+        return;
+      }
       const noteTool = [
         ["用笔记工具记下", "mcp__fake__add_note"],
         ["用远程笔记记下", "mcp__cloud__add_note"],
@@ -949,7 +986,13 @@ const { execFileSync } = require("node:child_process");
     assert.equal(toolTurns.length, 2, "Asked once, answered after the tool");
     assert.deepEqual(
       toolTurns[0].body.tools.map((t) => t.function.name),
-      ["otter_time", "otter_reminders", "otter_todos", "otter_settings"],
+      [
+        "otter_read_webpage",
+        "otter_time",
+        "otter_reminders",
+        "otter_todos",
+        "otter_settings",
+      ],
     );
     assert.equal(toolTurns[1].body.messages.at(-1).role, "tool");
     await panel
@@ -961,6 +1004,26 @@ const { execFileSync } = require("node:child_process");
       .locator(".chat-message.assistant")
       .last()
       .getByText(/按 Otter 的时钟：.*（Asia\/Shanghai）/)
+      .waitFor();
+    // Reading a web page asks first and shows the address; addresses on this
+    // Mac or the local network are refused even after 允许.
+    const pageUrl = apiUrl.replace("/v1", "/article");
+    await panel
+      .getByRole("textbox", { name: "聊天输入" })
+      .fill(`读一下这个网页 ${pageUrl}`);
+    await panel.getByRole("button", { name: "发送", exact: true }).click();
+    const webCard = panel.getByRole("region", { name: "工具请求：读网页" });
+    await webCard.getByText(pageUrl, { exact: false }).waitFor();
+    await webCard
+      .getByRole("button", { name: "允许一次", exact: true })
+      .click();
+    await panel
+      .getByText(/网页结果：工具出错：不能读取本机或局域网里的地址/)
+      .waitFor();
+    await panel
+      .locator(".chat-message.assistant")
+      .last()
+      .getByText("✕ 读网页")
       .waitFor();
     // MCP: a server added in settings offers its tools; a call that writes
     // waits for the card, and only 允许 lets it run.
@@ -1183,7 +1246,7 @@ const { execFileSync } = require("node:child_process");
       "A switched-off skill is not offered",
     );
     console.log(
-      "PASS: MCP server added from settings: preview first, its tools offered, a writing call waits for the card, 允许一次 runs it, 拒绝 does not, 不用再问 skips the card, disable and remove; servers added from chat after a card (a pasted command, and a remote HTTP server with a token whose tool then runs after 允许); a skill found by 重新扫描, read through use_skill, and not offered once off.",
+      "PASS: reading a web page asks first and refuses this Mac and the local network; MCP server added from settings: preview first, its tools offered, a writing call waits for the card, 允许一次 runs it, 拒绝 does not, 不用再问 skips the card, disable and remove; servers added from chat after a card (a pasted command, and a remote HTTP server with a token whose tool then runs after 允许); a skill found by 重新扫描, read through use_skill, and not offered once off.",
     );
     await panel.getByRole("button", { name: "新对话", exact: true }).click();
     await panel
