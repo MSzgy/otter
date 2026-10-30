@@ -8,6 +8,7 @@ const http = require("node:http");
 const { projectModelReply, verifyProjects } = require("./project-smoke.cjs");
 const { verifyHandoff } = require("./handoff-smoke.cjs");
 const { go, openScenes, openTools } = require("./smoke-nav.cjs");
+const { startFakeHttpMcp } = require("./fake-mcp-http.cjs");
 const { extractPage } = require("../electron/page-reader.cjs");
 const { nativeRead } = require("../electron/awareness.cjs");
 const { execFileSync } = require("node:child_process");
@@ -252,11 +253,15 @@ const { execFileSync } = require("node:child_process");
         res.end(`data: ${JSON.stringify(chunk)}\n\ndata: [DONE]\n\n`);
         return;
       }
-      if (body.stream && lastUser.startsWith("用笔记工具记下")) {
+      const noteTool = [
+        ["用笔记工具记下", "mcp__fake__add_note"],
+        ["用远程笔记记下", "mcp__cloud__add_note"],
+      ].find(([prefix]) => lastUser.startsWith(prefix));
+      if (body.stream && noteTool) {
         // Ask the MCP server's add_note, then report what came back.
         res.setHeader("Content-Type", "text/event-stream");
         const result = body.messages.find((m) => m.role === "tool");
-        const note = lastUser.slice("用笔记工具记下".length).trim();
+        const note = lastUser.slice(noteTool[0].length).trim();
         const chunk = result
           ? {
               choices: [
@@ -275,7 +280,7 @@ const { execFileSync } = require("node:child_process");
                         index: 0,
                         id: "call_note",
                         function: {
-                          name: "mcp__fake__add_note",
+                          name: noteTool[1],
                           arguments: JSON.stringify({ text: note }),
                         },
                       },
@@ -1046,6 +1051,97 @@ const { execFileSync } = require("node:child_process");
     await panel.getByText("还没有接上 MCP 服务。").waitFor();
     await panel.keyboard.press("Escape");
     fs.rmSync(notesFile, { force: true });
+    // MCP from chat: a pasted config becomes a card that names the command;
+    // a remote server (streamable HTTP, with a token) the same, then its tool
+    // is used like any other, after 允许.
+    const pasted = JSON.stringify({
+      mcpServers: {
+        chatnotes: {
+          command: process.execPath,
+          args: [path.join(__dirname, "fake-mcp-server.cjs")],
+        },
+      },
+    });
+    await noteSay(`帮我接上这个 MCP：${pasted}`);
+    const addCard = panel.getByRole("region", { name: "办事确认" });
+    await addCard.getByText("确认添加 MCP 服务").waitFor();
+    await addCard.getByText(/chatnotes：运行 .*fake-mcp-server\.cjs/).waitFor();
+    await addCard
+      .getByRole("button", { name: "确认执行", exact: true })
+      .click();
+    await panel.getByText(/^已添加 MCP 服务：chatnotes/).waitFor();
+    const remoteNotes = path.join(
+      os.tmpdir(),
+      `otter-remote-notes-${process.pid}.txt`,
+    );
+    fs.rmSync(remoteNotes, { force: true });
+    const remote = await startFakeHttpMcp({
+      token: "smoke-token",
+      notesFile: remoteNotes,
+    });
+    try {
+      await noteSay(
+        `接上远程 MCP ${JSON.stringify({ mcpServers: { cloud: { url: remote.url, headers: { Authorization: "Bearer smoke-token" } } } })}`,
+      );
+      await addCard
+        .getByText(`cloud：连接 ${remote.url}（请求头：Authorization）`)
+        .waitFor();
+      assert(
+        !(await addCard.innerText()).includes("smoke-token"),
+        "The card never shows a header value",
+      );
+      await panel.screenshot({
+        path: path.join(output, "otter-mcp-add-from-chat.png"),
+      });
+      await addCard
+        .getByRole("button", { name: "确认执行", exact: true })
+        .click();
+      await panel.getByText(/^已添加 MCP 服务：cloud/).waitFor();
+      const kept = await panel.evaluate(async () => {
+        const [latest] = await window.otter.call("chat.sessions", {});
+        return JSON.stringify(
+          await window.otter.call("chat.history", { session_id: latest.id }),
+        );
+      });
+      assert(kept.includes("接上远程 MCP"), "The request itself is kept");
+      assert(!kept.includes("smoke-token"), "but never the token");
+      await openTools();
+      await panel
+        .getByRole("article", { name: "MCP 服务：cloud" })
+        .getByText("运行中 · 2 个工具", { exact: true })
+        .waitFor();
+      await panel
+        .getByRole("article", { name: "MCP 服务：cloud" })
+        .scrollIntoViewIfNeeded();
+      await panel.screenshot({
+        path: path.join(output, "otter-mcp-remote.png"),
+      });
+      await panel.keyboard.press("Escape");
+      await noteSay("用远程笔记记下 远程一条");
+      await panel
+        .getByRole("region", { name: "工具请求：记一条笔记" })
+        .getByRole("button", { name: "允许一次", exact: true })
+        .click();
+      await panel
+        .getByText("工具结果：记下了：远程一条", { exact: true })
+        .waitFor();
+      assert.equal(fs.readFileSync(remoteNotes, "utf8"), "远程一条\n");
+      assert(remote.seen.some((m) => m.method === "tools/call"));
+      await openTools();
+      for (const name of ["chatnotes", "cloud"]) {
+        await panel
+          .getByRole("button", { name: `删除 ${name}`, exact: true })
+          .click();
+        await panel
+          .getByRole("button", { name: "确认删除", exact: true })
+          .click();
+      }
+      await panel.getByText("还没有接上 MCP 服务。").waitFor();
+      await panel.keyboard.press("Escape");
+    } finally {
+      await remote.close();
+      fs.rmSync(remoteNotes, { force: true });
+    }
     // Skills: a folder with SKILL.md shows up after 重新扫描; the model reads
     // it through use_skill without a card; switched off, it is not offered.
     const skillDir = path.join(userData, "skills", "otter-haiku");
@@ -1087,7 +1183,7 @@ const { execFileSync } = require("node:child_process");
       "A switched-off skill is not offered",
     );
     console.log(
-      "PASS: MCP server added from settings: preview first, its tools offered, a writing call waits for the card, 允许一次 runs it, 拒绝 does not, 不用再问 skips the card, disable and remove; a skill found by 重新扫描, read through use_skill, and not offered once off.",
+      "PASS: MCP server added from settings: preview first, its tools offered, a writing call waits for the card, 允许一次 runs it, 拒绝 does not, 不用再问 skips the card, disable and remove; servers added from chat after a card (a pasted command, and a remote HTTP server with a token whose tool then runs after 允许); a skill found by 重新扫描, read through use_skill, and not offered once off.",
     );
     await panel.getByRole("button", { name: "新对话", exact: true }).click();
     await panel

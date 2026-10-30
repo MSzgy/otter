@@ -64,6 +64,11 @@ number 是范围内整数；text 是简短文字。
 每次只改一项。模型、密钥、工作空间、“允许 AI 工具连接”不在列表里，
 要求修改时 clarify 请用户到设置里手动改。
 只是抱怨或描述感受（如“通知好烦”）而没有明确要改时返回 clarify 问是否要改哪项设置。
+接入 MCP：用户要求添加、接上 MCP 服务，并在当前输入里给出了要运行的命令或服务网址时返回
+{"kind":"mcp_add","config":{"mcpServers":{"名字":{"command":"命令","args":["参数"]}}}}；
+网络服务写 {"url":"网址"}，可带 "headers"。command、args、url 和所有值必须原样取自当前输入，
+不补充、不猜测、不换成别的包或网址。只说了服务名称（如“帮我接上文件系统 MCP”）
+没给命令或网址时返回 clarify，请用户把配置 JSON 或服务网址发来。
 """
 
 
@@ -98,6 +103,8 @@ def normalize(result, text, state, now, timezone):
     kind = result.get("kind")
     if kind == "none":
         return {"kind": kind}
+    if kind == "mcp_add":
+        return {"kind": kind, "config": mcp_config(result.get("config"), text)}
     if kind in {"setting_change", "setting_query"}:
         settings = {s["id"]: s for s in state.get("settings", []) if isinstance(s, dict)}
         if kind == "setting_query" and result.get("id") in (None, ""):
@@ -210,9 +217,55 @@ def normalize(result, text, state, now, timezone):
     return plan
 
 
+def _pasted_config(text):
+    """A JSON MCP config pasted into the message, if there is one."""
+    start, end = text.find("{"), text.rfind("}")
+    if start < 0 or end <= start:
+        return None
+    try:
+        value = json.loads(text[start : end + 1])
+    except ValueError:
+        return None
+    if not isinstance(value, dict):
+        return None
+    if "mcpServers" in value or (
+        "mcp" in text.lower() and any(k in value for k in ("command", "url", "serverUrl"))
+    ):
+        return value
+    return None
+
+
+def _strings(value):
+    if isinstance(value, str):
+        yield value
+    elif isinstance(value, dict):
+        for item in value.values():
+            yield from _strings(item)
+    elif isinstance(value, list):
+        for item in value:
+            yield from _strings(item)
+
+
+def mcp_config(config, text):
+    """An MCP config taken from the user's own words: every value is in the text."""
+    if not isinstance(config, dict) or len(json.dumps(config, ensure_ascii=False)) > 20000:
+        raise ValueError("Invalid config")
+    servers = config.get("mcpServers", config)
+    if not isinstance(servers, dict) or not servers:
+        raise ValueError("No servers")
+    for value in _strings(servers):
+        # Whole words only: a short value must not "match" inside another word.
+        if value and not re.search(rf"(?<![\w-]){re.escape(value)}(?![\w-])", text):
+            raise ValueError("Config must come from the request")
+    return config
+
+
 def local_plan(text):
     if memory_command(text)[0] is not None:
         return {"kind": "none"}
+    pasted = _pasted_config(text)
+    if pasted is not None:
+        return {"kind": "mcp_add", "config": pasted}
     match = re.fullmatch(r"(?:请)?(?:在)?(\d+)\s*(秒|分钟|小时)后(?:提醒我|叫我)(.{1,200})", text)
     if match:
         return {
@@ -266,6 +319,12 @@ class TaskPlanner:
         try:
             return normalize(result, text, state, now, timezone)
         except (ValueError, TypeError, KeyError, OverflowError):
+            if isinstance(result, dict) and result.get("kind") == "mcp_add":
+                return {
+                    "kind": "clarify",
+                    "message": "要添加 MCP 服务，请把配置 JSON 或服务网址原样发给我，"
+                    "我不会自己猜要运行的命令。也可以到 设置 → 工具与扩展 里粘贴。",
+                }
             if isinstance(result, dict) and str(result.get("kind", "")).startswith("setting_"):
                 return {
                     "kind": "clarify",

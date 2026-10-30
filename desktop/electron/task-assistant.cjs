@@ -1,5 +1,21 @@
 const { randomUUID } = require("node:crypto");
 const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+// Values of env and headers in an MCP config: tokens, as a rule. They are
+// blanked out of what the chat keeps, so later turns never send them on.
+function secretsOf(config) {
+  const found = [];
+  const walk = (value) => {
+    if (!value || typeof value !== "object") return;
+    for (const [key, item] of Object.entries(value))
+      if (["env", "headers"].includes(key) && item && typeof item === "object")
+        for (const secret of Object.values(item))
+          if (typeof secret === "string" && secret) found.push(secret);
+          else walk(secret);
+      else walk(item);
+  };
+  walk(config);
+  return found.sort((a, b) => b.length - a.length);
+}
 
 class TaskAssistant {
   constructor({
@@ -11,6 +27,7 @@ class TaskAssistant {
     checkProject = null,
     scope = null,
     settings = null,
+    extensions = null,
     timezone = () => "Asia/Shanghai",
     now = Date.now,
   }) {
@@ -23,6 +40,7 @@ class TaskAssistant {
       checkProject,
       scope,
       settings,
+      extensions,
       timezone,
       now,
     });
@@ -302,6 +320,33 @@ class TaskAssistant {
           detail = `${label}：${this.settings.format(plan.id, settingBefore)} → ${this.settings.format(plan.id, value)}`;
           break;
         }
+        case "mcp_add": {
+          if (!this.extensions) throw new Error("工具与扩展尚未就绪。");
+          for (const secret of secretsOf(plan.config))
+            request.text = request.text.split(secret).join("••••");
+          const config = JSON.stringify(plan.config);
+          let servers;
+          try {
+            servers = this.extensions.preview(config);
+          } catch (e) {
+            return await this.receipt(request, `没有添加：${e.message}`);
+          }
+          const line = (s) =>
+            s.url
+              ? `${s.name}：连接 ${s.url}${s.headerKeys?.length ? `（请求头：${s.headerKeys.join("、")}）` : ""}`
+              : `${s.name}：运行 ${[s.command, ...s.args].join(" ")}${s.envKeys?.length ? `（环境变量：${s.envKeys.join("、")}）` : ""}`;
+          title = "确认添加 MCP 服务";
+          detail = `${servers.map(line).join("\n")}\n\n${[
+            servers.some((s) => !s.url) &&
+              "这会在你的 Mac 上运行上面的命令，只添加你信任的服务。",
+            servers.some((s) => s.url) &&
+              "你允许的工具调用会把参数发给这个网络服务。",
+          ]
+            .filter(Boolean)
+            .join("\n")}`;
+          plan = { ...plan, config, names: servers.map((s) => s.name) };
+          break;
+        }
         case "open_app":
         case "open_url": {
           const action = await this.gate.prepare(plan);
@@ -404,6 +449,10 @@ class TaskAssistant {
         case "todo_complete":
           item = this.store.completeTodo(p.id);
           message = `已完成待办：${item.title}`;
+          break;
+        case "mcp_add":
+          this.extensions.add(p.config);
+          message = `已添加 MCP 服务：${p.names.join("、")}。正在启动，好了以后它的工具就能在聊天里用；可以在 设置 → 工具与扩展 里管理。`;
           break;
         case "setting_change": {
           const { label } = this.settings.get(p.id);

@@ -248,3 +248,60 @@ def test_rejected_setting_change_asks_instead_of_guessing():
     )
     assert result["kind"] == "clarify"
     assert "设置里手动改" in result["message"]
+
+
+def test_mcp_config_must_come_from_the_request_word_for_word():
+    text = "帮我接上 MCP：npx -y @modelcontextprotocol/server-filesystem /Users/me/Docs"
+    good = {
+        "mcpServers": {
+            "files": {
+                "command": "npx",
+                "args": ["-y", "@modelcontextprotocol/server-filesystem", "/Users/me/Docs"],
+            }
+        }
+    }
+    assert normalize({"kind": "mcp_add", "config": good}, text, STATE, NOW, "Asia/Shanghai") == {
+        "kind": "mcp_add",
+        "config": good,
+    }
+    invented = {"mcpServers": {"files": {"command": "npx", "args": ["-y", "evil-package"]}}}
+    with pytest.raises(ValueError):
+        normalize({"kind": "mcp_add", "config": invented}, text, STATE, NOW, "Asia/Shanghai")
+    url = "接上这个 MCP https://mcp.example.com/mcp"
+    remote = {"mcpServers": {"cloud": {"url": "https://mcp.example.com/mcp"}}}
+    assert normalize({"kind": "mcp_add", "config": remote}, url, STATE, NOW, "Asia/Shanghai")
+    token = {"cloud": {"url": "https://mcp.example.com/mcp", "headers": {"Authorization": "x"}}}
+    with pytest.raises(ValueError):
+        normalize({"kind": "mcp_add", "config": token}, url, STATE, NOW, "Asia/Shanghai")
+
+
+def test_pasted_mcp_config_is_understood_without_the_model():
+    async def stream(config, messages, resolver):
+        raise AssertionError("no model call")
+        yield ""
+
+    llm = LLMCfg(provider="openai", providers={"openai": {"model": "fixture"}})
+    config = '{"mcpServers": {"notes": {"command": "node", "args": ["s.js"]}}}'
+    plan = asyncio.run(
+        TaskPlanner(stream, None).plan(
+            llm, "帮我添加这个：" + config, STATE, [], NOW, "Asia/Shanghai"
+        )
+    )
+    assert plan == {"kind": "mcp_add", "config": json.loads(config)}
+    one = '帮我接上 MCP {"url": "https://a.example/mcp"}'
+    plan = asyncio.run(TaskPlanner(stream, None).plan(llm, one, STATE, [], NOW, "Asia/Shanghai"))
+    assert plan["kind"] == "mcp_add"
+
+
+def test_named_but_unspecified_mcp_server_asks_for_the_config():
+    async def stream(config, messages, resolver):
+        yield json.dumps(
+            {"kind": "mcp_add", "config": {"files": {"command": "npx", "args": ["-y", "x"]}}}
+        )
+
+    llm = LLMCfg(provider="openai", providers={"openai": {"model": "fixture"}})
+    plan = asyncio.run(
+        TaskPlanner(stream, None).plan(llm, "帮我接上文件系统 MCP", STATE, [], NOW, "Asia/Shanghai")
+    )
+    assert plan["kind"] == "clarify"
+    assert "原样发给我" in plan["message"]

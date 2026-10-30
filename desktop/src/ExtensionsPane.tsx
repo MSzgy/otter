@@ -8,12 +8,18 @@ type Tool = {
   readOnly: boolean;
   autoApprove: boolean;
 };
-type Server = {
-  id: string;
+// A local server shows what it runs; a remote one, where it connects.
+type Target = {
   name: string;
-  command: string;
-  args: string[];
-  envKeys: string[];
+  command?: string;
+  args?: string[];
+  envKeys?: string[];
+  url?: string;
+  transport?: "http" | "sse";
+  headerKeys?: string[];
+};
+type Server = Target & {
+  id: string;
   enabled: boolean;
   status: "off" | "starting" | "ready" | "error";
   message: string;
@@ -35,12 +41,17 @@ type State = {
   servers: Server[];
   skills: Skills | null;
 };
-type Preview = {
-  name: string;
-  command: string;
-  args: string[];
-  envKeys: string[];
-};
+type Preview = Target;
+function where(t: Target) {
+  if (t.url) {
+    const keys = t.headerKeys?.length
+      ? `，请求头：${t.headerKeys.join("、")}`
+      : "";
+    return `${t.url}（${t.transport === "sse" ? "SSE" : "HTTP"}${keys}）`;
+  }
+  const keys = t.envKeys?.length ? `（环境变量：${t.envKeys.join("、")}）` : "";
+  return [t.command, ...(t.args || [])].join(" ") + keys;
+}
 
 const api = window.otter;
 const EXAMPLE = `{
@@ -48,6 +59,10 @@ const EXAMPLE = `{
     "files": {
       "command": "npx",
       "args": ["-y", "@modelcontextprotocol/server-filesystem", "/Users/你/Documents"]
+    },
+    "remote": {
+      "url": "https://example.com/mcp",
+      "headers": { "Authorization": "Bearer 你的令牌" }
     }
   }
 }`;
@@ -181,10 +196,7 @@ export function ExtensionsPane() {
                 }}
               />
             </div>
-            <code className="mcp-command">
-              {[s.command, ...s.args].join(" ")}
-              {s.envKeys.length ? `（环境变量：${s.envKeys.join("、")}）` : ""}
-            </code>
+            <code className="mcp-command">{where(s)}</code>
             {!!s.tools.length && (
               <details className="settings-more">
                 <summary>它的工具 · {s.tools.length}</summary>
@@ -265,13 +277,17 @@ export function ExtensionsPane() {
           />
           {preview ? (
             <div className="mcp-preview" aria-label="将要添加的服务">
-              <p>这会在你的 Mac 上运行下面的命令，只添加你信任的服务：</p>
+              {preview.some((p) => !p.url) && (
+                <p>这会在你的 Mac 上运行下面的命令，只添加你信任的服务：</p>
+              )}
+              {preview.some((p) => p.url) && (
+                <p>
+                  会连接下面的网络服务；你允许的工具调用会把参数发给它，只添加你信任的服务：
+                </p>
+              )}
               {preview.map((p) => (
                 <code key={p.name} className="mcp-command">
-                  {p.name}：{[p.command, ...p.args].join(" ")}
-                  {p.envKeys.length
-                    ? `（环境变量：${p.envKeys.join("、")}）`
-                    : ""}
+                  {p.name}：{where(p)}
                 </code>
               ))}
               <div className="section-foot">
@@ -289,7 +305,7 @@ export function ExtensionsPane() {
                   确认添加
                 </button>
                 <button onClick={() => setPreview(null)}>取消</button>
-                <small>环境变量会保存在本机的设置文件里。</small>
+                <small>环境变量和请求头会保存在本机的设置文件里。</small>
               </div>
             </div>
           ) : (
@@ -304,7 +320,10 @@ export function ExtensionsPane() {
               >
                 检查配置
               </button>
-              <small>暂时只支持本机命令（stdio）类型的服务。</small>
+              <small>
+                支持本机命令和网络服务（HTTP、SSE）。要网页登录的服务暂时不行，可以把令牌放在
+                headers 里。
+              </small>
             </div>
           )}
         </details>

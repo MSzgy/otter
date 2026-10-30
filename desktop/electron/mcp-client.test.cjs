@@ -27,12 +27,44 @@ test("configs in Claude Desktop form, a bare map or one server all parse", () =>
     ["not json", /有效的 JSON/],
     ["[]", /JSON 对象/],
     ['{"mcpServers":{}}', /没有 MCP 服务/],
-    ['{"x":{"url":"https://example.com/mcp"}}', /只支持本机命令/],
+    ['{"x":{"url":"http://example.com/mcp"}}', /要用 https/],
+    ['{"x":{"url":"https://u:p@example.com/mcp"}}', /不要写账号密码/],
+    ['{"x":{"url":"not a url"}}', /不是有效网址/],
+    ['{"x":{"url":"https://a.com","type":"ws"}}', /只能是 http 或 sse/],
+    ['{"x":{"url":"https://a.com","headers":{"Host":"b"}}}', /headers/],
+    ['{"x":{"type":"http"}}', /要写上 url/],
     ['{"x":{"args":[]}}', /缺少要运行的 command/],
     ['{"x":{"command":"a","args":"b"}}', /字符串列表/],
     ['{"x":{"command":"a","env":{"bad key":"v"}}}', /env/],
   ])
     assert.throws(() => parseConfig(text), message);
+});
+
+test("remote servers: https or this Mac's http, transport from type or /sse", () => {
+  const [a, b, c] = parseConfig(
+    JSON.stringify({
+      mcpServers: {
+        cloud: {
+          url: "https://mcp.example.com/mcp",
+          headers: { Authorization: "Bearer t" },
+        },
+        old: { url: "https://mcp.example.com/sse" },
+        here: { serverUrl: "http://127.0.0.1:9000/x", type: "streamable-http" },
+      },
+    }),
+  );
+  assert.deepEqual(a, {
+    name: "cloud",
+    url: "https://mcp.example.com/mcp",
+    transport: "http",
+    headers: { Authorization: "Bearer t" },
+  });
+  assert.equal(b.transport, "sse");
+  assert.equal(c.transport, "http");
+  assert.equal(
+    parseConfig('{"name":"one","url":"https://a.com/mcp"}')[0].name,
+    "one",
+  );
 });
 
 test("tool names are unique, safe and within 64 characters", () => {
@@ -96,4 +128,68 @@ test("a command that does not exist fails with a plain message", async () => {
   await assert.rejects(server.start(), /找不到命令/);
   assert.equal(server.status, "error");
   assert.match(server.message, /找不到命令/);
+});
+
+const { startFakeHttpMcp } = require("../scripts/fake-mcp-http.cjs");
+
+for (const transport of ["http", "sse"])
+  test(`a remote ${transport} server: handshake, tools, calls and stop`, async (t) => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "otter-mcp-http-"));
+    const notes = path.join(dir, "notes.txt");
+    const fake = await startFakeHttpMcp({
+      transport,
+      token: "s3cret",
+      notesFile: notes,
+    });
+    t.after(async () => {
+      await fake.close();
+      fs.rmSync(dir, { recursive: true, force: true });
+    });
+    const server = new McpServer({
+      name: "remote",
+      url: fake.url,
+      transport,
+      headers: { Authorization: "Bearer s3cret" },
+      timeout: 5000,
+    });
+    await server.start();
+    assert.equal(server.status, "ready");
+    assert.deepEqual(
+      server.snapshot().tools.map((x) => x.name),
+      ["look", "add_note"],
+    );
+    assert.equal(
+      await server.call("add_note", { text: "远程" }),
+      "记下了：远程",
+    );
+    assert.equal(fs.readFileSync(notes, "utf8"), "远程\n");
+    if (transport === "http") {
+      const later = fake.seen.filter((m) => m.method !== "initialize");
+      assert(
+        later.every((m) => m.session),
+        "Session id on every later request",
+      );
+      assert(
+        later.every((m) => m.protocol === "2025-06-18"),
+        "Protocol version on every later request",
+      );
+    }
+    server.stop();
+    assert.equal(server.status, "off");
+    if (transport === "http") {
+      await new Promise((r) => setTimeout(r, 50));
+      assert.equal(fake.seen.at(-1).method, "DELETE", "The session is ended");
+    }
+  });
+
+test("a remote server that wants a token says so", async (t) => {
+  const fake = await startFakeHttpMcp({ token: "s3cret" });
+  t.after(() => fake.close());
+  const server = new McpServer({
+    name: "remote",
+    url: fake.url,
+    timeout: 3000,
+  });
+  await assert.rejects(server.start(), /要求登录或令牌（HTTP 401）/);
+  assert.equal(server.status, "error");
 });

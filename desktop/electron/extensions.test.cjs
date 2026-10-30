@@ -122,3 +122,99 @@ test("enabled servers start on init; disabled ones do not", () => {
     ["a"],
   );
 });
+
+test("remote servers are shown by address and header names, never values", async () => {
+  const { ext, servers, stored } = setup();
+  const remote = JSON.stringify({
+    mcpServers: {
+      cloud: {
+        url: "https://mcp.example.com/mcp",
+        headers: { Authorization: "Bearer secret-token" },
+      },
+    },
+  });
+  const preview = ext.preview(remote);
+  assert.deepEqual(preview, [
+    {
+      name: "cloud",
+      url: "https://mcp.example.com/mcp",
+      transport: "http",
+      headerKeys: ["Authorization"],
+    },
+  ]);
+  ext.add(remote);
+  await new Promise((r) => setImmediate(r));
+  assert.equal(servers[0].config.url, "https://mcp.example.com/mcp");
+  assert.equal(servers[0].config.headers.Authorization, "Bearer secret-token");
+  assert.equal(
+    stored().servers[0].headers.Authorization,
+    "Bearer secret-token",
+  );
+  assert(!JSON.stringify(ext.snapshot()).includes("secret-token"));
+});
+
+const { TaskAssistant } = require("./task-assistant.cjs");
+
+test("adding from chat: a card with what will run, added only after 确认", async () => {
+  const { ext, servers } = setup();
+  let plan = {
+    kind: "mcp_add",
+    config: {
+      mcpServers: {
+        notes: { command: "node", args: ["s.js"], env: { KEY: "k" } },
+      },
+    },
+  };
+  const records = [];
+  const tasks = new TaskAssistant({
+    store: { snapshot: () => ({ reminders: [], todos: [] }) },
+    gate: { cancel() {} },
+    extensions: { preview: (t) => ext.preview(t), add: (t) => ext.add(t) },
+    interpret: async () => plan,
+    record: async (r) => records.push(r),
+  });
+  const ask = () =>
+    tasks.plan({ text: "加 MCP", sessionId: "s", requestId: "r" });
+  const card = await ask();
+  assert.equal(card.title, "确认添加 MCP 服务");
+  assert.match(card.detail, /notes：运行 node s\.js（环境变量：KEY）/);
+  assert.match(card.detail, /只添加你信任的服务/);
+  assert.equal(servers.length, 0, "Nothing starts before 确认");
+  const done = await tasks.confirm({ id: card.id, sessionId: "s" });
+  assert.equal(done.ok, true);
+  assert.match(done.message, /已添加 MCP 服务：notes/);
+  assert.equal(servers.length, 1);
+  const again = await ask();
+  assert.equal(again.kind, "result");
+  assert.match(again.message, /没有添加：已经有叫“notes”/);
+  plan = {
+    kind: "mcp_add",
+    config: { web: { url: "http://example.com/mcp" } },
+  };
+  assert.match((await ask()).message, /没有添加：.*要用 https/);
+  plan = {
+    kind: "mcp_add",
+    config: { web: { url: "https://example.com/mcp" } },
+  };
+  assert.match(
+    (await ask()).detail,
+    /web：连接 https:\/\/example\.com\/mcp\n\n你允许的工具调用/,
+  );
+  plan = {
+    kind: "mcp_add",
+    config: {
+      vault: {
+        url: "https://example.com/mcp",
+        headers: { Authorization: "Bearer tok-123" },
+      },
+    },
+  };
+  const tokenCard = await tasks.plan({
+    text: '加 {"vault":{"url":"https://example.com/mcp","headers":{"Authorization":"Bearer tok-123"}}}',
+    sessionId: "s",
+    requestId: "r",
+  });
+  await tasks.confirm({ id: tokenCard.id, sessionId: "s" });
+  assert(!records.at(-1).text.includes("tok-123"), "The chat keeps no token");
+  assert.match(records.at(-1).text, /"Authorization":"••••"/);
+});

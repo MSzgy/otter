@@ -6,6 +6,24 @@ const { EventEmitter } = require("node:events");
 const { randomUUID } = require("node:crypto");
 const { McpServer, parseConfig, toolName } = require("./mcp-client.cjs");
 
+// How a server is shown: what it runs or where it connects, and the names
+// (never the values) of its env variables or headers.
+function describe(s) {
+  return s.url
+    ? {
+        name: s.name,
+        url: s.url,
+        transport: s.transport,
+        headerKeys: Object.keys(s.headers || {}),
+      }
+    : {
+        name: s.name,
+        command: s.command,
+        args: s.args,
+        envKeys: Object.keys(s.env || {}),
+      };
+}
+
 class Extensions extends EventEmitter {
   constructor({
     load,
@@ -42,6 +60,9 @@ class Extensions extends EventEmitter {
       command: server.command,
       args: server.args,
       env: server.env,
+      url: server.url,
+      transport: server.transport,
+      headers: server.headers,
     });
     instance.on("change", () => this.emit("change", this.snapshot()));
     this.running.set(server.id, instance);
@@ -67,10 +88,7 @@ class Extensions extends EventEmitter {
         };
         return {
           id: s.id,
-          name: s.name,
-          command: s.command,
-          args: s.args,
-          envKeys: Object.keys(s.env || {}),
+          ...describe(s),
           enabled: s.enabled !== false,
           status: live.status,
           message: live.message,
@@ -84,12 +102,12 @@ class Extensions extends EventEmitter {
   }
   // What a pasted config would add, without changing anything.
   preview(text) {
-    return parseConfig(text).map(({ name, command, args, env }) => ({
-      name,
-      command,
-      args,
-      envKeys: Object.keys(env),
-    }));
+    const names = this.config().servers.map((s) => s.name);
+    return parseConfig(text).map((entry) => {
+      if (names.includes(entry.name))
+        throw new Error(`已经有叫“${entry.name}”的服务了。`);
+      return describe(entry);
+    });
   }
   add(text) {
     const config = this.config();

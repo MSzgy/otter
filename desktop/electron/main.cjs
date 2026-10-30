@@ -1841,6 +1841,11 @@ else {
         checkProject: (params) => backend.call("projects.check", params),
         scope: (session_id) => backend.call("projects.scope", { session_id }),
         settings: chatSettings,
+        // Created before this; read through so a reconnect keeps working.
+        extensions: {
+          preview: (text) => extensions.preview(text),
+          add: (text) => extensions.add(text),
+        },
         projectAction: async (plan, request) => {
           if (plan.kind === "project_capture")
             return {
