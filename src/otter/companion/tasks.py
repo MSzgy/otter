@@ -76,6 +76,7 @@ number 是范围内整数；text 是简短文字，标了 empty 的可以用 "" 
 host、user、key_path、jump 必须原样取自当前输入；缺主机或用户名时 clarify。
 输入里的密码已被应用替换成 ••••，有 •••• 时 auth 写 password，不要把密码写进 JSON。
 “连接/打开某台服务器”“在服务器上运行命令”不是这里的操作，返回 none。
+把任务交给 Codex、Claude Code、Grok 等 AI 代理去做，或问它们的进度，返回 none（聊天会处理）。
 """
 
 

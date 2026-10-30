@@ -22,6 +22,7 @@ import { ModelSettings } from "./ModelSettings";
 import { VoiceSettings } from "./VoiceControls";
 import { ExtensionsPane } from "./ExtensionsPane";
 import { SshPane } from "./SshPane";
+import { AgentsPane } from "./AgentTasks";
 import { SettingsSheet, type SettingsSection } from "./SettingsSheet";
 import { ThemePicker, applyTheme, isTheme, useTheme } from "./ThemePicker";
 import { BackdropPicker, useBackdrop } from "./BackdropPicker";
@@ -275,6 +276,7 @@ function Panel() {
   const [memoryFocus, setMemoryFocus] = useState<string | null>(null);
   // Text typed on 今天, handed to chat to send.
   const [ask, setAsk] = useState<string | null>(null);
+  const [chatFocus, setChatFocus] = useState<string | null>(null);
   const mainScroll = useRef<HTMLElement | null>(null);
   useEffect(() => {
     mainScroll.current?.scrollTo({ top: 0 });
@@ -298,6 +300,8 @@ function Panel() {
   useEffect(() => {
     let navigated = false;
     const unsub = api.subscribe((event) => {
+      if (event.type === "navigation" && event.data.sessionId)
+        setChatFocus(event.data.sessionId);
       if (event.type === "navigation" && open(event.data.view))
         navigated = true;
     });
@@ -603,6 +607,8 @@ function Panel() {
               health={health}
               initialDraft={ask}
               onDraftTaken={() => setAsk(null)}
+              focusSession={chatFocus}
+              onSessionTaken={() => setChatFocus(null)}
               onSettings={() => setSettings("model")}
               onProjects={(id) => {
                 setProjectFocus(id || null);
@@ -729,6 +735,7 @@ function Panel() {
               ),
             },
             { id: "ssh", label: "SSH 服务器", content: <SshPane /> },
+            { id: "agents", label: "AI 代理", content: <AgentsPane /> },
             { id: "privacy", label: "隐私与感知", content: <AwarenessPane /> },
             {
               id: "handoff",

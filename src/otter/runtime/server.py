@@ -178,6 +178,21 @@ class Runtime:
                     params.get("session_id"), params["request_id"], params["text"], params["result"]
                 )
             return {"ok": True}
+        if method == "chat.note":
+            # Internal main-process endpoint (an AI agent's report), not in the
+            # renderer RPC allowlist.
+            for key, limit in (("session_id", 80), ("note_id", 80), ("content", 40000)):
+                if not isinstance(params.get(key), str) or not 1 <= len(params[key]) <= limit:
+                    raise RequestError("消息格式无效。")
+            if not params["note_id"].startswith("agent-"):
+                raise RequestError("消息格式无效。")
+            with self.chat.lock:
+                if self.chat.turn and self.chat.turn["status"] == "streaming":
+                    raise RequestError("请先等待当前回复完成。")
+                self.chat.store.record_note(
+                    params["session_id"], params["note_id"], params["content"]
+                )
+            return {"ok": True}
         if method == "chat.send":
             with self.lock:
                 return self.chat.send(params, self.config.llm)

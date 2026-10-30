@@ -58,6 +58,18 @@ const { execFileSync } = require("node:child_process");
     { stdio: "pipe" },
   );
   const backdropHeic = wallpaper("Sonoma.heic");
+  // AI 代理: a stand-in codex (scripts/fake-codex.cjs) that logs its calls,
+  // and a project folder for it to work in.
+  const agentDir = fs.mkdtempSync(path.join(os.tmpdir(), "otter-agent-smoke-"));
+  const agentProject = path.join(agentDir, "demo-project");
+  fs.mkdirSync(agentProject);
+  const codexLog = path.join(agentDir, "codex.jsonl");
+  const fakeCodex = path.resolve(__dirname, "fake-codex.cjs");
+  fs.chmodSync(fakeCodex, 0o755);
+  const codexCalls = () =>
+    fs.existsSync(codexLog)
+      ? fs.readFileSync(codexLog, "utf8").trim().split("\n").map(JSON.parse)
+      : [];
   // SSH: a real sshd for key logins, a stand-in home with ~/.ssh/config, and
   // a scratch keychain, so no test password touches the user's own.
   const sshd = await startSshd();
@@ -375,6 +387,56 @@ const { execFileSync } = require("node:child_process");
         res.end(`data: ${JSON.stringify(chunk)}\n\ndata: [DONE]\n\n`);
         return;
       }
+      // 让 Codex …: hand a task over, then say it went; 看看 Codex 的任务
+      // reads the list back.
+      const agentAsks = {
+        "让 Codex 写个说明文件": {
+          title: "写一个说明文件",
+          task: "在项目里新建 otter-agent.txt，写上这段任务。",
+          folder: agentProject,
+          access: "write",
+        },
+        "让 Codex 慢慢做": {
+          title: "慢慢做的检查",
+          task: "慢慢做",
+          access: "read",
+        },
+        "让 Codex 做不完": {
+          title: "做不完的任务",
+          task: "做不完",
+          folder: agentProject,
+          access: "read",
+        },
+      };
+      const agentAsk = agentAsks[lastUser];
+      if (body.stream && (agentAsk || lastUser === "看看 Codex 的任务")) {
+        res.setHeader("Content-Type", "text/event-stream");
+        const last = body.messages.at(-1);
+        const delta =
+          last.role === "tool"
+            ? { content: `好的：${last.content}` }
+            : {
+                tool_calls: [
+                  {
+                    index: 0,
+                    id: "call_agent",
+                    function: agentAsk
+                      ? {
+                          name: "agent_assign",
+                          arguments: JSON.stringify({
+                            agent: "codex",
+                            ...agentAsk,
+                          }),
+                        }
+                      : { name: "agent_tasks", arguments: "{}" },
+                  },
+                ],
+              };
+        res.end(
+          `data: ${JSON.stringify({ choices: [{ delta, finish_reason: last.role === "tool" ? "stop" : "tool_calls" }] })}\n\ndata: [DONE]\n\n`,
+        );
+        return;
+      }
       if (body.stream && lastUser.startsWith("用 skill 帮我添加")) {
         // Read the add-mcp-server skill, then propose a server, then report.
         res.setHeader("Content-Type", "text/event-stream");
@@ -617,6 +679,9 @@ const { execFileSync } = require("node:child_process");
         OTTER_SSH_KEYCHAIN: sshKeychain,
         OTTER_TEST_NO_TERMINAL: "1",
         OTTER_TEST_BACKDROP_PICK: backdropPick,
+        OTTER_CODEX_BIN: fakeCodex,
+        OTTER_TEST_AGENT_FOLDER: agentProject,
+        FAKE_CODEX_LOG: codexLog,
       },
       timeout: 30000,
     });
@@ -1211,6 +1276,9 @@ const { execFileSync } = require("node:child_process");
         "ssh_list_servers",
         "ssh_open_terminal",
         "ssh_run",
+        "agent_assign",
+        "agent_tasks",
+        "agent_stop",
       ],
     );
     assert.equal(toolTurns[1].body.messages.at(-1).role, "tool");
@@ -1729,6 +1797,231 @@ const { execFileSync } = require("node:child_process");
     await panel.keyboard.press("Escape");
     console.log(
       "PASS: SSH servers: ~/.ssh/config hosts listed; one added in settings tests and opens; logins saved from chat after a card, a typed password kept from the model and the chat and stored only in the keychain; a message with a password held back; a command run on a real sshd after 允许一次; deleting removes the password.",
+    );
+    // AI 代理: Codex found and a default folder picked in settings; a task
+    // handed over from chat only after 允许一次 on a card that shows the
+    // folder, the access and the task; it runs codex exec in its sandbox
+    // with the task on stdin, and its report lands in the conversation by
+    // itself. A slow one shows above the chat box and stops; a failing one
+    // says why; the list in settings keeps all three.
+    const execCalls = () => codexCalls().filter((c) => c.args?.[0] === "exec");
+    await go(panel, "偏好设置");
+    await panel
+      .getByRole("navigation", { name: "设置分组" })
+      .getByRole("button", { name: "AI 代理" })
+      .click();
+    const agentsSection = panel.getByRole("region", {
+      name: "代理和默认文件夹",
+    });
+    await agentsSection
+      .getByText(/codex-cli 0\.166\.0-fake · Logged in using ChatGPT/)
+      .waitFor();
+    await agentsSection.getByText("可以用", { exact: true }).waitFor();
+    await agentsSection.getByRole("button", { name: "选择…" }).click();
+    await agentsSection.getByText(agentProject, { exact: true }).waitFor();
+    assert.equal(
+      JSON.parse(fs.readFileSync(path.join(userData, "desktop.json"), "utf8"))
+        .agents.defaultFolder,
+      agentProject,
+    );
+    assert(
+      await pet.evaluate(async () => {
+        try {
+          await window.otter.action("agents.get");
+          return false;
+        } catch {
+          return true;
+        }
+      }),
+      "The pet window cannot see or steer agent tasks",
+    );
+    await panel.keyboard.press("Escape");
+    await go(panel, "与水獭聊天");
+    await panel.getByRole("button", { name: "新对话", exact: true }).click();
+    await noteSay("让 Codex 写个说明文件");
+    const agentCard = panel.getByRole("region", {
+      name: "工具请求：派任务给 AI 代理",
+    });
+    await agentCard.getByText(/交给 Codex：写一个说明文件/).waitFor();
+    await agentCard
+      .getByText(/权限：可以修改这个文件夹里的文件（不联网）/)
+      .waitFor();
+    await agentCard
+      .getByText(/在项目里新建 otter-agent\.txt，写上这段任务。/)
+      .waitFor();
+    assert.equal(
+      await agentCard.getByRole("button", { name: "这段对话都允许" }).count(),
+      0,
+      "Every task asks",
+    );
+    assert.equal(execCalls().length, 0, "Nothing runs before 允许");
+    await panel.screenshot({ path: path.join(output, "otter-agent-card.png") });
+    await agentCard
+      .getByRole("button", { name: "允许一次", exact: true })
+      .click();
+    await panel.getByText(/^好的：已交给 Codex（任务 [0-9a-f]{8}）/).waitFor();
+    const reportBubble = panel
+      .locator(".chat-message.assistant")
+      .filter({ hasText: "Codex 做完了：写一个说明文件" });
+    await reportBubble.waitFor();
+    await reportBubble.getByText("Codex · 任务回报", { exact: true }).waitFor();
+    await reportBubble.getByText(/做好了。写了 otter-agent\.txt。/).waitFor();
+    await reportBubble.getByText("otter-agent.txt", { exact: true }).waitFor();
+    await reportBubble.scrollIntoViewIfNeeded();
+    await panel.screenshot({
+      path: path.join(output, "otter-agent-report.png"),
+    });
+    const [firstExec] = execCalls();
+    assert.equal(
+      firstExec.args[firstExec.args.indexOf("--sandbox") + 1],
+      "workspace-write",
+    );
+    assert.equal(
+      firstExec.args[firstExec.args.indexOf("--cd") + 1],
+      agentProject,
+    );
+    assert.equal(
+      codexCalls().find((c) => "prompt" in c).prompt,
+      "在项目里新建 otter-agent.txt，写上这段任务。",
+    );
+    assert.equal(
+      fs.readFileSync(path.join(agentProject, "otter-agent.txt"), "utf8"),
+      "在项目里新建 otter-agent.txt，写上这段任务。",
+    );
+    // The report is part of the conversation the model sees next.
+    await noteSay("看看 Codex 的任务");
+    await panel.getByText(/^好的：\[/).waitFor();
+    const listTurn = requests.filter((r) => r.body.stream).at(-1).body.messages;
+    assert(
+      listTurn.some(
+        (m) =>
+          m.role === "assistant" &&
+          /Codex 做完了：写一个说明文件/.test(m.content),
+      ),
+      "The model sees the report",
+    );
+    assert.match(listTurn.at(-1).content, /"状态": "已完成"/);
+    // Files linked in a report show in Finder, only inside a task's folder.
+    const reveal = (href) =>
+      panel.evaluate(async (href) => {
+        try {
+          return await window.otter.action("reveal-file", href);
+        } catch (e) {
+          return `refused: ${e.message}`;
+        }
+      }, href);
+    assert.equal(
+      await reveal(
+        `${encodeURI(path.join(agentProject, "otter-agent.txt"))}:3`,
+      ),
+      path.join(agentProject, "otter-agent.txt"),
+    );
+    for (const href of [
+      "/etc/hosts",
+      path.join(agentProject, "missing.txt"),
+      "relative/file.txt",
+      `${agentProject}/../${path.basename(agentProject)}-x`,
+    ])
+      assert.match(await reveal(href), /^refused: /, href);
+    // No folder named: the default one; then stopped from above the chat box.
+    await noteSay("让 Codex 慢慢做");
+    await agentCard.getByText(/权限：只读：只能查看和分析，不改文件/).waitFor();
+    await agentCard
+      .getByRole("button", { name: "允许一次", exact: true })
+      .click();
+    const strip = panel.getByRole("region", { name: "进行中的代理任务" });
+    await strip.getByText(/^运行 step \d+$/).waitFor();
+    await strip.getByText("慢慢做的检查", { exact: true }).waitFor();
+    await panel.screenshot({
+      path: path.join(output, "otter-agent-running.png"),
+    });
+    await strip
+      .getByRole("button", { name: "停止 慢慢做的检查", exact: true })
+      .click();
+    await strip.waitFor({ state: "detached" });
+    await panel
+      .locator(".chat-message.assistant")
+      .filter({ hasText: "已停止 Codex 的任务：慢慢做的检查" })
+      .waitFor();
+    const slowExec = execCalls().at(-1);
+    assert.equal(
+      slowExec.args[slowExec.args.indexOf("--cd") + 1],
+      agentProject,
+    );
+    assert.equal(
+      slowExec.args[slowExec.args.indexOf("--sandbox") + 1],
+      "read-only",
+    );
+    await noteSay("让 Codex 做不完");
+    await agentCard
+      .getByRole("button", { name: "允许一次", exact: true })
+      .click();
+    const failedReport = panel
+      .locator(".chat-message.assistant")
+      .filter({ hasText: "Codex 没做完：做不完的任务" });
+    await failedReport.getByText("原因：模型额度用完了").waitFor();
+    // Settings keeps all three, newest first, with results and a way back.
+    await go(panel, "偏好设置");
+    await panel
+      .getByRole("navigation", { name: "设置分组" })
+      .getByRole("button", { name: "AI 代理" })
+      .click();
+    const taskList = panel.getByRole("region", { name: "代理任务" });
+    for (const [title, status] of [
+      ["做不完的任务", "没做完"],
+      ["慢慢做的检查", "已停止"],
+      ["写一个说明文件", "已完成"],
+    ])
+      await taskList
+        .getByRole("article", { name: `任务：${title}` })
+        .getByText(status, { exact: true })
+        .waitFor();
+    const doneTask = taskList.getByRole("article", {
+      name: "任务：写一个说明文件",
+    });
+    await doneTask.getByText("结果和任务说明").click();
+    await doneTask.getByText("做好了。写了 otter-agent.txt。").waitFor();
+    await panel.screenshot({
+      path: path.join(output, "otter-agent-settings.png"),
+    });
+    const saved = JSON.parse(
+      fs.readFileSync(path.join(userData, "desktop.json"), "utf8"),
+    ).agents.tasks;
+    assert.deepEqual(
+      saved.map((t) => t.status),
+      ["failed", "stopped", "done"],
+    );
+    assert(saved.every((t) => !("progress" in t)));
+    await doneTask
+      .getByRole("button", { name: "打开派这个任务的对话" })
+      .click();
+    await panel
+      .getByRole("dialog", { name: "设置" })
+      .waitFor({ state: "hidden" });
+    await panel
+      .locator(".chat-message.assistant")
+      .filter({ hasText: "Codex 做完了：写一个说明文件" })
+      .waitFor();
+    await go(panel, "偏好设置");
+    await panel
+      .getByRole("navigation", { name: "设置分组" })
+      .getByRole("button", { name: "AI 代理" })
+      .click();
+    await taskList
+      .getByRole("button", { name: "删除记录 做不完的任务", exact: true })
+      .click();
+    await taskList
+      .getByRole("article", { name: "任务：做不完的任务" })
+      .waitFor({ state: "detached" });
+    await taskList.getByRole("button", { name: "清除已结束的" }).click();
+    await taskList.getByText("还没有派过任务。").waitFor();
+    await panel.keyboard.press("Escape");
+    assert.throws(
+      () => execFileSync("/usr/bin/pgrep", ["-f", "fake-codex.cjs"]),
+      "No codex process is left running",
+    );
+    console.log(
+      "PASS: AI agents: Codex found with its version and login; a default folder picked; a task handed to Codex from chat only after 允许一次 on a card with folder, access and task, run as codex exec in its sandbox with the task on stdin, its report posted to the conversation by itself and seen by the model next turn; a slow one shown above the chat box and stopped; a failing one reported with its reason; all kept in settings, opened back in chat, deleted and cleared; the pet cannot reach them.",
     );
     console.log(
       "PASS: reading a web page asks first and refuses this Mac and the local network; MCP server added from settings: preview first, its tools offered, a writing call waits for the card, 允许一次 runs it, 拒绝 does not, 不用再问 skips the card, disable and remove; servers added from chat after a card (a pasted command, and a remote HTTP server with a token whose tool then runs after 允许); a skill found by 重新扫描, read through use_skill, and not offered once off; Codex, Claude Code and shared skill folders read in place, merged when linked, switched per folder and per skill, and one installed later offered with the next message; the shipped add-mcp-server skill read, then a server proposed through otter_add_mcp_server and added after 允许一次; a VS Code-shaped remote config pasted into settings.",
@@ -2751,6 +3044,7 @@ const { execFileSync } = require("node:child_process");
     sshd.stop();
     fs.rmSync(sshHome, { recursive: true, force: true });
     fs.rmSync(backdropDir, { recursive: true, force: true });
+    fs.rmSync(agentDir, { recursive: true, force: true });
     execFileSync("/usr/bin/security", ["delete-keychain", sshKeychain]);
     if (keychains() !== keychainsBefore)
       console.error("The keychain search list changed during the smoke test.");

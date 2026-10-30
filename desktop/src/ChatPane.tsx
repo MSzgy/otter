@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import Markdown from "react-markdown";
+import { AgentStrip, agentName, openHref, useAgents } from "./AgentTasks";
 import { ProjectCapture } from "./ProjectCapture";
 import { MemorySuggestions } from "./MemorySuggestions";
 import { VoiceControls } from "./VoiceControls";
@@ -25,6 +26,7 @@ type Message = {
   context?: string;
   memory_refs?: MemoryRef[];
   tool_calls?: ToolCall[];
+  turn_id?: string;
 };
 type Attachment = {
   id: string;
@@ -40,6 +42,8 @@ export function ChatPane({
   onProjects,
   initialDraft,
   onDraftTaken,
+  focusSession,
+  onSessionTaken,
 }: {
   health: Health | null;
   onSettings: () => void;
@@ -47,7 +51,13 @@ export function ChatPane({
   onProjects: (id?: string) => void;
   initialDraft?: string | null;
   onDraftTaken?: () => void;
+  // A conversation to open, such as the one an agent just reported to.
+  focusSession?: string | null;
+  onSessionTaken?: () => void;
 }) {
+  const [agents] = useAgents();
+  const focusRef = useRef(focusSession);
+  focusRef.current = focusSession;
   const [sessions, setSessions] = useState<Session[]>([]);
   const [session, setSession] = useState("");
   const [messages, setMessages] = useState<Message[]>([]);
@@ -377,6 +387,20 @@ export function ChatPane({
         if (event.data.status !== "streaming")
           void refreshSessions().catch(fail);
       }
+      // An agent's report landed in a conversation: show it if it is this one.
+      if (event.type === "chat.note") {
+        void refreshSessions().catch(fail);
+        if (event.data.sessionId === sessionRef.current)
+          void api
+            .call<Message[]>("chat.history", {
+              session_id: event.data.sessionId,
+            })
+            .then((rows) => {
+              if (sessionRef.current === event.data.sessionId)
+                setMessages(rows);
+            })
+            .catch(fail);
+      }
       if (event.type === "navigation" && event.data.view === "chat")
         textarea.current?.focus();
     });
@@ -385,7 +409,10 @@ export function ChatPane({
         const rows = await api.call<Session[]>("chat.sessions");
         if (!alive) return;
         setSessions(rows);
-        const selected = rows[0] || (await api.call<Session>("chat.new"));
+        const wanted = rows.find((r) => r.id === focusRef.current);
+        if (wanted) onSessionTaken?.();
+        const selected =
+          wanted || rows[0] || (await api.call<Session>("chat.new"));
         if (!alive) return;
         if (!rows.length) setSessions([selected]);
         await choose(selected.id);
@@ -404,6 +431,17 @@ export function ChatPane({
       unsubscribe();
     };
   }, [!!health]);
+  useEffect(() => {
+    if (!focusSession || !sessionRef.current) return;
+    onSessionTaken?.();
+    if (focusSession !== sessionRef.current)
+      void refreshSessions()
+        .then((rows) => {
+          if (rows.some((r) => r.id === focusSession))
+            return choose(focusSession);
+        })
+        .catch(fail);
+  }, [focusSession]);
   useEffect(() => {
     end.current?.scrollIntoView({ block: "nearest" });
   }, [messages.at(-1)?.content, session]);
@@ -655,9 +693,16 @@ export function ChatPane({
           </div>
         ) : (
           messages.map((m) => (
-            <div key={m.id} className={`chat-message ${m.role}`}>
+            <div
+              key={m.id}
+              className={`chat-message ${m.role}${m.turn_id?.startsWith("agent-") ? " agent-report" : ""}`}
+            >
               <div className="chat-author">
-                {m.role === "user" ? "你" : "Otter 🦦"}
+                {m.role === "user"
+                  ? "你"
+                  : m.turn_id?.startsWith("agent-")
+                    ? `${agentName(agents, m.turn_id.split("-")[1])} · 任务回报`
+                    : "Otter 🦦"}
               </div>
               {!!m.memory_refs?.length && (
                 <MemoryRefs refs={m.memory_refs} onEdit={onEditMemory} />
@@ -690,8 +735,7 @@ export function ChatPane({
                         href={href}
                         onClick={(e) => {
                           e.preventDefault();
-                          if (href)
-                            void api.action("open-link", href).catch(fail);
+                          if (href) void openHref(href).catch(fail);
                         }}
                       >
                         {children}
@@ -787,6 +831,7 @@ export function ChatPane({
             </div>
           </section>
         ))}
+      {session && <AgentStrip sessionId={session} />}
       {settingUndo && (
         <div className="undo-bar">
           刚把「{settingUndo.label}」改了，不满意可以

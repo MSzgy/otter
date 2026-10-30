@@ -142,6 +142,45 @@ def test_local_receipts_are_atomic_persistent_and_idempotent(tmp_path):
         store.record_action(session, "task2", "已删除的对话", "结果")
 
 
+def test_agent_reports_join_the_conversation_once(tmp_path):
+    from otter.core.config import Config
+    from otter.runtime.server import RequestError, Runtime
+
+    config = Config.model_validate(
+        {
+            "identity": {"primary": "fixture@example.com"},
+            "llm": {"provider": "mock"},
+            "core": {"data_dir": str(tmp_path / "data")},
+        }
+    )
+    runtime = Runtime(config, lambda *args: None)
+    try:
+        store = runtime.chat.store
+        session = store.new()["id"]
+        store.record_action(session, "receipt", "提醒我喝水", "已创建提醒：喝水")
+        note = {"session_id": session, "note_id": "agent-codex-1", "content": "**Codex 做完了**"}
+        assert runtime.dispatch("chat.note", note) == {"ok": True}
+        runtime.dispatch("chat.note", note)
+        rows = store.history(session)
+        assert [(r["role"], r["content"]) for r in rows[-2:]] == [
+            ("assistant", "已创建提醒：喝水"),
+            ("assistant", "**Codex 做完了**"),
+        ]
+        assert rows[-1]["turn_id"] == "agent-codex-1"
+        for bad in (
+            {**note, "note_id": "receipt-2"},
+            {**note, "content": ""},
+            {**note, "session_id": None},
+        ):
+            with pytest.raises(RequestError):
+                runtime.dispatch("chat.note", bad)
+        store.delete(session)
+        with pytest.raises(LLMError):
+            runtime.dispatch("chat.note", {**note, "note_id": "agent-codex-2"})
+    finally:
+        runtime.close()
+
+
 def test_runtime_planner_omits_attached_turns_and_private_sources(tmp_path):
     from otter.core.config import Config
     from otter.runtime.server import Runtime

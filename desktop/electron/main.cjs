@@ -32,6 +32,8 @@ const {
 } = require("./theme.cjs");
 const { SettingsRegistry } = require("./settings-registry.cjs");
 const { Backdrop, SCHEME, MAX_TRANSPARENCY } = require("./backdrop.cjs");
+const { AgentTasks, codexAgent, report } = require("./agents.cjs");
+const { shellPath } = require("./mcp-client.cjs");
 const { ToolHost } = require("./tool-host.cjs");
 const { WebReader } = require("./web-reader.cjs");
 const { Extensions, summary } = require("./extensions.cjs");
@@ -563,6 +565,8 @@ let skills;
 let ssh;
 // The panel's background picture and how see-through it is.
 let backdrop;
+// AI 代理: tasks handed to Codex (later Claude Code, Grok) from chat.
+let agentTasks;
 // Pictures load as otter-backdrop://image/<file>; registered before ready.
 protocol.registerSchemesAsPrivileged([
   { scheme: SCHEME, privileges: { standard: true, secure: true } },
@@ -655,6 +659,168 @@ const sshTools = {
     ];
   },
 };
+// Chat hands work to an agent through these. Assigning always shows a card
+// with the folder, the access and the whole task; the result comes back to
+// the conversation by itself (deliverReport).
+const agentTools = {
+  list: () => {
+    if (!agentTasks) return [];
+    const ids = [...agentTasks.adapters.keys()];
+    const labels = ids.map((id) => agentTasks.label(id)).join("、");
+    return [
+      {
+        name: "agent_assign",
+        label: "派任务给 AI 代理",
+        origin: "Otter",
+        alwaysAsk: true,
+        description: `把一项编程或文件任务交给这台 Mac 上的 AI 代理（${labels}）在后台完成，做完后结果会自动发回这个对话。用户要求交给代理时才用。代理看不到这段对话，task 要写清楚目标、背景、要改哪里和怎样算完成。`,
+        parameters: {
+          type: "object",
+          properties: {
+            agent: {
+              type: "string",
+              enum: ids,
+              description: "交给哪个代理",
+            },
+            title: {
+              type: "string",
+              description: "十几个字的任务标题",
+            },
+            task: {
+              type: "string",
+              description: "交给代理的完整任务说明",
+            },
+            folder: {
+              type: "string",
+              description:
+                "代理工作的文件夹（绝对路径或 ~/ 开头）；用户没说时省略，用默认文件夹",
+            },
+            access: {
+              type: "string",
+              enum: ["read", "write"],
+              description:
+                "read：只看和分析，不改文件；write：可以修改这个文件夹里的文件（不联网）",
+            },
+          },
+          required: ["agent", "title", "task", "access"],
+        },
+        preview: async (args) => {
+          await agentTasks.ready(args.agent);
+          return agentTasks.describe({ ...args, prompt: args.task });
+        },
+        run: (args, { sessionId }) => {
+          const task = agentTasks.start(
+            { ...args, prompt: args.task },
+            { sessionId },
+          );
+          return `已交给 ${agentTasks.label(task.agent)}（任务 ${task.id}），在 ${short(task.cwd)} 后台进行。做完后结果会自动发回这个对话；进度和停止在聊天框上方，或 设置 → AI 代理。`;
+        },
+      },
+      {
+        name: "agent_tasks",
+        label: "看代理任务",
+        origin: "Otter",
+        readOnly: true,
+        trusted: true,
+        description:
+          "最近交给 AI 代理的任务：编号、状态、进度，做完的附结果摘要。",
+        parameters: { type: "object", properties: {} },
+        run: () =>
+          agentTasks
+            .snapshot()
+            .tasks.slice(0, 10)
+            .map((t) => ({
+              编号: t.id,
+              代理: agentTasks.label(t.agent),
+              标题: t.title,
+              状态: t.statusText,
+              文件夹: short(t.cwd),
+              ...(t.progress ? { 进度: t.progress } : {}),
+              ...(t.result ? { 结果: t.result.slice(0, 1500) } : {}),
+              ...(t.error ? { 原因: t.error } : {}),
+            })),
+      },
+      {
+        name: "agent_stop",
+        label: "停止代理任务",
+        origin: "Otter",
+        description: "停止一个正在进行的代理任务。用户要求停止时才用。",
+        parameters: {
+          type: "object",
+          properties: { id: { type: "string", description: "任务编号" } },
+          required: ["id"],
+        },
+        preview: ({ id }) => {
+          const t = agentTasks.snapshot().tasks.find((t) => t.id === id);
+          if (!t || t.status !== "running")
+            throw new Error("这个任务已经不在进行中了。");
+          return `停止 ${agentTasks.label(t.agent)} 的任务：${t.title}`;
+        },
+        run: ({ id }) => {
+          agentTasks.stop(id);
+          return "已经让它停下，停好后结果会发回这个对话。";
+        },
+      },
+    ];
+  },
+};
+const short = (p) => {
+  const home = app.getPath("home");
+  return p === home || p.startsWith(home + path.sep)
+    ? "~" + p.slice(home.length)
+    : p;
+};
+// Waiting reports go in as soon as the reply in progress ends.
+const chatIdle = [];
+// A finished task's report goes into the conversation that assigned it,
+// once no reply is streaming there; then a notification and the pet say so.
+async function deliverReport(task) {
+  if (quitting) return;
+  const label = agentTasks.label(task.agent);
+  const id = `agent-${task.agent}-${task.id}`;
+  let delivered = false;
+  for (let i = 0; task.sessionId && i < 200 && !delivered; i++) {
+    try {
+      if (!backend || backend.closed || switching)
+        throw new Error("后台尚未就绪。");
+      await backend.call("chat.note", {
+        session_id: task.sessionId,
+        note_id: id,
+        content: report(task, label, app.getPath("home")),
+      });
+      delivered = true;
+    } catch (e) {
+      if (!/当前回复|尚未就绪/.test(e.message)) break;
+      await Promise.race([
+        new Promise((r) => setTimeout(r, 3000)),
+        new Promise((r) => chatIdle.push(r)),
+      ]);
+    }
+  }
+  if (delivered && panel && !panel.isDestroyed())
+    panel.webContents.send("otter:event", {
+      type: "chat.note",
+      data: { sessionId: task.sessionId, id },
+    });
+  const headline =
+    task.status === "done"
+      ? `${label} 做完了`
+      : task.status === "stopped"
+        ? `${label} 的任务已停止`
+        : `${label} 没做完`;
+  if (!preferences.quiet && Notification.isSupported()) {
+    const note = new Notification({
+      title: `Otter · ${headline}`,
+      body: task.title,
+    });
+    note.on("click", () => showChat(delivered ? task.sessionId : null));
+    note.show();
+  }
+  broadcast({
+    type: "pet.notice",
+    data: { message: `${headline}：${task.title}` },
+  });
+}
 const toolsEnabled = () =>
   extensions ? extensions.enabled : preferences.extensions?.tools !== false;
 function preferencesPublic() {
@@ -749,7 +915,10 @@ async function connect() {
       }
       if (event.type === "chat.changed") {
         chatState = event.data;
-        if (chatState.status !== "streaming") toolHost.cancelTurn(chatState.id);
+        if (chatState.status !== "streaming") {
+          toolHost.cancelTurn(chatState.id);
+          for (const resolve of chatIdle.splice(0)) resolve();
+        }
         body.observe({
           type: "chat.activity",
           data: { status: chatState.status },
@@ -866,13 +1035,13 @@ function reposition() {
     pet.setPosition(p.x, p.y);
   }
 }
-function showChat() {
+function showChat(sessionId = null) {
   activeView = "chat";
   showPanel();
   if (panel && !panel.isDestroyed())
     panel.webContents.send("otter:event", {
       type: "navigation",
-      data: { view: "chat" },
+      data: { view: "chat", ...(sessionId ? { sessionId } : {}) },
     });
 }
 function showHandoff() {
@@ -1323,6 +1492,36 @@ async function panelAction(event, name, value) {
       return backdrop.setTransparency(value);
     if (name === "backdrop.chat") return backdrop.chatSet(value);
     throw new Error("不支持的背景图操作。");
+  }
+  if (name.startsWith("agents.")) {
+    if (event.sender !== panel.webContents)
+      throw new Error("请在设置里管理代理任务。");
+    if (!agentTasks) throw new Error("AI 代理尚未就绪。");
+    if (name === "agents.get") return agentTasks.snapshot();
+    if (name === "agents.detect") return agentTasks.detectAll();
+    if (name === "agents.stop") return agentTasks.stop(value?.id);
+    if (name === "agents.remove") return agentTasks.remove(value?.id);
+    if (name === "agents.clear") return agentTasks.clearFinished();
+    if (name === "agents.folder") {
+      if (value === null) return agentTasks.setDefaultFolder("");
+      const picked = process.env.OTTER_TEST_AGENT_FOLDER
+        ? { canceled: false, filePaths: [process.env.OTTER_TEST_AGENT_FOLDER] }
+        : await dialog.showOpenDialog(panel, {
+            title: "选择代理默认工作的文件夹",
+            defaultPath: agentTasks.defaultFolder || app.getPath("home"),
+            properties: ["openDirectory", "createDirectory"],
+          });
+      return picked.canceled
+        ? agentTasks.snapshot()
+        : agentTasks.setDefaultFolder(picked.filePaths[0]);
+    }
+    if (name === "agents.open") {
+      const task = agentTasks.snapshot().tasks.find((t) => t.id === value?.id);
+      if (!task) throw new Error("没有这个任务。");
+      showChat(task.sessionId);
+      return null;
+    }
+    throw new Error("不支持的代理操作。");
   }
   if (name.startsWith("ssh.")) {
     if (event.sender !== panel.webContents)
@@ -1919,6 +2118,40 @@ async function panelAction(event, name, value) {
     broadcast({ type: "preferences", data: preferencesPublic() });
     return;
   }
+  // Agents' reports link to files they touched (/path/file.ts:12); show one
+  // in Finder, but only inside a folder a task worked in.
+  if (name === "reveal-file" && typeof value === "string") {
+    let file = value;
+    try {
+      file = value.startsWith("file:")
+        ? fileURLToPath(value)
+        : decodeURIComponent(value);
+    } catch {
+      throw new Error("不支持的链接。");
+    }
+    file = file.replace(/#L\d+(?:-L?\d+)?$/, "").replace(/:\d+(?::\d+)?$/, "");
+    if (!path.isAbsolute(file)) throw new Error("不支持的链接。");
+    file = path.resolve(file);
+    const real = (p) => {
+      try {
+        return fs.realpathSync(p);
+      } catch {
+        return p;
+      }
+    };
+    const inside = (agentTasks?.snapshot().tasks || []).some((t) =>
+      [t.cwd, real(t.cwd)].some(
+        (dir) => file === dir || file.startsWith(dir + path.sep),
+      ),
+    );
+    if (!inside) throw new Error("只能打开代理任务文件夹里的文件。");
+    if (!fs.existsSync(file))
+      throw new Error("找不到这个文件，可能已经被移动或删除。");
+    // The smoke test checks the path without opening Finder.
+    if (process.env.OTTER_TEST_NO_TERMINAL) return file;
+    shell.showItemInFolder(file);
+    return file;
+  }
   if (name === "open-link" && typeof value === "string") {
     const url = new URL(value);
     if (!["https:", "http:"].includes(url.protocol))
@@ -2040,6 +2273,31 @@ else {
     });
     void ssh.warm().catch(() => {});
     toolHost.addSource(sshTools);
+    agentTasks = new AgentTasks({
+      // Claude Code and Grok join here as adapters of their own.
+      adapters: [
+        codexAgent({
+          bin: process.env.OTTER_CODEX_BIN || null,
+          PATH: shellPath,
+        }),
+      ],
+      load: () => preferences.agents,
+      save: (value) => {
+        preferences.agents = value;
+        save();
+      },
+      home: app.getPath("home"),
+      onChange: (data) => {
+        if (panel && !panel.isDestroyed())
+          panel.webContents.send("otter:event", {
+            type: "agents.changed",
+            data,
+          });
+      },
+      onFinish: deliverReport,
+    });
+    void agentTasks.detectAll().catch(() => {});
+    toolHost.addSource(agentTools);
     appContentReader = new AppContentReader(
       app.isPackaged
         ? path.join(process.resourcesPath, "native/otter-app-content")
@@ -2289,6 +2547,7 @@ else {
     body.stop();
     evolution.close();
     extensions?.stopAll();
+    agentTasks?.stopAll();
     globalShortcut.unregisterAll();
     (backend ? backend.stop() : Promise.resolve()).finally(() => app.quit());
   });

@@ -5,6 +5,7 @@ export type SettingsSection =
   | "model"
   | "tools"
   | "ssh"
+  | "agents"
   | "privacy"
   | "handoff"
   | "body"

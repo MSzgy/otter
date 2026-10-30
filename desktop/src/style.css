@@ -3822,6 +3822,8 @@ button.danger {
   color: var(--danger);
 }
 .tool-request .tool-detail {
+  max-height: 260px;
+  overflow: auto;
   white-space: pre-wrap;
   font-size: 13px;
   line-height: 1.6;
@@ -3900,4 +3902,152 @@ button.danger {
 .ssh-key button {
   padding: 6px 12px;
   font-size: 12px;
+}
+
+/* AI 代理: tasks running for this conversation, above the chat box. */
+.agent-strip {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0 0 10px;
+}
+.agent-run {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  padding: 8px 8px 8px 14px;
+  border-radius: var(--r-md);
+  background: var(--surface);
+  box-shadow: 0 0 0 1px var(--line) inset;
+  font-size: 12.5px;
+}
+.agent-pulse {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--clay);
+  animation: agent-pulse 1.4s ease-in-out infinite;
+}
+@keyframes agent-pulse {
+  50% {
+    opacity: 0.35;
+    transform: scale(0.75);
+  }
+}
+.agent-run strong {
+  flex: none;
+  color: var(--clay-ink);
+}
+.agent-title {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: var(--ink);
+}
+.agent-run .agent-progress {
+  flex: 1 1 0;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: var(--ink-3);
+  font-family: ui-monospace, "SF Mono", monospace;
+  font-size: 11.5px;
+}
+.agent-time {
+  flex: none;
+  color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+}
+.agent-run button {
+  flex: none;
+  padding: 4px 10px;
+  font-size: 12px;
+}
+.agent-badge {
+  flex: none;
+  align-self: center;
+  padding: 2px 9px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 600;
+  background: var(--tint-2);
+  color: var(--ink-2);
+}
+.agent-badge.ok,
+.agent-badge.done {
+  background: color-mix(in srgb, var(--ok) 16%, transparent);
+  color: var(--ok);
+}
+.agent-badge.bad,
+.agent-badge.failed {
+  background: color-mix(in srgb, var(--danger) 14%, transparent);
+  color: var(--danger);
+}
+.agent-badge.running {
+  background: var(--clay-tint);
+  color: var(--clay-ink);
+}
+.agent-task {
+  padding: 10px 0;
+  border-top: 1px solid var(--line);
+}
+.agent-task:first-of-type {
+  border-top: 0;
+}
+.agent-task .setting-line {
+  border-top: 0;
+}
+.agent-task strong {
+  display: block;
+  font-size: 13.5px;
+}
+/* An agent's report in the chat: the otter's bubble with the accent edge. */
+.chat-message.agent-report .chat-bubble {
+  box-shadow:
+    inset 3px 0 0 var(--clay),
+    var(--shadow-1);
+}
+.chat-message.agent-report .chat-author {
+  color: var(--clay-ink);
+  font-weight: 600;
+}
+.agent-task > .agent-progress {
+  margin: 4px 0 0;
+  font-family: ui-monospace, "SF Mono", monospace;
+  font-size: 11.5px;
+  color: var(--ink-3);
+}
+.agent-task details {
+  margin-top: 6px;
+  font-size: 12.5px;
+}
+.agent-task summary {
+  cursor: pointer;
+  color: var(--ink-3);
+}
+.agent-result {
+  margin: 6px 0;
+  padding: 2px 12px;
+  border-radius: var(--r-sm);
+  background: var(--wash);
+  line-height: 1.6;
+}
+.agent-prompt {
+  max-height: 180px;
+  overflow: auto;
+  margin: 6px 0;
+  padding: 8px 10px;
+  border-radius: var(--r-sm);
+  background: var(--tint-1);
+  white-space: pre-wrap;
+  font:
+    12px/1.5 ui-monospace,
+    "SF Mono",
+    monospace;
 }
