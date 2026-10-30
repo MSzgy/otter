@@ -9,6 +9,7 @@ const { projectModelReply, verifyProjects } = require("./project-smoke.cjs");
 const { verifyHandoff } = require("./handoff-smoke.cjs");
 const { go, openScenes, openTools } = require("./smoke-nav.cjs");
 const { startFakeHttpMcp } = require("./fake-mcp-http.cjs");
+const { startSshd } = require("./local-sshd.cjs");
 const { extractPage } = require("../electron/page-reader.cjs");
 const { nativeRead } = require("../electron/awareness.cjs");
 const { execFileSync } = require("node:child_process");
@@ -30,6 +31,38 @@ const { execFileSync } = require("node:child_process");
       `---\nname: ${name}\ndescription: ${name} 的用法\n---\n做法\n`,
     );
   };
+  // SSH: a real sshd for key logins, a stand-in home with ~/.ssh/config, and
+  // a scratch keychain, so no test password touches the user's own.
+  const sshd = await startSshd();
+  const sshHome = fs.mkdtempSync(path.join(os.tmpdir(), "otter-ssh-home-"));
+  fs.mkdirSync(path.join(sshHome, ".ssh"));
+  fs.writeFileSync(
+    path.join(sshHome, ".ssh", "config"),
+    "Host lab\n  HostName lab.example.com\n  User ops\n",
+  );
+  const keychains = () =>
+    execFileSync("/usr/bin/security", [
+      "list-keychains",
+      "-d",
+      "user",
+    ]).toString();
+  const keychainsBefore = keychains();
+  const sshKeychain = path.join(
+    os.tmpdir(),
+    `otter-smoke-${process.pid}.keychain-db`,
+  );
+  execFileSync("/usr/bin/security", [
+    "create-keychain",
+    "-p",
+    "smoke",
+    sshKeychain,
+  ]);
+  execFileSync("/usr/bin/security", [
+    "unlock-keychain",
+    "-p",
+    "smoke",
+    sshKeychain,
+  ]);
   homeSkill(".agents/skills", "shared-tips");
   homeSkill(".claude/skills", "claude-notes");
   homeSkill(".codex/skills", "codex-helper");
@@ -148,6 +181,28 @@ const { execFileSync } = require("node:child_process");
           plan = { kind: "setting_query", id: "quiet" };
         } else if (request === "把模型密钥改成 abc") {
           plan = { kind: "setting_change", id: "models.api_key", value: "abc" };
+        } else if (request.startsWith("保存服务器 box")) {
+          plan = {
+            kind: "ssh_save",
+            server: {
+              name: "box",
+              host: "127.0.0.1",
+              user: sshd.user,
+              port: sshd.port,
+              auth: "key",
+              key_path: sshd.key,
+            },
+          };
+        } else if (request.startsWith("保存服务器 pwbox")) {
+          plan = {
+            kind: "ssh_save",
+            server: {
+              name: "pwbox",
+              host: "10.9.8.7",
+              user: "me",
+              auth: "password",
+            },
+          };
         } else if (request === "打开计算器") {
           plan = { kind: "open_app", target: "com.apple.calculator" };
         } else if (request.startsWith("打开这个网页 http://127.0.0.1:")) {
@@ -238,6 +293,43 @@ const { execFileSync } = require("node:child_process");
       const lastUser =
         [...(body.messages || [])].reverse().find((m) => m.role === "user")
           ?.content || "";
+      if (body.stream && lastUser.startsWith("在 box 上看看")) {
+        res.setHeader("Content-Type", "text/event-stream");
+        const result = body.messages.find((m) => m.role === "tool");
+        const chunk = result
+          ? {
+              choices: [
+                {
+                  delta: { content: `命令结果：${result.content}` },
+                  finish_reason: "stop",
+                },
+              ],
+            }
+          : {
+              choices: [
+                {
+                  delta: {
+                    tool_calls: [
+                      {
+                        index: 0,
+                        id: "call_ssh",
+                        function: {
+                          name: "ssh_run",
+                          arguments: JSON.stringify({
+                            server: "box",
+                            command: "echo smoke-$(whoami)",
+                          }),
+                        },
+                      },
+                    ],
+                  },
+                  finish_reason: "tool_calls",
+                },
+              ],
+            };
+        res.end(`data: ${JSON.stringify(chunk)}\n\ndata: [DONE]\n\n`);
+        return;
+      }
       if (body.stream && lastUser.startsWith("用 skill 帮我添加")) {
         // Read the add-mcp-server skill, then propose a server, then report.
         res.setHeader("Content-Type", "text/event-stream");
@@ -476,6 +568,9 @@ const { execFileSync } = require("node:child_process");
         ...process.env,
         OTTER_DESKTOP_USER_DATA: userData,
         OTTER_SKILLS_HOME: skillsHome,
+        OTTER_SSH_HOME: sshHome,
+        OTTER_SSH_KEYCHAIN: sshKeychain,
+        OTTER_TEST_NO_TERMINAL: "1",
       },
       timeout: 30000,
     });
@@ -1066,6 +1161,10 @@ const { execFileSync } = require("node:child_process");
         // The add-mcp-server skill ships with the app.
         "use_skill",
         "read_skill_file",
+        // ~/.ssh/config has a host, so the server tools are offered.
+        "ssh_list_servers",
+        "ssh_open_terminal",
+        "ssh_run",
       ],
     );
     assert.equal(toolTurns[1].body.messages.at(-1).role, "tool");
@@ -1444,6 +1543,147 @@ const { execFileSync } = require("node:child_process");
     } finally {
       await vscodeRemote.close();
     }
+    // SSH 服务器: ~/.ssh/config hosts listed; a server added in settings logs
+    // in; logins saved from chat (a key, and a password that only reaches the
+    // keychain); a message with a password held back; a command run after
+    // 允许一次.
+    const openSsh = async () => {
+      if (!(await panel.getByRole("dialog", { name: "设置" }).isVisible()))
+        await panel.getByRole("button", { name: "设置", exact: true }).click();
+      await panel
+        .getByRole("navigation", { name: "设置分组" })
+        .getByRole("button", { name: "SSH 服务器" })
+        .click();
+    };
+    await openSsh();
+    await panel
+      .getByRole("article", { name: "服务器：lab" })
+      .getByText("ops@lab.example.com · 来自 ~/.ssh/config")
+      .waitFor();
+    await panel
+      .getByRole("button", { name: "添加服务器", exact: true })
+      .click();
+    const form = panel.getByRole("form", { name: "添加服务器" });
+    await form.getByRole("textbox", { name: "名称" }).fill("local");
+    await form.getByRole("textbox", { name: "主机" }).fill("127.0.0.1");
+    await form.getByRole("textbox", { name: "端口" }).fill(String(sshd.port));
+    await form.getByRole("textbox", { name: "用户名" }).fill(sshd.user);
+    await form.getByRole("textbox", { name: "密钥文件" }).fill(sshd.key);
+    await form.getByRole("button", { name: "保存服务器", exact: true }).click();
+    const local = panel.getByRole("article", { name: "服务器：local" });
+    await local.waitFor();
+    await local.getByRole("button", { name: "测试连接 local" }).click();
+    await local.getByText("能登录 local。", { exact: true }).waitFor();
+    await local.getByRole("button", { name: "打开终端 local" }).click();
+    await local.getByText("已在终端打开 local。", { exact: true }).waitFor();
+    await panel.screenshot({
+      path: path.join(output, "otter-ssh-settings.png"),
+    });
+    await panel.keyboard.press("Escape");
+    const sshCard = panel.getByRole("region", { name: "办事确认" });
+    await noteSay(
+      `保存服务器 box：${sshd.user}@127.0.0.1 端口 ${sshd.port}，密钥 ${sshd.key}`,
+    );
+    await sshCard
+      .getByText(`地址：${sshd.user}@127.0.0.1:${sshd.port}`)
+      .waitFor();
+    await sshCard
+      .getByRole("button", { name: "确认执行", exact: true })
+      .click();
+    await panel.getByText(/^已保存服务器 box/).waitFor();
+    await noteSay("保存服务器 pwbox：me@10.9.8.7 密码：S3cret!pass");
+    await sshCard.getByText(/登录方式：密码（存进钥匙串）/).waitFor();
+    await sshCard.getByText(/没有发给模型/).waitFor();
+    assert.match(taskRequests.at(-1).text, /密码：••••/);
+    await panel.screenshot({
+      path: path.join(output, "otter-ssh-save-card.png"),
+    });
+    await sshCard
+      .getByRole("button", { name: "确认执行", exact: true })
+      .click();
+    await panel.getByText(/^已保存服务器 pwbox/).waitFor();
+    const pwbox = JSON.parse(
+      fs.readFileSync(path.join(userData, "desktop.json"), "utf8"),
+    ).ssh.hosts.find((h) => h.name === "pwbox");
+    assert.equal(pwbox.auth, "password");
+    assert(!JSON.stringify(pwbox).includes("S3cret"));
+    const stored = execFileSync("/usr/bin/security", [
+      "find-generic-password",
+      "-s",
+      "Otter SSH",
+      "-a",
+      pwbox.id,
+      "-w",
+      sshKeychain,
+    ]).toString();
+    assert.equal(
+      Buffer.from(stored.trim(), "base64").toString(),
+      "S3cret!pass",
+    );
+    await noteSay("我的密码是：Hunter2pass 帮我记一下");
+    await panel.getByText(/这条消息里有密码，Otter 没有把它发给模型/).waitFor();
+    const everything = JSON.stringify([requests, taskRequests, memoryRequests]);
+    assert(!everything.includes("S3cret!pass"), "No password reached a model");
+    assert(!everything.includes("Hunter2pass"), "No password reached a model");
+    const history = await panel.evaluate(async () => {
+      const [latest] = await window.otter.call("chat.sessions", {});
+      return JSON.stringify(
+        await window.otter.call("chat.history", { session_id: latest.id }),
+      );
+    });
+    assert(
+      !history.includes("S3cret!pass") && !history.includes("Hunter2pass"),
+    );
+    await noteSay("在 box 上看看我是谁");
+    const runCard = panel.getByRole("region", {
+      name: "工具请求：在服务器上运行命令",
+    });
+    await runCard.getByText(/echo smoke-\$\(whoami\)/).waitFor();
+    assert.equal(
+      await runCard.getByRole("button", { name: "这段对话都允许" }).count(),
+      0,
+    );
+    await panel.screenshot({
+      path: path.join(output, "otter-ssh-run-card.png"),
+    });
+    await runCard
+      .getByRole("button", { name: "允许一次", exact: true })
+      .click();
+    await panel
+      .getByText(new RegExp(`命令结果：退出码 0[\\s\\S]*smoke-${sshd.user}`))
+      .waitFor();
+    await openSsh();
+    for (const name of ["local", "box", "pwbox"]) {
+      await panel
+        .getByRole("button", { name: `删除 ${name}`, exact: true })
+        .click();
+      await panel
+        .getByRole("button", { name: "确认删除", exact: true })
+        .click();
+      await panel
+        .getByRole("article", { name: `服务器：${name}` })
+        .waitFor({ state: "detached" });
+    }
+    assert.throws(
+      () =>
+        execFileSync(
+          "/usr/bin/security",
+          [
+            "find-generic-password",
+            "-s",
+            "Otter SSH",
+            "-a",
+            pwbox.id,
+            sshKeychain,
+          ],
+          { stdio: "ignore" },
+        ),
+      "Deleting the server deletes its password",
+    );
+    await panel.keyboard.press("Escape");
+    console.log(
+      "PASS: SSH servers: ~/.ssh/config hosts listed; one added in settings tests and opens; logins saved from chat after a card, a typed password kept from the model and the chat and stored only in the keychain; a message with a password held back; a command run on a real sshd after 允许一次; deleting removes the password.",
+    );
     console.log(
       "PASS: reading a web page asks first and refuses this Mac and the local network; MCP server added from settings: preview first, its tools offered, a writing call waits for the card, 允许一次 runs it, 拒绝 does not, 不用再问 skips the card, disable and remove; servers added from chat after a card (a pasted command, and a remote HTTP server with a token whose tool then runs after 允许); a skill found by 重新扫描, read through use_skill, and not offered once off; Codex, Claude Code and shared skill folders read in place, merged when linked, switched per folder and per skill, and one installed later offered with the next message; the shipped add-mcp-server skill read, then a server proposed through otter_add_mcp_server and added after 允许一次; a VS Code-shaped remote config pasted into settings.",
     );
@@ -2227,6 +2467,11 @@ const { execFileSync } = require("node:child_process");
     await new Promise((resolve) => server.close(resolve));
     fs.rmSync(userData, { recursive: true, force: true });
     fs.rmSync(skillsHome, { recursive: true, force: true });
+    sshd.stop();
+    fs.rmSync(sshHome, { recursive: true, force: true });
+    execFileSync("/usr/bin/security", ["delete-keychain", sshKeychain]);
+    if (keychains() !== keychainsBefore)
+      console.error("The keychain search list changed during the smoke test.");
   }
 })().catch((e) => {
   console.error(e);

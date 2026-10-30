@@ -3679,3 +3679,55 @@ button.danger {
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
+
+/* SSH 服务器 */
+.ssh-section .setting-row .chat-new {
+  flex: none;
+}
+.ssh-host {
+  border-top: 1px solid var(--line);
+  padding: 2px 0 8px;
+}
+.ssh-host .setting-line {
+  border-top: 0;
+}
+.ssh-host strong {
+  display: block;
+  font-size: 13.5px;
+}
+.ssh-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  flex: none;
+  justify-content: flex-end;
+}
+.ssh-actions button {
+  padding: 5px 11px;
+  font-size: 12px;
+}
+.ssh-result {
+  margin: 0;
+  font-size: 12px;
+}
+.ssh-result.ok {
+  color: var(--ok);
+}
+.ssh-result.bad {
+  color: var(--danger);
+}
+.ssh-form {
+  margin-top: 8px;
+  padding: 10px 14px;
+  border-radius: var(--r-md);
+  background: var(--wash);
+}
+.ssh-key {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+.ssh-key button {
+  padding: 6px 12px;
+  font-size: 12px;
+}

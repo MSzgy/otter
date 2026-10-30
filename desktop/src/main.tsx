@@ -21,6 +21,7 @@ import { HandoffPane } from "./HandoffPane";
 import { ModelSettings } from "./ModelSettings";
 import { VoiceSettings } from "./VoiceControls";
 import { ExtensionsPane } from "./ExtensionsPane";
+import { SshPane } from "./SshPane";
 import { SettingsSheet, type SettingsSection } from "./SettingsSheet";
 import { ThemePicker, applyTheme, isTheme, useTheme } from "./ThemePicker";
 const api = window.otter;
@@ -719,6 +720,7 @@ function Panel() {
                 <p className="muted">正在连接…</p>
               ),
             },
+            { id: "ssh", label: "SSH 服务器", content: <SshPane /> },
             { id: "privacy", label: "隐私与感知", content: <AwarenessPane /> },
             {
               id: "handoff",

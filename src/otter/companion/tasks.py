@@ -69,6 +69,12 @@ number 是范围内整数；text 是简短文字。
 网络服务写 {"url":"网址"}，可带 "headers"。command、args、url 和所有值必须原样取自当前输入，
 不补充、不猜测、不换成别的包或网址。只说了服务名称（如“帮我接上文件系统 MCP”）
 没给命令或网址时返回 clarify，请用户把配置 JSON 或服务网址发来。
+保存 SSH 服务器：用户要求保存、记住、添加一台服务器的登录时返回
+{"kind":"ssh_save","server":{"name":"简短名字","host":"主机名或 IP","user":"用户名","port":22,
+"auth":"key 或 agent 或 password","key_path":"密钥文件路径（可省略）","jump":"跳板机（可省略）"}}。
+host、user、key_path、jump 必须原样取自当前输入；缺主机或用户名时 clarify。
+输入里的密码已被应用替换成 ••••，有 •••• 时 auth 写 password，不要把密码写进 JSON。
+“连接/打开某台服务器”“在服务器上运行命令”不是这里的操作，返回 none。
 """
 
 
@@ -105,6 +111,8 @@ def normalize(result, text, state, now, timezone):
         return {"kind": kind}
     if kind == "mcp_add":
         return {"kind": kind, "config": mcp_config(result.get("config"), text)}
+    if kind == "ssh_save":
+        return {"kind": kind, "server": ssh_server(result.get("server"), text)}
     if kind in {"setting_change", "setting_query"}:
         settings = {s["id"]: s for s in state.get("settings", []) if isinstance(s, dict)}
         if kind == "setting_query" and result.get("id") in (None, ""):
@@ -260,6 +268,44 @@ def mcp_config(config, text):
     return config
 
 
+def _said(value, text):
+    """A value the user wrote: a whole word of the message."""
+    return bool(re.search(rf"(?<![\w.-]){re.escape(value)}(?![\w-])", text))
+
+
+def ssh_server(server, text):
+    """A server login from the user's own words; the app checks it again."""
+    if not isinstance(server, dict):
+        raise ValueError("Invalid server")
+    result = {}
+    for key in ("host", "user"):
+        value = server.get(key)
+        if not isinstance(value, str) or not value.strip() or not _said(value.strip(), text):
+            raise ValueError("Server must come from the request")
+        result[key] = value.strip()
+    for key in ("key_path", "jump"):
+        value = server.get(key)
+        if value:
+            if not isinstance(value, str) or not _said(value.strip(), text):
+                raise ValueError("Server must come from the request")
+            result[key] = value.strip()
+    port = server.get("port", 22)
+    if isinstance(port, str) and port.isdigit():
+        port = int(port)
+    if isinstance(port, bool) or not isinstance(port, int) or not 1 <= port <= 65535:
+        raise ValueError("Invalid port")
+    if port != 22 and not _said(str(port), text):
+        raise ValueError("Port must come from the request")
+    result["port"] = port
+    auth = server.get("auth") or ("key" if "key_path" in result else "agent")
+    if auth not in {"key", "agent", "password"}:
+        raise ValueError("Invalid auth")
+    result["auth"] = auth
+    name = server.get("name")
+    result["name"] = name.strip()[:40] if isinstance(name, str) and name.strip() else result["host"]
+    return result
+
+
 def local_plan(text):
     if memory_command(text)[0] is not None:
         return {"kind": "none"}
@@ -319,6 +365,13 @@ class TaskPlanner:
         try:
             return normalize(result, text, state, now, timezone)
         except (ValueError, TypeError, KeyError, OverflowError):
+            if isinstance(result, dict) and result.get("kind") == "ssh_save":
+                return {
+                    "kind": "clarify",
+                    "message": "要保存服务器，请写明主机和用户名，"
+                    "比如“保存服务器 prod：root@1.2.3.4 端口 2222”。"
+                    "用密钥登录就写上密钥文件路径；用密码就写“密码：……”，密码只会存进钥匙串。",
+                }
             if isinstance(result, dict) and result.get("kind") == "mcp_add":
                 return {
                     "kind": "clarify",

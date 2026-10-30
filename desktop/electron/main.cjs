@@ -34,6 +34,13 @@ const { ToolHost } = require("./tool-host.cjs");
 const { WebReader } = require("./web-reader.cjs");
 const { Extensions, summary } = require("./extensions.cjs");
 const { SkillLibrary } = require("./skills.cjs");
+const {
+  SshManager,
+  SshKeychain,
+  takePassword,
+  explain: explainSsh,
+  AUTH: SSH_AUTH,
+} = require("./ssh.cjs");
 const actionGate = new ActionGate({
   resolveApp: (id) => nativeRead("resolve-app", id),
   execute: (proposal) =>
@@ -526,6 +533,96 @@ const toolHost = new ToolHost({
 let extensions;
 // Skill folders in <userData>/skills; the model loads them with use_skill.
 let skills;
+// SSH 服务器: saved logins (passwords in the keychain) and ~/.ssh/config.
+let ssh;
+const PASSWORD_HELD =
+  "这条消息里像是有密码，Otter 没有把它发给模型。要保存服务器登录，请打开“理解办事请求”后说“保存服务器 名字：用户@主机 密码：……”，或者到 设置 → SSH 服务器 里填。";
+const sshWhere = (h) =>
+  `${h.user ? h.user + "@" : ""}${h.host}${h.port !== 22 ? ":" + h.port : ""}`;
+// Chat tools for saved servers, offered only when there are some.
+const sshTools = {
+  list: () => {
+    const hosts = ssh?.list() || [];
+    if (!hosts.length) return [];
+    const server = {
+      type: "string",
+      enum: hosts.map((h) => h.name),
+      description: "服务器名字",
+    };
+    return [
+      {
+        name: "ssh_list_servers",
+        label: "看服务器",
+        origin: "Otter",
+        readOnly: true,
+        trusted: true,
+        description:
+          "用户在 Otter 里保存的 SSH 服务器和 ~/.ssh/config 里的主机：名字、地址、登录方式，不含密码。",
+        parameters: { type: "object", properties: {} },
+        run: () =>
+          ssh.list().map((h) => ({
+            名字: h.name,
+            地址: sshWhere(h),
+            登录方式:
+              h.source === "config" ? "~/.ssh/config" : SSH_AUTH[h.auth],
+            ...(h.note ? { 备注: h.note } : {}),
+          })),
+      },
+      {
+        name: "ssh_open_terminal",
+        label: "打开终端登录",
+        origin: "Otter",
+        description:
+          "在终端里打开一个已登录到某台服务器的窗口，让用户自己操作。",
+        parameters: {
+          type: "object",
+          properties: { server },
+          required: ["server"],
+        },
+        preview: ({ server }) => {
+          const h = ssh.find(server);
+          return `在终端里登录 ${h.name}（${sshWhere(h)}）。`;
+        },
+        run: async ({ server }) => (await ssh.openTerminal(server)).message,
+      },
+      {
+        name: "ssh_run",
+        label: "在服务器上运行命令",
+        origin: "Otter",
+        alwaysAsk: true,
+        description:
+          "在一台已保存的服务器上运行一行 shell 命令，返回退出码和输出（最多 60 秒）。只做用户要求的事；会改动服务器的命令，先在回复里说明。",
+        parameters: {
+          type: "object",
+          properties: {
+            server,
+            command: {
+              type: "string",
+              description: "在服务器上执行的一行命令",
+            },
+          },
+          required: ["server", "command"],
+        },
+        preview: ({ server, command }) => {
+          const h = ssh.find(server);
+          if (typeof command !== "string" || !command.trim())
+            throw new Error("缺少要运行的命令。");
+          return `在 ${h.name}（${sshWhere(h)}）上运行：\n${command}\n\n命令在服务器上执行，可能改动服务器上的东西。`;
+        },
+        run: async ({ server, command }) => {
+          const r = await ssh.run(server, command);
+          if (r.code === 255 && !r.stdout)
+            throw new Error(explainSsh(r.stderr, r.code));
+          return [
+            r.timedOut ? "超过 60 秒，已停止。" : `退出码 ${r.code}`,
+            r.stdout ? `输出：\n${r.stdout}` : "（没有输出）",
+            ...(r.stderr ? [`错误输出：\n${r.stderr}`] : []),
+          ].join("\n\n");
+        },
+      },
+    ];
+  },
+};
 const toolsEnabled = () =>
   extensions ? extensions.enabled : preferences.extensions?.tools !== false;
 function preferencesPublic() {
@@ -1064,6 +1161,7 @@ ipcMain.handle("otter:call", async (event, method, params) => {
   // The renderer never chooses tools; the host offers what is enabled,
   // including skills installed in other tools since the last message.
   if (method === "chat.send") {
+    if (takePassword(params.text).password) throw new Error(PASSWORD_HELD);
     try {
       skills?.refresh();
     } catch {}
@@ -1149,6 +1247,32 @@ async function panelAction(event, name, value) {
     if (name === "extensions.allow")
       return extensions.setAllow(value?.id, value?.tool, value?.allow);
     throw new Error("不支持的工具设置。");
+  }
+  if (name.startsWith("ssh.")) {
+    if (event.sender !== panel.webContents)
+      throw new Error("请在设置里管理服务器。");
+    if (!ssh) throw new Error("服务器管理尚未就绪。");
+    if (name === "ssh.get") return ssh.snapshot();
+    if (name === "ssh.save") {
+      const password =
+        typeof value?.password === "string" && value.password
+          ? value.password
+          : null;
+      await ssh.saveHost(value?.server, { id: value?.id || null, password });
+      return ssh.snapshot();
+    }
+    if (name === "ssh.remove") return ssh.remove(value?.id);
+    if (name === "ssh.test") return ssh.test(value?.id);
+    if (name === "ssh.open") return ssh.openTerminal(value?.id);
+    if (name === "ssh.pick-key") {
+      const picked = await dialog.showOpenDialog(panel, {
+        title: "选择 SSH 私钥文件",
+        defaultPath: path.join(app.getPath("home"), ".ssh"),
+        properties: ["openFile", "showHiddenFiles"],
+      });
+      return picked.canceled ? null : picked.filePaths[0];
+    }
+    throw new Error("不支持的服务器操作。");
   }
   if (name.startsWith("skills.")) {
     if (event.sender !== panel.webContents)
@@ -1241,11 +1365,21 @@ async function panelAction(event, name, value) {
     if (chatState?.status === "streaming")
       throw new Error("请等待当前回复结束。");
     if (name === "tasks.plan") {
-      if (preferences.tasks?.enabled === false) return { kind: "chat" };
+      // A password in the message stays here: the planner sees ••••, and
+      // only a 保存服务器 card may use it (it then goes to the keychain).
+      const { text, password } = takePassword(value?.text);
+      if (preferences.tasks?.enabled === false) {
+        if (password) throw new Error(PASSWORD_HELD);
+        return { kind: "chat" };
+      }
       const id = value?.requestId;
       evolution.begin("task", { id });
       try {
-        const result = await taskAssistant.plan(value || {});
+        const result = await taskAssistant.plan({
+          ...(value || {}),
+          text,
+          secret: password,
+        });
         if (result.kind === "proposal") evolution.wait("task", id);
         else evolution.cancel("task", id);
         return result;
@@ -1785,6 +1919,28 @@ else {
       skills.scan();
     } catch {}
     toolHost.addSource(skills.source());
+    ssh = new SshManager({
+      load: () => preferences.ssh,
+      save: (value) => {
+        preferences.ssh = value;
+        save();
+      },
+      dir: path.join(app.getPath("userData"), "ssh"),
+      // The tests point these at fixtures and keep Terminal closed.
+      home: process.env.OTTER_SSH_HOME || app.getPath("home"),
+      keychain: new SshKeychain({
+        keychain: process.env.OTTER_SSH_KEYCHAIN || null,
+      }),
+      ...(process.env.OTTER_TEST_NO_TERMINAL
+        ? { openFile: async () => {} }
+        : {}),
+      onChange: (data) => {
+        if (panel && !panel.isDestroyed())
+          panel.webContents.send("otter:event", { type: "ssh.changed", data });
+      },
+    });
+    void ssh.warm().catch(() => {});
+    toolHost.addSource(sshTools);
     appContentReader = new AppContentReader(
       app.isPackaged
         ? path.join(process.resourcesPath, "native/otter-app-content")
@@ -1929,6 +2085,11 @@ else {
         checkProject: (params) => backend.call("projects.check", params),
         scope: (session_id) => backend.call("projects.scope", { session_id }),
         settings: chatSettings,
+        ssh: {
+          clean: (server) => ssh.clean(server),
+          describe: (server, password) => ssh.describe(server, password),
+          save: (server, password) => ssh.saveHost(server, { password }),
+        },
         // Created before this; read through so a reconnect keeps working.
         extensions: {
           preview: (text) => extensions.preview(text),

@@ -29,6 +29,7 @@ class TaskAssistant {
     scope = null,
     settings = null,
     extensions = null,
+    ssh = null,
     timezone = () => "Asia/Shanghai",
     now = Date.now,
   }) {
@@ -42,6 +43,7 @@ class TaskAssistant {
       scope,
       settings,
       extensions,
+      ssh,
       timezone,
       now,
     });
@@ -151,7 +153,8 @@ class TaskAssistant {
     }
     return { kind: "result", message, ok, warning, ...extra };
   }
-  async plan({ text, sessionId, requestId }) {
+  // secret: a password main.cjs took out of the text (the text holds ••••).
+  async plan({ text, sessionId, requestId, secret = null }) {
     if (this.executing) throw new Error("正在执行上一项操作，请稍等。");
     if (
       typeof text !== "string" ||
@@ -170,6 +173,7 @@ class TaskAssistant {
       text: text.trim(),
       sessionId,
       requestId,
+      secret: typeof secret === "string" && secret ? secret : null,
     };
     this.active = request;
     try {
@@ -192,6 +196,12 @@ class TaskAssistant {
         if (plan.kind === "result")
           return await this.receipt(request, plan.message);
       }
+      // A password only ever goes into a server login, never to the chat.
+      if (request.secret && plan.kind !== "ssh_save")
+        return await this.receipt(
+          request,
+          "这条消息里有密码，Otter 没有把它发给模型，也没有保存。要保存服务器登录，请写明主机和用户名，比如“保存服务器 prod：root@1.2.3.4 密码：……”。",
+        );
       if (plan.kind === "none") return { kind: "chat" };
       if (plan.kind === "clarify")
         return await this.receipt(request, `尚未执行操作。\n\n${plan.message}`);
@@ -321,6 +331,28 @@ class TaskAssistant {
           detail = `${label}：${this.settings.format(plan.id, settingBefore)} → ${this.settings.format(plan.id, value)}`;
           break;
         }
+        case "ssh_save": {
+          if (!this.ssh) throw new Error("服务器管理尚未就绪。");
+          let server;
+          try {
+            const s = plan.server || {};
+            server = this.ssh.clean({
+              name: s.name,
+              host: s.host,
+              user: s.user,
+              port: s.port,
+              auth: request.secret ? "password" : s.auth,
+              keyPath: s.key_path ?? s.keyPath,
+              jump: s.jump,
+            });
+          } catch (e) {
+            return await this.receipt(request, `没有保存：${e.message}`);
+          }
+          title = "确认保存 SSH 服务器";
+          detail = `${this.ssh.describe(server, !!request.secret)}${request.secret ? "\n\n密码只存进这台 Mac 的钥匙串，没有发给模型。" : ""}`;
+          plan = { ...plan, server };
+          break;
+        }
         case "mcp_add": {
           if (!this.extensions) throw new Error("工具与扩展尚未就绪。");
           for (const secret of secretsOf(plan.config))
@@ -439,6 +471,10 @@ class TaskAssistant {
         case "todo_complete":
           item = this.store.completeTodo(p.id);
           message = `已完成待办：${item.title}`;
+          break;
+        case "ssh_save":
+          await this.ssh.save(p.server, request.secret);
+          message = `已保存服务器 ${p.server.name}。可以在 设置 → SSH 服务器 里测试连接，或者跟我说“打开 ${p.server.name} 的终端”。`;
           break;
         case "mcp_add":
           this.extensions.add(p.config);

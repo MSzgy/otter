@@ -315,3 +315,43 @@ def test_pasted_configs_from_other_apps_are_recognised():
     assert _pasted_config(vscode)["servers"]["n"]["url"] == "https://a.example/mcp"
     assert _pasted_config(gemini) == {"httpUrl": "https://a.example/mcp"}
     assert _pasted_config('看看这段 JSON {"servers": 1}') is None, "Needs the word MCP"
+
+
+def test_ssh_logins_come_from_the_request_and_never_carry_a_password():
+    text = "保存服务器 prod：deploy@10.0.0.5 端口 2222，密钥 ~/.ssh/prod_key，密码：••••"
+    plan = snorm_text(
+        {
+            "kind": "ssh_save",
+            "server": {
+                "name": "prod",
+                "host": "10.0.0.5",
+                "user": "deploy",
+                "port": 2222,
+                "auth": "password",
+                "key_path": "~/.ssh/prod_key",
+            },
+        },
+        text,
+    )
+    assert plan["server"] == {
+        "host": "10.0.0.5",
+        "user": "deploy",
+        "key_path": "~/.ssh/prod_key",
+        "port": 2222,
+        "auth": "password",
+        "name": "prod",
+    }
+    for server in (
+        {"host": "10.0.0.6", "user": "deploy"},
+        {"host": "10.0.0.5", "user": "root"},
+        {"host": "10.0.0.5", "user": "deploy", "port": 2200},
+        {"host": "10.0.0.5", "user": "deploy", "jump": "ops@bastion"},
+        {"host": "10.0.0.5", "user": "deploy", "auth": "telnet"},
+        {"host": "0.0.5", "user": "deploy"},
+    ):
+        with pytest.raises(ValueError):
+            snorm_text({"kind": "ssh_save", "server": server}, text)
+
+
+def snorm_text(plan, text):
+    return normalize(plan, text, STATE, NOW, "Asia/Shanghai")
