@@ -43,6 +43,7 @@ class SyncClient {
   connect({ pair = false, relay = false } = {}) {
     this.channel = null;
     this.closed = null;
+    this.revoked = false;
     return new Promise((resolve, reject) => {
       if (relay && !this.mac.r) return reject(new Error("no relay"));
       const socket = new WebSocket(
@@ -69,7 +70,7 @@ class SyncClient {
       socket.on("open", () => socket.send(hello));
       socket.on("error", fail);
       socket.on("close", (code, reason) => {
-        this.closed = { code, reason: String(reason) };
+        this.closed = { code, reason: String(reason), revoked: this.revoked };
         fail(new Error(`closed ${code} ${reason}`));
       });
       socket.on("message", (data, binary) => {
@@ -93,7 +94,16 @@ class SyncClient {
           });
           return;
         }
-        const message = this.channel.open(data);
+        let message;
+        try {
+          message = this.channel.open(data);
+        } catch {
+          // Not this Mac's keys: whoever answered is not the Mac we paired.
+          fail(new Error("handshake failed: not this Mac"));
+          return socket.close();
+        }
+        // Only a sealed "revoked" counts; a bare 4003 could come from anyone.
+        if (message.t === "revoked") this.revoked = true;
         this.receive(message);
         if (message.t === "ready" && !settled) {
           settled = true;

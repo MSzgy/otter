@@ -329,7 +329,7 @@ class MobileLink {
   revoke(id) {
     this.devices = this.devices.filter((d) => d.id !== id);
     for (const c of this.connections)
-      if (c.device?.id === id) c.close(4003, "revoked");
+      if (c.device?.id === id) c.refuse("revoked");
     this.persist();
     this.changed();
     return this.snapshot();
@@ -374,6 +374,7 @@ class Connection {
     this.ready = false;
     this.timer = setTimeout(() => this.close(4001, "slow"), HANDSHAKE_FOR);
     socket.on("message", (data, binary) => {
+      if (this.refused) return;
       try {
         if (!this.channel) this.hello(data, binary);
         else this.receive(data);
@@ -422,7 +423,6 @@ class Connection {
       code = p.code;
     } else {
       this.device = link.devices.find((d) => d.pub === hello.k) || null;
-      if (!this.device) return this.close(4003, "unpaired");
     }
     const ephemeral = keyPair();
     const welcome = JSON.stringify({ t: "welcome", v: 1, e: ephemeral.public });
@@ -438,6 +438,15 @@ class Connection {
     });
     this.pairingHello = hello.kind === "pair" ? hello : null;
     this.socket.send(welcome);
+    if (!this.device && !this.pairingHello) this.refuse("unpaired");
+  }
+  // "Not paired" goes over the sealed channel: only this Mac can say it, so
+  // a phone is never turned away for good by another Otter, or by anyone
+  // on the way who sends a bare close code.
+  refuse(reason) {
+    this.refused = true;
+    if (this.channel) this.send({ t: "revoked" });
+    this.close(4003, reason);
   }
   receive(data) {
     // The first sealed frame proves the keys match (and, pairing, the code).

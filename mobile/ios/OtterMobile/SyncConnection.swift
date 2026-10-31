@@ -1,10 +1,15 @@
 import Foundation
 import Network
+import os
 
-// One link to the Mac. Every way to reach it (each address from pairing and
-// its Bonjour name) is tried at once and the first to connect wins, so the
-// phone takes the quickest path and still finds the Mac when its address
-// moves. Then: hello / welcome in the clear, everything after sealed.
+private let log = Logger(subsystem: "dev.otter.mobile", category: "link")
+
+// One link to the Mac. Every way to reach it (each address from pairing, its
+// Bonjour name, then its relay) is opened at once and tried in the order they
+// connect, so the phone takes the quickest path and still finds the Mac when
+// its address moves. Each try is hello / welcome in the clear, everything
+// after sealed; the first that proves to be this Mac wins. One that leads
+// elsewhere (another Otter, a stale address) only moves on to the next.
 @MainActor
 final class SyncConnection {
   // Which way this connection reached the Mac.
@@ -31,6 +36,11 @@ final class SyncConnection {
   private let auth: [String: Any]
   private let onEvent: (Event) -> Void
   private var candidates: [NWConnection] = []
+  // Connected, waiting for their turn while another way in is being tried.
+  private var spare: [NWConnection] = []
+  // What a Mac said when it closed a way in (say, pairing closed), told if
+  // none works; otherwise the plain "can't reach the Mac".
+  private var refusal: (code: Int?, reason: String)?
   private var relayCandidate: NWConnection?
   private var relayWork: DispatchWorkItem?
   private var unusable: DispatchWorkItem?
@@ -41,6 +51,8 @@ final class SyncConnection {
   private var ready = false
   private var done = false
   private var deadline: DispatchWorkItem?
+  private static let unreachable =
+    "连不上 Mac：确认它开着 Otter、打开了“允许手机连接”，并且和手机在同一个 Wi-Fi。"
 
   init(
     mac: MacRecord, phone: PrivateKey, code: String?, auth: [String: Any],
@@ -80,7 +92,7 @@ final class SyncConnection {
       if let endpoint = url.url.map({ NWEndpoint.url($0) }) {
         let work = DispatchWorkItem { [weak self] in
           MainActor.assumeIsolated {
-            guard let self, self.connection == nil, !self.done else { return }
+            guard let self, !self.ready, !self.done else { return }
             self.relayCandidate = self.begin(endpoint)
           }
         }
@@ -91,7 +103,7 @@ final class SyncConnection {
     let deadline = DispatchWorkItem { [weak self] in
       MainActor.assumeIsolated {
         guard let self, !self.ready else { return }
-        self.finish(code: nil, reason: "连不上 Mac：确认它开着 Otter、打开了“允许手机连接”，并且和手机在同一个 Wi-Fi。")
+        self.giveUp()
       }
     }
     self.deadline = deadline
@@ -110,35 +122,71 @@ final class SyncConnection {
   }
 
   private func update(_ candidate: NWConnection, _ state: NWConnection.State) {
+    guard !done else { return }
     switch state {
     case .ready:
-      guard connection == nil else {
-        if connection !== candidate { candidate.cancel() }
-        return
-      }
-      connection = candidate
-      relayWork?.cancel()
-      for other in candidates where other !== candidate { other.cancel() }
-      candidates = [candidate]
-      watch(candidate)
-      sendHello()
-      receive(candidate)
+      if ready || connection === candidate || spare.contains(where: { $0 === candidate }) { return }
+      if connection == nil { attempt(candidate) } else { spare.append(candidate) }
     case .failed(let error), .waiting(let error):
       if connection === candidate {
-        finish(code: nil, reason: error.localizedDescription)
+        fail(code: nil, reason: error.localizedDescription)
       } else {
-        candidate.cancel()
-        candidates.removeAll { $0 === candidate }
-        // Everything local failed; wait for the relay if it has yet to start.
-        if candidates.isEmpty && connection == nil && (relayWork == nil || relayCandidate != nil) {
-          finish(code: nil, reason: "连不上 Mac：确认它开着 Otter、打开了“允许手机连接”，并且和手机在同一个 Wi-Fi。")
-        }
+        drop(candidate)
+        if connection == nil { next() }
       }
     case .cancelled:
-      if connection === candidate { finish(code: nil, reason: "连接已断开") }
+      if connection === candidate { fail(code: nil, reason: "连接已断开") }
     default:
       break
     }
+  }
+
+  // Say hello on this way in; its answer decides whether it is the Mac.
+  private func attempt(_ c: NWConnection) {
+    connection = c
+    channel = nil
+    ephemeral = PrivateKey()
+    sendHello()
+    receive(c)
+  }
+
+  private func drop(_ c: NWConnection) {
+    c.cancel()
+    candidates.removeAll { $0 === c }
+    spare.removeAll { $0 === c }
+  }
+
+  // The way being tried failed. Linked, that ends the link; still trying,
+  // it only rules this way out.
+  private func fail(code: Int?, reason: String) {
+    guard !ready, let c = connection else { return finish(code: code, reason: reason) }
+    log.info("way in fell through (\(String(describing: c.endpoint))): \(reason)")
+    if code != nil { refusal = (code, reason) }
+    connection = nil
+    drop(c)
+    next()
+  }
+
+  // The next way in that has connected; with none left (and the relay not
+  // still to come), give up.
+  private func next() {
+    if !spare.isEmpty { return attempt(spare.removeFirst()) }
+    if candidates.isEmpty && (relayWork == nil || relayCandidate != nil) { giveUp() }
+  }
+
+  private func giveUp() {
+    finish(code: refusal?.code, reason: refusal?.reason ?? Self.unreachable)
+  }
+
+  private func linked() {
+    ready = true
+    deadline?.cancel()
+    relayWork?.cancel()
+    guard let connection else { return }
+    for other in candidates where other !== connection { other.cancel() }
+    candidates = [connection]
+    spare = []
+    watch(connection)
   }
 
   // iOS says when a connection stops being usable (its network went away)
@@ -211,7 +259,7 @@ final class SyncConnection {
       MainActor.assumeIsolated {
         guard let self, self.connection === c, !self.done else { return }
         if let error {
-          self.finish(code: nil, reason: error.localizedDescription)
+          self.fail(code: nil, reason: error.localizedDescription)
           return
         }
         let meta =
@@ -220,7 +268,12 @@ final class SyncConnection {
         if meta?.opcode == .close {
           var code: Int?
           if case .privateCode(let value) = meta?.closeCode { code = Int(value) }
-          self.finish(code: code, reason: "Mac 关闭了连接")
+          // Anyone can send a bare 4003; only a sealed "revoked" means it.
+          if code == 4003 {
+            self.fail(code: nil, reason: "这条路上的 Otter 不认识这台手机")
+          } else {
+            self.fail(code: code, reason: "Mac 关闭了连接")
+          }
           return
         }
         if let data, !data.isEmpty { self.handle(data, text: meta?.opcode == .text) }
@@ -244,15 +297,18 @@ final class SyncConnection {
         return
       }
       let message = try channel.open(data)
-      if message["t"] as? String == "ready" {
-        ready = true
-        deadline?.cancel()
+      switch message["t"] as? String {
+      case "ready":
+        linked()
         onEvent(.ready(message, route()))
-      } else {
+      case "revoked":
+        finish(code: 4003, reason: "配对已在 Mac 上撤销")
+      default:
         onEvent(.message(message))
       }
     } catch {
-      finish(code: nil, reason: "和 Mac 的加密握手失败")
+      // Not this Mac's keys: another Otter, or something in the way.
+      fail(code: nil, reason: "和 Mac 的加密握手失败")
     }
   }
 
@@ -264,6 +320,7 @@ final class SyncConnection {
     unusable?.cancel()
     for c in candidates { c.cancel() }
     candidates = []
+    spare = []
     connection?.cancel()
     connection = nil
     onEvent(.closed(code: code, reason: reason))

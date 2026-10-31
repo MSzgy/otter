@@ -5,7 +5,8 @@
 // <dir>/cmd, one per line:
 //   todo <title> | done <title> | remind <minutes> <title> | focus <minutes>
 //   chat <text> | codex <title>  (a slow task; 停 stops it) | theme <id>
-//   control on|off (the phone may act or only look) | shot <png> | stats | stop
+//   control on|off (the phone may act or only look) | revoke (unpair it)
+//   shot <png> | stats | stop
 // Build first: npm run build. Usage: node scripts/mobile-demo.cjs [dir]
 const { _electron: electron } = require("playwright");
 const http = require("node:http");
@@ -135,7 +136,7 @@ function model() {
       OTTER_DESKTOP_CONFIG: config,
       OTTER_PROJECT_ROOT: dir,
       OTTER_MOBILE_PORT: "52531",
-      OTTER_MOBILE_NAME: "演示 Mac",
+      OTTER_MOBILE_NAME: process.env.OTTER_MOBILE_NAME || "演示 Mac",
       ...(process.env.OTTER_DEMO_AWAY === "1"
         ? { OTTER_MOBILE_HOST: "127.0.0.1" }
         : {}),
@@ -291,6 +292,10 @@ function model() {
             id: device.id,
             control: text === "on",
           });
+        }
+        if (verb === "revoke") {
+          const [device] = (await act("mobile.get")).devices;
+          await act("mobile.revoke", { id: device.id });
         }
         if (verb === "stats")
           log(JSON.stringify((await act("mobile.get")).devices));

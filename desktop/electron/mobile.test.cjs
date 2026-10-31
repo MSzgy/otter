@@ -130,6 +130,7 @@ test("a wrong code, an unknown phone and a revoked one are turned away", async (
   assert.equal(link.snapshot().devices.length, 0);
   const stranger = new SyncClient({ mac: real, address: "127.0.0.1" });
   await assert.rejects(stranger.connect(), /4003/);
+  assert.equal(stranger.revoked, true, "said over the sealed channel");
   // A phone that does not hold this Mac's key cannot pair either.
   const fake = new SyncClient({
     mac: { ...real, k: new SyncClient({ mac: real }).key.public },
@@ -148,13 +149,41 @@ test("a wrong code, an unknown phone and a revoked one are turned away", async (
   link.revoke(id);
   await until(() => phone.closed);
   assert.equal(phone.closed.code, 4003);
+  assert.equal(phone.closed.revoked, true);
   const back = new SyncClient({
     key: phone.saved(),
     mac: real,
     address: "127.0.0.1",
   });
   await assert.rejects(back.connect(), /4003/);
+  assert.equal(back.revoked, true);
   await link.setEnabled(false);
+});
+
+test("another Otter cannot tell a phone it was revoked", async () => {
+  // Two Otters on one network (say the installed one and a dev build): a
+  // phone paired with the first that reaches the second is turned away, but
+  // in words only the first could have sealed, so it does not believe it.
+  const { link } = setup();
+  const other = setup().link;
+  await link.setEnabled(true);
+  await other.setEnabled(true);
+  link.startPairing();
+  const phone = client(link);
+  await phone.connect({ pair: true });
+  phone.close();
+  const lost = new SyncClient({
+    key: phone.saved(),
+    mac: { ...phone.mac, p: other.port },
+    address: "127.0.0.1",
+  });
+  await assert.rejects(lost.connect(), /not this Mac/);
+  assert.equal(lost.revoked, false);
+  await phone.connect();
+  assert.equal(phone.closed, null);
+  phone.close();
+  await link.setEnabled(false);
+  await other.setEnabled(false);
 });
 
 test("a tampered or replayed frame ends the connection", async () => {
