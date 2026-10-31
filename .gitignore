@@ -45,3 +45,7 @@ venv/
 mobile/ios/OtterMobile.xcodeproj/xcuserdata/
 mobile/ios/OtterMobile.xcodeproj/project.xcworkspace/xcuserdata/
 mobile/ios/build/
+
+# ─────── relay（go build 的产物）───────
+/relay/relay
+/relay/otter-relay
