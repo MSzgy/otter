@@ -12,8 +12,15 @@ final class SyncConnection {
     case local, relay
   }
 
+  // The way in, for 我的: path, the address reached, and the phone's network.
+  struct Route: Equatable {
+    var path: Path
+    var address: String
+    var network: String
+  }
+
   enum Event {
-    case ready([String: Any], Path)
+    case ready([String: Any], Route)
     case message([String: Any])
     case closed(code: Int?, reason: String)
   }
@@ -26,6 +33,7 @@ final class SyncConnection {
   private var candidates: [NWConnection] = []
   private var relayCandidate: NWConnection?
   private var relayWork: DispatchWorkItem?
+  private var unusable: DispatchWorkItem?
   private var connection: NWConnection?
   private var channel: SyncChannel?
   private var ephemeral = PrivateKey()
@@ -112,6 +120,7 @@ final class SyncConnection {
       relayWork?.cancel()
       for other in candidates where other !== candidate { other.cancel() }
       candidates = [candidate]
+      watch(candidate)
       sendHello()
       receive(candidate)
     case .failed(let error), .waiting(let error):
@@ -130,6 +139,49 @@ final class SyncConnection {
     default:
       break
     }
+  }
+
+  // iOS says when a connection stops being usable (its network went away)
+  // or when a better one appeared (Wi-Fi came back): either way, end it and
+  // let the store race the ways in again.
+  private func watch(_ c: NWConnection) {
+    c.viabilityUpdateHandler = { [weak self] viable in
+      MainActor.assumeIsolated {
+        guard let self, self.connection === c else { return }
+        self.unusable?.cancel()
+        guard !viable else { return }
+        let work = DispatchWorkItem { [weak self] in
+          MainActor.assumeIsolated { self?.finish(code: nil, reason: "网络断了，正在重连") }
+        }
+        self.unusable = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2, execute: work)
+      }
+    }
+    c.betterPathUpdateHandler = { [weak self] better in
+      MainActor.assumeIsolated {
+        guard let self, better, self.connection === c else { return }
+        self.finish(code: nil, reason: "换到更好的网络")
+      }
+    }
+  }
+
+  private func route() -> Route {
+    let path: Path = connection === relayCandidate ? .relay : .local
+    var address = ""
+    switch connection?.endpoint {
+    case .url(let url): address = url.host ?? url.absoluteString
+    case .service(let name, _, _, _): address = name
+    case .hostPort(let host, _): address = "\(host)"
+    default: break
+    }
+    let current = connection?.currentPath
+    let network =
+      current?.usesInterfaceType(.wifi) == true ? "Wi-Fi"
+      : current?.usesInterfaceType(.cellular) == true ? "蜂窝网络"
+      : current?.usesInterfaceType(.wiredEthernet) == true ? "有线网络"
+      : current?.usesInterfaceType(.loopback) == true ? "本机"
+      : "VPN 或其他"
+    return Route(path: path, address: address, network: network)
   }
 
   private func sendHello() {
@@ -195,7 +247,7 @@ final class SyncConnection {
       if message["t"] as? String == "ready" {
         ready = true
         deadline?.cancel()
-        onEvent(.ready(message, connection === relayCandidate ? .relay : .local))
+        onEvent(.ready(message, route()))
       } else {
         onEvent(.message(message))
       }
@@ -209,6 +261,7 @@ final class SyncConnection {
     done = true
     deadline?.cancel()
     relayWork?.cancel()
+    unusable?.cancel()
     for c in candidates { c.cancel() }
     candidates = []
     connection?.cancel()
@@ -221,6 +274,7 @@ final class SyncConnection {
     done = true
     deadline?.cancel()
     relayWork?.cancel()
+    unusable?.cancel()
     for c in candidates { c.cancel() }
     connection?.cancel()
     connection = nil

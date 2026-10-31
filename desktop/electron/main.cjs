@@ -2619,6 +2619,11 @@ else {
       ...(process.env.OTTER_MOBILE_HOST
         ? { host: process.env.OTTER_MOBILE_HOST }
         : {}),
+      // A second Otter on this Mac (the demo) needs its own Bonjour name, or
+      // phones paired with one find the other.
+      ...(process.env.OTTER_MOBILE_NAME
+        ? { name: process.env.OTTER_MOBILE_NAME }
+        : {}),
       onChange: (data) => {
         if (panel && !panel.isDestroyed())
           panel.webContents.send("otter:event", {

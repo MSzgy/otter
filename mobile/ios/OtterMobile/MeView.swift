@@ -49,7 +49,9 @@ struct MeView: View {
   private var linkText: String {
     switch store.link {
     case .online:
-      return store.path == .relay ? "在线（经中继，端到端加密）" : "在线（局域网直连，端到端加密）"
+      guard let route = store.route else { return "在线（端到端加密）" }
+      let via = route.path == .relay ? "经中继 \(route.address)" : "局域网直连 \(route.address)"
+      return "在线 · \(via) · \(route.network)（端到端加密）"
     case .connecting: return "连接中…"
     case .offline(let reason): return reason.isEmpty ? "离线" : "离线：\(reason)"
     case .revoked: return "配对已在 Mac 上撤销"

@@ -1,4 +1,5 @@
 import Foundation
+import Network
 import Observation
 import UIKit
 import os
@@ -29,8 +30,10 @@ final class SyncStore {
   private(set) var cards: CardsTopic?
   // Whether the Mac lets this phone act (设置 → 手机 → 可以操作).
   private(set) var control = true
-  // How this phone reached the Mac: the local network or the relay.
-  private(set) var path: SyncConnection.Path?
+  // How this phone reached the Mac: the local network or the relay, which
+  // address, and over which of the phone's networks.
+  private(set) var route: SyncConnection.Route?
+  var path: SyncConnection.Path? { route?.path }
   private(set) var updated: Date?
   private(set) var latency: (p50: Double, p95: Double)?
   private(set) var rtt: Double?
@@ -49,6 +52,11 @@ final class SyncStore {
   @ObservationIgnored private var saveWork: DispatchWorkItem?
   @ObservationIgnored private var retries = 0
   @ObservationIgnored private var active = true
+  // When the Mac was last heard from; a link quiet for long is dead.
+  @ObservationIgnored private var lastHeard = Date()
+  @ObservationIgnored private let monitor = NWPathMonitor()
+  @ObservationIgnored private var network = ""
+  @ObservationIgnored private var networkWork: DispatchWorkItem?
 
   private static var cacheURL: URL {
     let dir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
@@ -63,6 +71,46 @@ final class SyncStore {
       loadCache()
       link = .offline("")
     }
+    watchNetwork()
+  }
+
+  // The phone's network changed (Wi-Fi off, onto cellular, back home): race
+  // the ways in again right away, so at home it is direct and away it is the
+  // relay, instead of waiting on a connection that went with the old network.
+  private func watchNetwork() {
+    monitor.pathUpdateHandler = { [weak self] path in
+      let kinds: [NWInterface.InterfaceType] = [.wifi, .cellular, .wiredEthernet, .other]
+      let signature =
+        "\(path.status)-" + kinds.filter { path.usesInterfaceType($0) }.map { "\($0)" }.joined(separator: ",")
+      DispatchQueue.main.async {
+        MainActor.assumeIsolated {
+          guard let self, signature != self.network else { return }
+          let first = self.network.isEmpty
+          self.network = signature
+          guard !first, self.active, self.mac != nil, path.status == .satisfied else { return }
+          self.networkWork?.cancel()
+          let work = DispatchWorkItem { [weak self] in
+            MainActor.assumeIsolated { self?.reconnect() }
+          }
+          self.networkWork = work
+          DispatchQueue.main.asyncAfter(deadline: .now() + 0.5, execute: work)
+        }
+      }
+    }
+    monitor.start(queue: .global(qos: .utility))
+  }
+
+  // Drop whatever link there is and race again at once.
+  func reconnect() {
+    retryWork?.cancel()
+    retries = 0
+    heartbeat?.invalidate()
+    heartbeat = nil
+    connection?.close()
+    connection = nil
+    failWaiting("网络变了，正在重连")
+    if link == .online { link = .connecting }
+    connect()
   }
 
   // MARK: Pairing
@@ -137,7 +185,8 @@ final class SyncStore {
     switch event {
     case .ready(let message, let via):
       retries = 0
-      path = via
+      route = via
+      lastHeard = Date()
       if pairing {
         mac = record
         record.save()
@@ -191,8 +240,16 @@ final class SyncStore {
     ping()
     heartbeat = Timer.scheduledTimer(withTimeInterval: 10, repeats: true) { [weak self] _ in
       MainActor.assumeIsolated {
-        self?.ping()
-        self?.report()
+        guard let self else { return }
+        // Pings are answered within a round trip; 25 s of silence means the
+        // link is dead even if iOS still calls it connected.
+        if Date().timeIntervalSince(self.lastHeard) > 25 {
+          log.info("silent for 25 s, reconnecting")
+          self.reconnect()
+          return
+        }
+        self.ping()
+        self.report()
       }
     }
   }
@@ -210,6 +267,7 @@ final class SyncStore {
 
   private func receive(_ message: [String: Any]) {
     let now = Self.nowMs
+    lastHeard = Date()
     switch message["t"] as? String {
     case "snap":
       guard let topic = message["topic"] as? String else { return }

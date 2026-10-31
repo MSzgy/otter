@@ -135,6 +135,7 @@ function model() {
       OTTER_DESKTOP_CONFIG: config,
       OTTER_PROJECT_ROOT: dir,
       OTTER_MOBILE_PORT: "52531",
+      OTTER_MOBILE_NAME: "演示 Mac",
       ...(process.env.OTTER_DEMO_AWAY === "1"
         ? { OTTER_MOBILE_HOST: "127.0.0.1" }
         : {}),
