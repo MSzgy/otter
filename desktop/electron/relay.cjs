@@ -184,21 +184,42 @@ async function checkRelay({ url, token }) {
 // systemd service when logged in as root, else the user's own copy started
 // with nohup and again at reboot via cron. Opens the port in ufw/iptables
 // when it can (root); a cloud provider's own firewall it cannot reach.
-const uploadPath = (dir) =>
-  dir ? `${dir}/otter-relay.upload` : "$HOME/.otter-relay-upload";
-function installScript({ port, token, dir }) {
+// listen: the address to bind ("" = all; "127.0.0.1" behind a reverse
+// proxy on the same server). firewall: open the port in ufw/iptables.
+function installScript({
+  port,
+  token,
+  dir,
+  upload,
+  listen = "",
+  firewall = true,
+}) {
   return `set -e
-UPLOAD="${uploadPath(dir)}"
+UPLOAD="${upload}"
 PORT=${Number(port)}
+LISTEN="${listen}:${Number(port)}"
 TOKEN='${token}'
 umask 077
 if [ "$(id -u)" = 0 ] && command -v systemctl >/dev/null 2>&1 && [ -z "${dir}" ]; then
   D=/opt/otter-relay
   mkdir -p "$D"
   mv -f "$UPLOAD" "$D/otter-relay"
+  chown root:root "$D/otter-relay"
   chmod 755 "$D" "$D/otter-relay"
   printf '%s' "$TOKEN" > "$D/token"
   chmod 600 "$D/token"
+  # systemd 247+ hands the token over with LoadCredential to a throwaway
+  # user; older ones (Ubuntu 20.04 has 245) get a system user of its own.
+  if [ "$(systemctl --version | head -1 | awk '{print $2}')" -ge 247 ]; then
+    RUN="DynamicUser=yes
+LoadCredential=token:$D/token"
+    TOKENFILE='\${CREDENTIALS_DIRECTORY}/token'
+  else
+    id otter-relay >/dev/null 2>&1 || useradd --system --no-create-home --shell /usr/sbin/nologin otter-relay
+    chown otter-relay "$D/token"
+    RUN="User=otter-relay"
+    TOKENFILE="$D/token"
+  fi
   cat > /etc/systemd/system/otter-relay.service <<UNIT
 [Unit]
 Description=Otter relay (phone to Mac, end-to-end encrypted)
@@ -206,9 +227,8 @@ After=network-online.target
 Wants=network-online.target
 
 [Service]
-ExecStart=$D/otter-relay -listen :$PORT -token-file \\\${CREDENTIALS_DIRECTORY}/token
-LoadCredential=token:$D/token
-DynamicUser=yes
+ExecStart=$D/otter-relay -listen $LISTEN -token-file $TOKENFILE
+$RUN
 NoNewPrivileges=yes
 ProtectSystem=strict
 ProtectHome=yes
@@ -222,10 +242,10 @@ UNIT
   systemctl daemon-reload
   systemctl enable otter-relay >/dev/null 2>&1
   systemctl restart otter-relay
-  if command -v ufw >/dev/null 2>&1 && ufw status 2>/dev/null | grep -q "Status: active"; then
+  if [ "${firewall ? 1 : 0}" = 1 ] && command -v ufw >/dev/null 2>&1 && ufw status 2>/dev/null | grep -q "Status: active"; then
     ufw allow "$PORT/tcp" >/dev/null
   fi
-  if command -v iptables >/dev/null 2>&1 && iptables -S INPUT 2>/dev/null | grep -q -- "-j REJECT"; then
+  if [ "${firewall ? 1 : 0}" = 1 ] && command -v iptables >/dev/null 2>&1 && iptables -S INPUT 2>/dev/null | grep -q -- "-j REJECT"; then
     iptables -C INPUT -p tcp --dport "$PORT" -j ACCEPT 2>/dev/null || iptables -I INPUT 1 -p tcp --dport "$PORT" -j ACCEPT
     command -v netfilter-persistent >/dev/null 2>&1 && netfilter-persistent save >/dev/null 2>&1 || true
   fi
@@ -238,9 +258,9 @@ else
   chmod 700 "$D/otter-relay"
   printf '%s' "$TOKEN" > "$D/token"
   pkill -f "$D/otter-relay" 2>/dev/null || true
-  nohup "$D/otter-relay" -listen ":$PORT" -token-file "$D/token" >> "$D/relay.log" 2>&1 &
+  nohup "$D/otter-relay" -listen "$LISTEN" -token-file "$D/token" >> "$D/relay.log" 2>&1 &
   if [ -z "${dir}" ] && command -v crontab >/dev/null 2>&1; then
-    (crontab -l 2>/dev/null | grep -v otter-relay; echo "@reboot $D/otter-relay -listen :$PORT -token-file $D/token >> $D/relay.log 2>&1") | crontab -
+    (crontab -l 2>/dev/null | grep -v otter-relay; echo "@reboot $D/otter-relay -listen $LISTEN -token-file $D/token >> $D/relay.log 2>&1") | crontab -
   fi
   sleep 1
   pgrep -f "$D/otter-relay" >/dev/null && echo "otter-relay: nohup $D"
@@ -251,6 +271,8 @@ fi
 // Deploys otter-relay to one of the user's SSH servers and checks it from
 // here. ssh: SshManager; binaries: folder with otter-relay-<os>-<arch>.
 // dir (tests): install there, no service or cron.
+// listen/firewall: see installScript; publicUrl: where phones reach it
+// when a reverse proxy (nginx, say) fronts it.
 async function deployRelay({
   ssh,
   server,
@@ -258,6 +280,9 @@ async function deployRelay({
   binaries,
   dir = "",
   publicHost,
+  publicUrl,
+  listen = "",
+  firewall = true,
 }) {
   const host = ssh.find(server);
   const step = async (command, options = {}) => {
@@ -280,16 +305,31 @@ async function deployRelay({
   const binary = path.join(binaries, `otter-relay-${os.toLowerCase()}-${arch}`);
   if (!arch || !fs.existsSync(binary))
     throw new Error(`${host.name} 是 ${os} ${machine}，还没有给它的中继程序。`);
-  await step(`mkdir -p "${dir || "$HOME"}" && cat > "${uploadPath(dir)}"`, {
+  // An absolute upload path: sudo may move $HOME to /root.
+  const home = (await step('printf %s "$HOME"')).trim();
+  const upload = dir
+    ? `${dir}/otter-relay.upload`
+    : `${home}/.otter-relay-upload`;
+  await step(`mkdir -p "${path.posix.dirname(upload)}" && cat > "${upload}"`, {
     input: fs.readFileSync(binary),
   });
+  // Root installs a system service; so can a login with password-less sudo.
+  const who = dir
+    ? "user"
+    : (
+        await step(
+          'if [ "$(id -u)" = 0 ]; then echo root; elif sudo -n true 2>/dev/null; then echo sudo; else echo user; fi',
+        )
+      ).trim();
   const token = newToken();
-  const how = await step("sh -s", {
-    input: installScript({ port, token, dir }),
+  const how = await step(who === "sudo" ? "sudo -n sh -s" : "sh -s", {
+    input: installScript({ port, token, dir, upload, listen, firewall }),
   });
   if (!/otter-relay:/.test(how))
     throw new Error(`${host.name} 上的中继没能启动。`);
-  const url = `ws://${publicHost || host.host}:${port}`;
+  const url = publicUrl
+    ? cleanUrl(publicUrl)
+    : `ws://${publicHost || host.host}:${port}`;
   const check = await checkRelay({ url, token });
   return {
     url,
