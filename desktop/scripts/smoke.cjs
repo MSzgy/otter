@@ -68,6 +68,30 @@ const { execFileSync } = require("node:child_process");
   const codexLog = path.join(agentDir, "codex.jsonl");
   const fakeCodex = path.resolve(__dirname, "fake-codex.cjs");
   fs.chmodSync(fakeCodex, 0o755);
+  // 在外面也能连: a relay (relay/, built by npm run bundle:relay) on loopback.
+  const relayToken = require("node:crypto")
+    .randomBytes(32)
+    .toString("base64url");
+  const relayPort = await new Promise((resolve) => {
+    const probe = require("node:net")
+      .createServer()
+      .listen(0, "127.0.0.1", () => {
+        const { port } = probe.address();
+        probe.close(() => resolve(port));
+      });
+  });
+  const relayUrl = `ws://127.0.0.1:${relayPort}`;
+  const relayBinary = path.resolve(
+    __dirname,
+    `../build/relay/otter-relay-darwin-${process.arch === "x64" ? "amd64" : process.arch}`,
+  );
+  if (!fs.existsSync(relayBinary))
+    execFileSync("node", [path.resolve(__dirname, "build_relay.cjs")]);
+  const relayProcess = require("node:child_process").spawn(
+    relayBinary,
+    ["-listen", `127.0.0.1:${relayPort}`],
+    { env: { ...process.env, OTTER_RELAY_TOKEN: relayToken }, stdio: "ignore" },
+  );
   const codexCalls = () =>
     fs.existsSync(codexLog)
       ? fs.readFileSync(codexLog, "utf8").trim().split("\n").map(JSON.parse)
@@ -2287,6 +2311,47 @@ const { execFileSync } = require("node:child_process");
     await panel.screenshot({
       path: path.join(output, "otter-mobile-settings.png"),
     });
+    // 在外面也能连: a relay entered by hand; its token never reaches the
+    // page; the paired phone hears of it and comes in through it.
+    const relayCard = panel.getByRole("region", { name: "在外面也能连" });
+    await relayCard.getByRole("button", { name: "已有中继" }).click();
+    await relayCard.getByRole("textbox", { name: "中继地址" }).fill(relayUrl);
+    await relayCard.getByLabel("中继令牌").fill(relayToken);
+    await relayCard.getByRole("button", { name: "保存" }).click();
+    await relayCard.getByText(/已连上中继/).waitFor();
+    assert(
+      !(await panel.content()).includes(relayToken),
+      "The relay token never reaches the page",
+    );
+    await relayCard.getByRole("button", { name: "测试" }).click();
+    await relayCard.getByText("中继能用。", { exact: true }).waitFor();
+    await until(() => phone.mac.r?.u === relayUrl);
+    const away = new SyncClient({ key: phone.saved(), mac: phone.mac });
+    await away.connect({ relay: true });
+    assert.equal(away.topics.status.online, true);
+    await away.ping();
+    away.close();
+    await relayCard.scrollIntoViewIfNeeded();
+    await panel.screenshot({
+      path: path.join(output, "otter-mobile-relay.png"),
+    });
+    await relayCard.getByRole("button", { name: "移除中继" }).click();
+    await relayCard.getByRole("button", { name: "部署到我的服务器" }).waitFor();
+    await until(() => phone.mac.r === undefined);
+    // The deploy form lists the saved servers and says what it will do; it
+    // is not run here (it would install on the machine).
+    await relayCard.getByRole("button", { name: "部署到我的服务器" }).click();
+    const deployForm = relayCard.getByLabel("部署中继");
+    await deployForm
+      .getByRole("combobox", { name: "部署到的服务器" })
+      .locator("option", { hasText: "lab" })
+      .waitFor({ state: "attached" });
+    await deployForm.getByText(/上传中继程序.*监听 TCP 8787/s).waitFor();
+    await relayCard.scrollIntoViewIfNeeded();
+    await panel.screenshot({
+      path: path.join(output, "otter-mobile-relay-deploy.png"),
+    });
+    await deployForm.getByRole("button", { name: "取消" }).click();
     await myPhones
       .getByRole("button", { name: "撤销 smoke 手机", exact: true })
       .click();
@@ -2304,7 +2369,7 @@ const { execFileSync } = require("node:child_process");
     await phoneLink.getByText(/正在等手机连接/).waitFor({ state: "detached" });
     await panel.keyboard.press("Escape");
     console.log(
-      `PASS: phone link: switched on in settings, paired from the QR link over the real Electron link, today and chat followed (a streamed reply as appended text), history read, nothing private sent, latency p50 ${Math.round(lag.p50)} ms / p95 ${Math.round(lag.p95)} ms shown in settings; from the phone: a message sent (shown on the desktop), a planner card confirmed and one dismissed, a tool card answered (gone from the desktop too), a Codex task stopped, a to-do added and ticked; made view-only (actions refused, reading kept) and back; revoked and kept out, switched off; the pet cannot reach it.`,
+      `PASS: phone link: switched on in settings, paired from the QR link over the real Electron link, today and chat followed (a streamed reply as appended text), history read, nothing private sent, latency p50 ${Math.round(lag.p50)} ms / p95 ${Math.round(lag.p95)} ms shown in settings; a relay set up by hand (token kept from the page) and a phone in through it, then removed; from the phone: a message sent (shown on the desktop), a planner card confirmed and one dismissed, a tool card answered (gone from the desktop too), a Codex task stopped, a to-do added and ticked; made view-only (actions refused, reading kept) and back; revoked and kept out, switched off; the pet cannot reach it.`,
     );
     console.log(
       "PASS: reading a web page asks first and refuses this Mac and the local network; MCP server added from settings: preview first, its tools offered, a writing call waits for the card, 允许一次 runs it, 拒绝 does not, 不用再问 skips the card, disable and remove; servers added from chat after a card (a pasted command, and a remote HTTP server with a token whose tool then runs after 允许); a skill found by 重新扫描, read through use_skill, and not offered once off; Codex, Claude Code and shared skill folders read in place, merged when linked, switched per folder and per skill, and one installed later offered with the next message; the shipped add-mcp-server skill read, then a server proposed through otter_add_mcp_server and added after 允许一次; a VS Code-shaped remote config pasted into settings.",
@@ -3328,6 +3393,7 @@ const { execFileSync } = require("node:child_process");
     fs.rmSync(sshHome, { recursive: true, force: true });
     fs.rmSync(backdropDir, { recursive: true, force: true });
     fs.rmSync(agentDir, { recursive: true, force: true });
+    relayProcess.kill();
     execFileSync("/usr/bin/security", ["delete-keychain", sshKeychain]);
     if (keychains() !== keychainsBefore)
       console.error("The keychain search list changed during the smoke test.");

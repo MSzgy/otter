@@ -29,6 +29,8 @@ final class SyncStore {
   private(set) var cards: CardsTopic?
   // Whether the Mac lets this phone act (设置 → 手机 → 可以操作).
   private(set) var control = true
+  // How this phone reached the Mac: the local network or the relay.
+  private(set) var path: SyncConnection.Path?
   private(set) var updated: Date?
   private(set) var latency: (p50: Double, p95: Double)?
   private(set) var rtt: Double?
@@ -133,8 +135,9 @@ final class SyncStore {
 
   private func handle(_ event: SyncConnection.Event, record: MacRecord, pairing: Bool) {
     switch event {
-    case .ready(let message):
+    case .ready(let message, let via):
       retries = 0
+      path = via
       if pairing {
         mac = record
         record.save()
@@ -146,6 +149,7 @@ final class SyncStore {
       if let device = message["device"] as? [String: Any] {
         control = device["control"] as? Bool ?? true
       }
+      if message.keys.contains("relay") { learnRelay(message["relay"]) }
       link = .online
       startHeartbeat()
     case .message(let message):
@@ -232,6 +236,8 @@ final class SyncStore {
       changed(topic)
     case "device":
       control = message["control"] as? Bool ?? control
+    case "relay":
+      learnRelay(message["relay"])
     case "pong":
       guard let t0 = message["t0"] as? Double, let tm = message["tm"] as? Double else { return }
       let trip = now - t0
@@ -247,6 +253,17 @@ final class SyncStore {
     default:
       break
     }
+  }
+
+  // The Mac says where its relay is (or that it has none): remember it for
+  // the times this phone is away from home.
+  private func learnRelay(_ value: Any?) {
+    guard var record = mac else { return }
+    let relay = decodeJSON(PairingInfo.Relay.self, value)
+    guard relay != record.relay else { return }
+    record.relay = relay
+    record.save()
+    mac = record
   }
 
   private func record(_ ms: Double) {

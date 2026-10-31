@@ -4,6 +4,11 @@ import Security
 
 // What the QR code on the Mac says: otter://pair?d=<base64url JSON>.
 struct PairingInfo: Decodable {
+  // The Mac's relay (外网访问): its address and this Mac's room there.
+  struct Relay: Codable, Equatable {
+    let u: String
+    let i: String
+  }
   let v: Int
   let n: String
   let k: String
@@ -11,6 +16,7 @@ struct PairingInfo: Decodable {
   let a: [String]
   let p: Int
   let s: String
+  let r: Relay?
 
   static func parse(_ text: String) -> PairingInfo? {
     guard
@@ -31,6 +37,7 @@ struct MacRecord: Codable, Equatable {
   var addresses: [String]
   var port: Int
   var service: String
+  var relay: PairingInfo.Relay?
 
   init(_ info: PairingInfo) {
     name = info.n
@@ -38,6 +45,7 @@ struct MacRecord: Codable, Equatable {
     addresses = info.a
     port = info.p
     service = info.s
+    relay = info.r
   }
 
   private static let defaultsKey = "otter.mac"

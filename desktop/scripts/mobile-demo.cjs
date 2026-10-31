@@ -135,6 +135,9 @@ function model() {
       OTTER_DESKTOP_CONFIG: config,
       OTTER_PROJECT_ROOT: dir,
       OTTER_MOBILE_PORT: "52531",
+      ...(process.env.OTTER_DEMO_AWAY === "1"
+        ? { OTTER_MOBILE_HOST: "127.0.0.1" }
+        : {}),
       OTTER_MOBILE_LOG: path.join(dir, "link.log"),
       OTTER_CODEX_BIN: fakeCodex,
       OTTER_TEST_NO_TERMINAL: "1",
@@ -190,6 +193,32 @@ function model() {
     });
   }
   await act("mobile.enable", true);
+  // OTTER_DEMO_AWAY=1: a relay on this Mac, and the local listener only on
+  // loopback, so the phone can only come in through the relay.
+  if (process.env.OTTER_DEMO_AWAY === "1") {
+    const relayPort = 52532;
+    const relayToken = require("node:crypto")
+      .randomBytes(32)
+      .toString("base64url");
+    const binary = path.resolve(
+      __dirname,
+      `../build/relay/otter-relay-darwin-${process.arch === "x64" ? "amd64" : process.arch}`,
+    );
+    const relay = require("node:child_process").spawn(
+      binary,
+      ["-listen", `:${relayPort}`],
+      {
+        env: { ...process.env, OTTER_RELAY_TOKEN: relayToken },
+        stdio: "ignore",
+      },
+    );
+    process.on("exit", () => relay.kill());
+    await new Promise((r) => setTimeout(r, 500));
+    await act("mobile.relay-set", {
+      url: `ws://127.0.0.1:${relayPort}`,
+      token: relayToken,
+    });
+  }
   const mobile = await act("mobile.pair");
   fs.writeFileSync(path.join(dir, "link.txt"), mobile.pairing.link);
   log(`ready: pairing link in ${path.join(dir, "link.txt")}`);
@@ -264,6 +293,8 @@ function model() {
         }
         if (verb === "stats")
           log(JSON.stringify((await act("mobile.get")).devices));
+        if (verb === "relay")
+          log(JSON.stringify((await act("mobile.get")).relay));
         if (verb === "stop") {
           await app.close();
           fake.close();

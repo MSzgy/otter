@@ -17,6 +17,7 @@ struct MeView: View {
             row("推送延迟", "中位 \(Int(latency.p50.rounded())) ms · 95% ≤ \(Int(latency.p95.rounded())) ms")
           }
           if let rtt = store.rtt { row("往返", "\(Int(rtt.rounded())) ms") }
+          row("外网", store.mac?.relay.map { "经 \($0.u) 中继" } ?? "没有中继，只能在同一个 Wi-Fi 下连")
           if let version = store.status?.version { row("Otter 版本", version) }
           if store.status?.quiet == true { row("安静模式", "开") }
           row("这台手机", store.control ? "可以操作" : "只能看")
@@ -47,7 +48,8 @@ struct MeView: View {
 
   private var linkText: String {
     switch store.link {
-    case .online: return "在线（局域网直连，端到端加密）"
+    case .online:
+      return store.path == .relay ? "在线（经中继，端到端加密）" : "在线（局域网直连，端到端加密）"
     case .connecting: return "连接中…"
     case .offline(let reason): return reason.isEmpty ? "离线" : "离线：\(reason)"
     case .revoked: return "配对已在 Mac 上撤销"

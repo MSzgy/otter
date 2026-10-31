@@ -36,6 +36,7 @@ const { AgentTasks, codexAgent, report } = require("./agents.cjs");
 const { shellPath } = require("./mcp-client.cjs");
 const { SyncHub } = require("./sync-hub.cjs");
 const { MobileLink } = require("./mobile.cjs");
+const { checkRelay, deployRelay } = require("./relay.cjs");
 const { ToolHost } = require("./tool-host.cjs");
 const { WebReader } = require("./web-reader.cjs");
 const { Extensions, summary } = require("./extensions.cjs");
@@ -1805,6 +1806,38 @@ async function panelAction(event, name, value) {
     if (name === "mobile.revoke") return mobile.revoke(value?.id);
     if (name === "mobile.control")
       return mobile.setControl(value?.id, value?.control === true);
+    if (name === "mobile.relay-set") return mobile.setRelay(value || {});
+    if (name === "mobile.relay-clear") return mobile.clearRelay();
+    if (name === "mobile.relay-test") {
+      const saved = mobile.relayConfig();
+      return checkRelay({
+        url: value?.url || saved?.url,
+        token: value?.token || saved?.token,
+      });
+    }
+    // Servers to deploy to: the ones saved in SSH 服务器 and ~/.ssh/config.
+    if (name === "mobile.servers")
+      return (ssh?.list() || []).map((h) => ({
+        id: h.id,
+        name: h.name,
+        where: sshWhere(h),
+      }));
+    if (name === "mobile.relay-deploy") {
+      if (!ssh) throw new Error("服务器管理尚未就绪。");
+      const port = Number(value?.port) || 8787;
+      if (!Number.isInteger(port) || port < 1024 || port > 65535)
+        throw new Error("端口要在 1024–65535 之间。");
+      const result = await deployRelay({
+        ssh,
+        server: value?.server,
+        port,
+        binaries: app.isPackaged
+          ? path.join(process.resourcesPath, "relay")
+          : path.join(__dirname, "../build/relay"),
+      });
+      mobile.setRelay({ url: result.url, token: result.token });
+      return { ok: result.reachable, message: result.message };
+    }
     throw new Error("不支持的手机操作。");
   }
   if (name.startsWith("agents.")) {
@@ -2581,6 +2614,10 @@ else {
       // Tests run their own Mac on a free port.
       ...(process.env.OTTER_MOBILE_PORT
         ? { port: Number(process.env.OTTER_MOBILE_PORT) }
+        : {}),
+      // Tests can keep the local listener off the network ("away from home").
+      ...(process.env.OTTER_MOBILE_HOST
+        ? { host: process.env.OTTER_MOBILE_HOST }
         : {}),
       onChange: (data) => {
         if (panel && !panel.isDestroyed())

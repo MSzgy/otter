@@ -7,8 +7,13 @@ import Network
 // moves. Then: hello / welcome in the clear, everything after sealed.
 @MainActor
 final class SyncConnection {
+  // Which way this connection reached the Mac.
+  enum Path: String {
+    case local, relay
+  }
+
   enum Event {
-    case ready([String: Any])
+    case ready([String: Any], Path)
     case message([String: Any])
     case closed(code: Int?, reason: String)
   }
@@ -19,6 +24,8 @@ final class SyncConnection {
   private let auth: [String: Any]
   private let onEvent: (Event) -> Void
   private var candidates: [NWConnection] = []
+  private var relayCandidate: NWConnection?
+  private var relayWork: DispatchWorkItem?
   private var connection: NWConnection?
   private var channel: SyncChannel?
   private var ephemeral = PrivateKey()
@@ -57,13 +64,21 @@ final class SyncConnection {
       URL(string: "ws://\(address):\(mac.port)/").map { .url($0) }
     }
     endpoints.append(.service(name: mac.service, type: "_otter._tcp", domain: "local.", interface: nil))
-    for endpoint in endpoints {
-      let candidate = NWConnection(to: endpoint, using: Self.parameters())
-      candidate.stateUpdateHandler = { [weak self] state in
-        MainActor.assumeIsolated { self?.update(candidate, state) }
+    for endpoint in endpoints { begin(endpoint) }
+    // The relay a moment later, so at home the local network wins; away,
+    // where nothing local answers, the relay does.
+    if let relay = mac.relay, var url = URLComponents(string: relay.u + "/join") {
+      url.queryItems = [URLQueryItem(name: "room", value: relay.i)]
+      if let endpoint = url.url.map({ NWEndpoint.url($0) }) {
+        let work = DispatchWorkItem { [weak self] in
+          MainActor.assumeIsolated {
+            guard let self, self.connection == nil, !self.done else { return }
+            self.relayCandidate = self.begin(endpoint)
+          }
+        }
+        relayWork = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4, execute: work)
       }
-      candidates.append(candidate)
-      candidate.start(queue: .main)
     }
     let deadline = DispatchWorkItem { [weak self] in
       MainActor.assumeIsolated {
@@ -75,6 +90,17 @@ final class SyncConnection {
     DispatchQueue.main.asyncAfter(deadline: .now() + 6, execute: deadline)
   }
 
+  @discardableResult
+  private func begin(_ endpoint: NWEndpoint) -> NWConnection {
+    let candidate = NWConnection(to: endpoint, using: Self.parameters())
+    candidate.stateUpdateHandler = { [weak self] state in
+      MainActor.assumeIsolated { self?.update(candidate, state) }
+    }
+    candidates.append(candidate)
+    candidate.start(queue: .main)
+    return candidate
+  }
+
   private func update(_ candidate: NWConnection, _ state: NWConnection.State) {
     switch state {
     case .ready:
@@ -83,6 +109,7 @@ final class SyncConnection {
         return
       }
       connection = candidate
+      relayWork?.cancel()
       for other in candidates where other !== candidate { other.cancel() }
       candidates = [candidate]
       sendHello()
@@ -93,7 +120,8 @@ final class SyncConnection {
       } else {
         candidate.cancel()
         candidates.removeAll { $0 === candidate }
-        if candidates.isEmpty && connection == nil {
+        // Everything local failed; wait for the relay if it has yet to start.
+        if candidates.isEmpty && connection == nil && (relayWork == nil || relayCandidate != nil) {
           finish(code: nil, reason: "连不上 Mac：确认它开着 Otter、打开了“允许手机连接”，并且和手机在同一个 Wi-Fi。")
         }
       }
@@ -167,7 +195,7 @@ final class SyncConnection {
       if message["t"] as? String == "ready" {
         ready = true
         deadline?.cancel()
-        onEvent(.ready(message))
+        onEvent(.ready(message, connection === relayCandidate ? .relay : .local))
       } else {
         onEvent(.message(message))
       }
@@ -180,6 +208,7 @@ final class SyncConnection {
     guard !done else { return }
     done = true
     deadline?.cancel()
+    relayWork?.cancel()
     for c in candidates { c.cancel() }
     candidates = []
     connection?.cancel()
@@ -191,6 +220,7 @@ final class SyncConnection {
     guard !done else { return }
     done = true
     deadline?.cancel()
+    relayWork?.cancel()
     for c in candidates { c.cancel() }
     connection?.cancel()
     connection = nil

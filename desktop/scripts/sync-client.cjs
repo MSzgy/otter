@@ -38,11 +38,18 @@ class SyncClient {
   }
   // Resolves once the Mac says ready and the catch-up has been applied
   // (catch-up frames are sent before anything else, in order).
-  connect({ pair = false } = {}) {
+  // relay: come in through the Mac's relay (from the pairing link, or as the
+  // Mac last said) instead of the local address.
+  connect({ pair = false, relay = false } = {}) {
     this.channel = null;
     this.closed = null;
     return new Promise((resolve, reject) => {
-      const socket = new WebSocket(`ws://${this.address}:${this.mac.p}`);
+      if (relay && !this.mac.r) return reject(new Error("no relay"));
+      const socket = new WebSocket(
+        relay
+          ? `${this.mac.r.u}/join?room=${encodeURIComponent(this.mac.r.i)}`
+          : `ws://${this.address}:${this.mac.p}`,
+      );
       this.socket = socket;
       const ephemeral = keyPair();
       const hello = JSON.stringify({
@@ -103,6 +110,10 @@ class SyncClient {
       this.control = message.device?.control !== false;
     }
     if (message.t === "device") this.control = message.control;
+    // The Mac says where its relay is (or that there is none now).
+    if (message.t === "ready" || message.t === "relay")
+      if ("relay" in message)
+        this.mac = { ...this.mac, r: message.relay || undefined };
     if (message.t === "snap") {
       this.epoch = message.epoch;
       this.topics[message.topic] = message.value;

@@ -9,6 +9,7 @@ const path = require("node:path");
 const { spawn, execFileSync } = require("node:child_process");
 const { randomBytes, randomUUID } = require("node:crypto");
 const { WebSocketServer } = require("ws");
+const { RelayClient, cleanUrl, newRoom } = require("./relay.cjs");
 const {
   keyPair,
   loadKey,
@@ -92,6 +93,60 @@ class MobileLink {
     this.connections = new Set();
     this.pairing = null;
     this.server = null;
+    this.relayFile = path.join(dir, "relay.json");
+  }
+  // The relay (外网访问): its address, its token (kept in a file only this
+  // user reads, never shown to the page), and this Mac's room there.
+  relayConfig() {
+    try {
+      const r = JSON.parse(fs.readFileSync(this.relayFile, "utf8"));
+      return r && r.url && r.token && r.room ? r : null;
+    } catch {
+      return null;
+    }
+  }
+  setRelay({ url, token }) {
+    const clean = cleanUrl(url);
+    const old = this.relayConfig();
+    const secret =
+      typeof token === "string" && token.trim() ? token.trim() : old?.token;
+    if (!secret || secret.length < 32)
+      throw new Error("中继令牌至少 32 个字符（部署时会自动生成）。");
+    const config = { url: clean, token: secret, room: old?.room || newRoom() };
+    fs.mkdirSync(this.dir, { recursive: true, mode: 0o700 });
+    fs.writeFileSync(this.relayFile, JSON.stringify(config), { mode: 0o600 });
+    this.restartRelay();
+    this.tellRelay();
+    this.changed();
+    return this.snapshot();
+  }
+  clearRelay() {
+    fs.rmSync(this.relayFile, { force: true });
+    this.restartRelay();
+    this.tellRelay();
+    this.changed();
+    return this.snapshot();
+  }
+  restartRelay() {
+    this.relay?.stop();
+    this.relay = null;
+    const config = this.relayConfig();
+    if (!config || !this.server) return;
+    this.relay = new RelayClient({
+      ...config,
+      onPeer: (socket) => this.accept(socket),
+      onChange: () => this.changed(),
+    });
+    this.relay.start();
+  }
+  // What a phone needs to come in through the relay: address and room.
+  relayInfo() {
+    const config = this.relayConfig();
+    return config ? { u: config.url, i: config.room } : null;
+  }
+  tellRelay() {
+    for (const c of this.connections)
+      if (c.ready) c.send({ t: "relay", relay: this.relayInfo() });
   }
   // This Mac's own key, made once and kept in a file only this user reads.
   identity() {
@@ -128,6 +183,15 @@ class MobileLink {
       name: this.name,
       addresses: this.server ? lanAddresses() : [],
       error: this.error || "",
+      relay: (() => {
+        const config = this.relayConfig();
+        return config
+          ? {
+              url: config.url,
+              ...(this.relay?.snapshot() || { status: "off" }),
+            }
+          : null;
+      })(),
       pairing: this.pairing
         ? {
             link: this.pairing.link,
@@ -188,6 +252,7 @@ class MobileLink {
     }
     this.server.on("connection", (socket) => this.accept(socket));
     this.announce();
+    this.restartRelay();
   }
   // Bonjour, so a paired phone finds this Mac again when its address moves.
   announce() {
@@ -207,6 +272,8 @@ class MobileLink {
     this.advert.on("error", () => {});
   }
   stop() {
+    this.relay?.stop();
+    this.relay = null;
     this.advert?.kill();
     this.advert = null;
     this.unlisten?.();
@@ -231,6 +298,7 @@ class MobileLink {
       a: lanAddresses(),
       p: this.port,
       s: `Otter · ${this.name}`,
+      ...(this.relayInfo() ? { r: this.relayInfo() } : {}),
     };
     this.pairing = {
       code,
@@ -418,6 +486,7 @@ class Connection {
         control: this.device.control !== false,
       },
       epoch: link.hub.epoch,
+      relay: link.relayInfo(),
     });
     // Live patches wait until the catch-up is out, then skip what it covered.
     const frames = await link.hub.catchUp(message.since || {});

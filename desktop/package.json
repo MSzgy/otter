@@ -10,9 +10,10 @@
     "start": "npm run build && npm run bundle:native && electron .",
     "test": "node --test electron/*.test.cjs",
     "test:e2e": "npm run build && node scripts/smoke.cjs",
-    "package": "npm run build && npm run bundle:native && node scripts/package_local.cjs",
+    "package": "npm run build && npm run bundle:native && npm run bundle:relay && node scripts/package_local.cjs",
     "bundle:backend": "python3 scripts/build_backend.py",
-    "bundle:native": "node scripts/build_native.cjs"
+    "bundle:native": "node scripts/build_native.cjs",
+    "bundle:relay": "node scripts/build_relay.cjs"
   },
   "build": {
     "appId": "dev.otter.desktop",
@@ -42,6 +43,13 @@
       {
         "from": "build/native/otter-app-content",
         "to": "native/otter-app-content"
+      },
+      {
+        "from": "build/relay",
+        "to": "relay",
+        "filter": [
+          "otter-relay-linux-*"
+        ]
       }
     ],
     "mac": {

@@ -376,7 +376,8 @@ esac
     };
   }
   // Runs one command on a host without a terminal.
-  run(nameOrId, command, { timeout = 60000 } = {}) {
+  // input: bytes for the command's stdin (a file to upload, a script for sh -s).
+  run(nameOrId, command, { timeout = 60000, input = null } = {}) {
     const host = this.find(nameOrId);
     if (typeof command !== "string" || !command.trim() || command.length > 4000)
       throw new Error("命令要是 1–4000 字的一行文字。");
@@ -390,8 +391,12 @@ esac
     return new Promise((resolve) => {
       const child = spawn(this.ssh, [...args, command], {
         env: { ...process.env, ...this.env(host) },
-        stdio: ["ignore", "pipe", "pipe"],
+        stdio: [input == null ? "ignore" : "pipe", "pipe", "pipe"],
       });
+      if (input != null) {
+        child.stdin.on("error", () => {});
+        child.stdin.end(input);
+      }
       const out = { stdout: "", stderr: "" };
       for (const stream of ["stdout", "stderr"])
         child[stream].on("data", (chunk) => {

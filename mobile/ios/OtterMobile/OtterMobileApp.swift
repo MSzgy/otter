@@ -90,8 +90,9 @@ struct LinkPill: View {
   private var text: String {
     switch store.link {
     case .online:
-      if let p50 = store.latency?.p50 { return "在线 · \(Int(p50.rounded())) ms" }
-      return "在线"
+      let via = store.path == .relay ? " · 中继" : ""
+      if let p50 = store.latency?.p50 { return "在线\(via) · \(Int(p50.rounded())) ms" }
+      return "在线\(via)"
     case .connecting: return "连接中…"
     case .revoked: return "已撤销"
     case .unpaired: return "未配对"
