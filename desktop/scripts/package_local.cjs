@@ -28,8 +28,9 @@ try {
     ["-c", "-k", "--keepParent", stagedApp, archive],
     { stdio: "inherit" },
   );
-  console.log(`Verified local app: ${stagedApp}`);
-  console.log(`Archive: ${archive}`);
+  console.log(`Verified and archived: ${archive}`);
+  // The staged app (~350 MB) is in the archive now; leaving it filled the disk.
+  fs.rmSync(staging, { recursive: true, force: true });
   console.log(
     "Install into ~/Applications or /Applications, outside file-provider folders.",
   );
