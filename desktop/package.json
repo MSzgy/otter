@@ -54,6 +54,7 @@
     ],
     "mac": {
       "category": "public.app-category.productivity",
+      "icon": "assets/Otter.icon",
       "target": "dir",
       "extendInfo": {
         "NSAppleEventsUsageDescription": "在你主动操作时读取浏览器标签页或可见网页正文，用于预览；仅在确认发送后交给已配置的模型。",
