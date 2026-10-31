@@ -63,6 +63,7 @@ class MobileLink {
     save = () => {},
     onChange = () => {},
     requests = {},
+    actions = {},
     name = computerName(),
     port = PORT,
     // Both IPv4 and IPv6: Bonjour often hands the phone an IPv6 address.
@@ -75,6 +76,8 @@ class MobileLink {
     this.saveState = save;
     this.onChange = onChange;
     this.requests = requests;
+    // Changes a phone may ask for, only when its owner allowed it.
+    this.actions = actions;
     this.name = name;
     this.preferredPort = port;
     this.host = host;
@@ -135,6 +138,7 @@ class MobileLink {
       devices: this.devices.map((d) => ({
         id: d.id,
         name: d.name,
+        control: d.control !== false,
         added: d.added,
         seen: d.seen || null,
         online: online.has(d.id),
@@ -239,6 +243,18 @@ class MobileLink {
   }
   cancelPairing() {
     this.pairing = null;
+    this.changed();
+    return this.snapshot();
+  }
+  // A phone that may only look, or may also act (send, confirm, stop).
+  setControl(id, control) {
+    const device = this.devices.find((d) => d.id === id);
+    if (!device) throw new Error("没有这台手机。");
+    device.control = !!control;
+    for (const c of this.connections)
+      if (c.device?.id === id && c.ready)
+        c.send({ t: "device", control: device.control });
+    this.persist();
     this.changed();
     return this.snapshot();
   }
@@ -396,7 +412,11 @@ class Connection {
     this.send({
       t: "ready",
       mac: { name: link.name, key: link.identity().public },
-      device: { id: this.device.id, name: this.device.name },
+      device: {
+        id: this.device.id,
+        name: this.device.name,
+        control: this.device.control !== false,
+      },
       epoch: link.hub.epoch,
     });
     // Live patches wait until the catch-up is out, then skip what it covered.
@@ -427,9 +447,18 @@ class Connection {
       this.socket.send(this.channel.seal(message));
   }
   async request({ id, m, p }) {
-    const handler = this.link.requests[m];
+    const action = Object.hasOwn(this.link.actions, m);
+    const handler = action
+      ? this.link.actions[m]
+      : Object.hasOwn(this.link.requests, m)
+        ? this.link.requests[m]
+        : null;
     try {
       if (!handler) throw new Error("不支持的请求。");
+      if (action && this.device.control === false)
+        throw new Error(
+          "这台手机只能看。要在手机上操作，请在 Mac 的 设置 → 手机 里打开“可以操作”。",
+        );
       this.send({ t: "res", id, ok: true, value: await handler(p || {}) });
     } catch (e) {
       this.send({ t: "res", id, ok: false, error: e.message });

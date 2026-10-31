@@ -86,6 +86,38 @@ struct OtterTopic: Decodable {
   let body: Body
 }
 
+// Cards waiting on the Mac for an answer (a tool the chat wants to use).
+struct CardsTopic: Decodable {
+  struct ToolCard: Decodable, Identifiable {
+    let id: String
+    let session: String
+    let label: String
+    let origin: String
+    let detail: String
+    let alwaysAsk: Bool
+  }
+  let tools: [ToolCard]
+}
+
+// What sending a message led to: a reply on its way, a card to confirm, or
+// a result the Mac already recorded.
+struct SendResult: Decodable {
+  let kind: String
+  let session: String?
+  let requestId: String?
+  let id: String?
+  let title: String?
+  let detail: String?
+  let ok: Bool?
+  let message: String?
+  let turn: String?
+}
+
+struct ConfirmResult: Decodable {
+  let ok: Bool
+  let message: String
+}
+
 struct ChatMessage: Decodable, Identifiable {
   let id: String
   let role: String

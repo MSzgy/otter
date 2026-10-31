@@ -71,17 +71,20 @@ struct TaskRow: View {
         StatusBadge(status: task.status, text: task.statusText)
       }
       if task.status == "running" {
-        TimelineView(.periodic(from: .now, by: 1)) { context in
-          HStack {
-            Text(task.progress.isEmpty ? "进行中" : task.progress)
-              .font(.system(size: 12, design: .monospaced))
-              .foregroundStyle(palette.muted)
-              .lineLimit(1)
-            Spacer()
-            Text(elapsed(from: task.created, to: context.date.timeIntervalSince1970 * 1000))
-              .font(.system(size: 12, design: .rounded).monospacedDigit())
-              .foregroundStyle(palette.muted)
+        HStack {
+          TimelineView(.periodic(from: .now, by: 1)) { context in
+            HStack {
+              Text(task.progress.isEmpty ? "进行中" : task.progress)
+                .font(.system(size: 12, design: .monospaced))
+                .foregroundStyle(palette.muted)
+                .lineLimit(1)
+              Spacer()
+              Text(elapsed(from: task.created, to: context.date.timeIntervalSince1970 * 1000))
+                .font(.system(size: 12, design: .rounded).monospacedDigit())
+                .foregroundStyle(palette.muted)
+            }
           }
+          StopTaskButton(id: task.id)
         }
       } else if !task.error.isEmpty {
         Text(task.error).font(.rounded(13))
@@ -89,6 +92,26 @@ struct TaskRow: View {
       } else if !task.result.isEmpty {
         Text(task.result).font(.rounded(13)).foregroundStyle(palette.muted).lineLimit(2)
       }
+    }
+  }
+}
+
+// Stops a running agent task on the Mac (when this phone may act).
+struct StopTaskButton: View {
+  let id: String
+  @Environment(SyncStore.self) private var store
+  @State private var busy = false
+
+  var body: some View {
+    if store.control {
+      Button(busy ? "正在停止…" : "停止") {
+        busy = true
+        Task { try? await store.perform("stopAgent", ["id": id]) }
+      }
+      .font(.rounded(13, .semibold))
+      .buttonStyle(.bordered)
+      .disabled(busy || store.link != .online)
+      .accessibilityLabel("停止任务")
     }
   }
 }

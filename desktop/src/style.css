@@ -4074,3 +4074,14 @@ button.danger {
   padding: 5px 12px;
   font-size: 12px;
 }
+
+.mobile-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--ink-2);
+}
+.mobile-control .toggle {
+  transform: scale(0.8);
+}

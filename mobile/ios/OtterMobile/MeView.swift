@@ -19,6 +19,7 @@ struct MeView: View {
           if let rtt = store.rtt { row("往返", "\(Int(rtt.rounded())) ms") }
           if let version = store.status?.version { row("Otter 版本", version) }
           if store.status?.quiet == true { row("安静模式", "开") }
+          row("这台手机", store.control ? "可以操作" : "只能看")
         }
         if let body = store.otter?.body, body.enabled {
           Section("实体水獭") {

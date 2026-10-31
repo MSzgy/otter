@@ -5,7 +5,7 @@
 // <dir>/cmd, one per line:
 //   todo <title> | done <title> | remind <minutes> <title> | focus <minutes>
 //   chat <text> | codex <title>  (a slow task; 停 stops it) | theme <id>
-//   stats | stop
+//   control on|off (the phone may act or only look) | shot <png> | stats | stop
 // Build first: npm run build. Usage: node scripts/mobile-demo.cjs [dir]
 const { _electron: electron } = require("playwright");
 const http = require("node:http");
@@ -33,8 +33,24 @@ function model() {
       const first = body.messages?.[0]?.content || "";
       if (first.startsWith("[Otter")) {
         res.setHeader("Content-Type", "application/json");
-        const content = first.startsWith("[Otter task planner]")
-          ? '{"kind":"none"}'
+        // The planner proposes a reminder for “…提醒我<事>”, nothing else.
+        const ask = first.startsWith("[Otter task planner]")
+          ? JSON.parse(body.messages[1].content)
+          : null;
+        // English too: the simulator's keyboard tool cannot type Chinese.
+        const remind = ask && /(?:提醒我|remind me )(.+)$/i.exec(ask.text);
+        const content = ask
+          ? JSON.stringify(
+              remind
+                ? {
+                    kind: "reminder_create",
+                    title: remind[1],
+                    when: {
+                      at: new Date(Date.parse(ask.now) + 3600000).toISOString(),
+                    },
+                  }
+                : { kind: "none" },
+            )
           : first.includes("memory suggestion")
             ? '{"candidates":[]}'
             : '{"ids":[]}';
@@ -43,7 +59,7 @@ function model() {
       res.setHeader("Content-Type", "text/event-stream");
       const last = body.messages.at(-1);
       const user = [...body.messages].reverse().find((m) => m.role === "user");
-      const codex = /^让 Codex/.exec(user?.content || "");
+      const codex = /^(让 Codex|codex )/i.exec(user?.content || "");
       if (codex && last.role !== "tool") {
         const call = {
           index: 0,
@@ -231,6 +247,21 @@ function model() {
           if (running) await act("agents.stop", { id: running.id });
         }
         if (verb === "theme") await act("theme", text);
+        if (verb === "shot") {
+          await panel
+            .getByRole("button", { name: "聊天", exact: true })
+            .first()
+            .click();
+          await panel.waitForTimeout(500);
+          await panel.screenshot({ path: text });
+        }
+        if (verb === "control") {
+          const [device] = (await act("mobile.get")).devices;
+          await act("mobile.control", {
+            id: device.id,
+            control: text === "on",
+          });
+        }
         if (verb === "stats")
           log(JSON.stringify((await act("mobile.get")).devices));
         if (verb === "stop") {

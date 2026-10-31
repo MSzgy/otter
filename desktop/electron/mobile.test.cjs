@@ -42,6 +42,7 @@ function setup(extra = {}) {
     load: () => saved,
     save: (v) => (saved = structuredClone(v)),
     requests: { echo: async (p) => ({ back: p.text }) },
+    actions: { add: async (p) => ({ done: p.title }) },
     ...extra,
   });
   return { hub, link, state, saved: () => saved };
@@ -235,4 +236,33 @@ test("the Mac announces itself over Bonjour while on", async () => {
   assert.equal(found, true);
   await link.setEnabled(false);
   assert.equal(link.advert, null);
+});
+
+test("a phone may act only while its owner allows it", async () => {
+  const { link } = setup();
+  await link.setEnabled(true);
+  link.startPairing();
+  const phone = client(link);
+  const ready = await phone.connect({ pair: true });
+  assert.equal(ready.device.control, true, "a new phone may act");
+  assert.deepEqual(await phone.request("add", { title: "买牛奶" }), {
+    done: "买牛奶",
+  });
+  const told = [];
+  phone.on((m) => m.t === "device" && told.push(m.control));
+  const id = link.snapshot().devices[0].id;
+  link.setControl(id, false);
+  await until(() => told.length === 1);
+  assert.deepEqual(told, [false]);
+  assert.equal(link.snapshot().devices[0].control, false);
+  await assert.rejects(phone.request("add", { title: "x" }), /只能看/);
+  assert.deepEqual(await phone.request("echo", { text: "还能看" }), {
+    back: "还能看",
+  });
+  for (const m of ["constructor", "toString", "__proto__", "hasOwnProperty"])
+    await assert.rejects(phone.request(m, {}), /不支持的请求/, m);
+  link.setControl(id, true);
+  await phone.request("add", { title: "又能操作了" });
+  assert.throws(() => link.setControl("nope", true), /没有这台手机/);
+  await link.setEnabled(false);
 });

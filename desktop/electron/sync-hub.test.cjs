@@ -163,3 +163,21 @@ test("a change while the app is being read is not lost", async () => {
   );
   hub.stop();
 });
+
+test("a topic that could not be read at catch-up arrives once it can", async () => {
+  let ready = false;
+  const hub = new SyncHub({
+    sources: { chat: () => (ready ? { sessions: [{ id: "a" }] } : undefined) },
+  });
+  assert.deepEqual(await hub.catchUp({}), [], "nothing to send yet");
+  const frames = [];
+  hub.listen((f) => frames.push(f));
+  ready = true;
+  hub.touch("chat");
+  await new Promise((r) => setTimeout(r, 30));
+  assert.deepEqual(
+    frames.map((f) => [f.t, f.seq, f.value]),
+    [["snap", 1, { sessions: [{ id: "a" }] }]],
+  );
+  hub.stop();
+});

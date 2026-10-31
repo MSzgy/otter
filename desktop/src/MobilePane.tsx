@@ -5,6 +5,7 @@ import "./types";
 type Device = {
   id: string;
   name: string;
+  control: boolean;
   added: number;
   seen: number | null;
   online: boolean;
@@ -99,7 +100,7 @@ export function MobilePane() {
             <h2>允许手机连接</h2>
             <p>
               配对过的 iPhone 在同一个 Wi-Fi 下能看到这里的今天、聊天、Codex
-              任务和水獭状态，变化实时推过去。所有内容端到端加密；应用感知、窗口内容、剪贴板和密码不会同步。
+              任务和水獭状态，变化实时推过去；打开“可以操作”的手机还能发消息、确认卡片、停止任务、勾待办。所有内容端到端加密；应用感知、窗口内容、剪贴板和密码不会同步。
             </p>
           </div>
           <input
@@ -197,6 +198,25 @@ export function MobilePane() {
                   </small>
                 </span>
                 <span className="ssh-actions">
+                  <label className="mobile-control">
+                    <input
+                      type="checkbox"
+                      className="toggle"
+                      aria-label={`${d.name} 可以操作`}
+                      checked={d.control}
+                      onChange={(e) => {
+                        const control = e.target.checked;
+                        setState({
+                          ...state,
+                          devices: state.devices.map((x) =>
+                            x.id === d.id ? { ...x, control } : x,
+                          ),
+                        });
+                        void run("mobile.control", { id: d.id, control });
+                      }}
+                    />
+                    可以操作
+                  </label>
                   <span className={`agent-badge ${d.online ? "ok" : ""}`}>
                     {d.online ? "在线" : "离线"}
                   </span>

@@ -4,6 +4,9 @@ import SwiftUI
 struct TodayView: View {
   @Environment(SyncStore.self) private var store
   @Environment(\.palette) private var palette
+  @State private var adding = false
+  @State private var newTodo = ""
+  @State private var failed: String?
 
   var body: some View {
     NavigationStack {
@@ -23,6 +26,29 @@ struct TodayView: View {
         ToolbarItem(placement: .topBarTrailing) { LinkPill() }
       }
       .navigationTitle(greeting)
+      .alert("加一件待办", isPresented: $adding) {
+        TextField("比如：买猫粮", text: $newTodo)
+        Button("添加") {
+          let title = newTodo.trimmingCharacters(in: .whitespacesAndNewlines)
+          newTodo = ""
+          guard !title.isEmpty else { return }
+          act("addTodo", ["title": title])
+        }
+        Button("取消", role: .cancel) { newTodo = "" }
+      }
+      .alert("没有成功", isPresented: Binding(get: { failed != nil }, set: { if !$0 { failed = nil } })) {
+        Button("好") { failed = nil }
+      } message: {
+        Text(failed ?? "")
+      }
+    }
+  }
+
+  private var canAct: Bool { store.control && store.link == .online }
+
+  private func act(_ method: String, _ params: [String: Any]) {
+    Task {
+      do { try await store.perform(method, params) } catch { failed = error.localizedDescription }
     }
   }
 
@@ -87,21 +113,37 @@ struct TodayView: View {
         if !todos.isEmpty {
           Text("\(todos.count - open.count)/\(todos.count)").font(.rounded(13)).foregroundStyle(palette.muted)
         }
+        if canAct {
+          Button {
+            adding = true
+          } label: {
+            Image(systemName: "plus.circle.fill").font(.system(size: 20))
+          }
+          .accessibilityLabel("加一件待办")
+        }
       }
       if todos.isEmpty {
         Text("没有待办。").font(.rounded(14)).foregroundStyle(palette.muted)
       }
       ForEach((open + todos.filter(\.done)).prefix(20)) { t in
-        HStack(spacing: 10) {
-          Image(systemName: t.done ? "checkmark.circle.fill" : "circle")
-            .foregroundStyle(t.done ? palette.accent : palette.muted)
-          Text(t.title)
-            .font(.rounded(15))
-            .strikethrough(t.done)
-            .foregroundStyle(t.done ? palette.muted : palette.ink)
+        Button {
+          act("todo", ["id": t.id])
+        } label: {
+          HStack(spacing: 10) {
+            Image(systemName: t.done ? "checkmark.circle.fill" : "circle")
+              .foregroundStyle(t.done ? palette.accent : palette.muted)
+            Text(t.title)
+              .font(.rounded(15))
+              .strikethrough(t.done)
+              .foregroundStyle(t.done ? palette.muted : palette.ink)
+            Spacer(minLength: 0)
+          }
+          .contentShape(Rectangle())
         }
-        .accessibilityElement(children: .combine)
+        .buttonStyle(.plain)
+        .disabled(!canAct)
         .accessibilityLabel("\(t.done ? "已完成" : "未完成")：\(t.title)")
+        .accessibilityHint(canAct ? "轻点切换完成" : "")
       }
     }
   }

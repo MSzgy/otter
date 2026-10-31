@@ -141,6 +141,17 @@ class SyncHub {
       if (t.seq === 0) {
         t.value = next;
         t.seq = 1;
+        // A topic that had nothing to show when phones caught up (the
+        // backend still starting, say) reaches them now, whole.
+        const snap = {
+          t: "snap",
+          topic,
+          seq: 1,
+          epoch: this.epoch,
+          value: next,
+          at: this.now(),
+        };
+        for (const listener of this.listeners) listener(snap);
         return;
       }
       const ops = diff(t.value, next);

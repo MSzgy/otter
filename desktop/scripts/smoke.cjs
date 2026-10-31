@@ -2099,6 +2099,7 @@ const { execFileSync } = require("node:child_process");
       .waitFor();
     assert.deepEqual(Object.keys(phone.topics).sort(), [
       "agents",
+      "cards",
       "chat",
       "otter",
       "status",
@@ -2159,10 +2160,129 @@ const { execFileSync } = require("node:child_process");
     }
     const lag = phone.stats();
     assert(lag.p95 < 100, `p50 ${lag.p50} ms, p95 ${lag.p95} ms`);
+    // Acting from the phone: each goes through the desktop's own code.
+    assert.equal(phone.control, true, "a new phone may act");
+    const phoneAsk = (m, p) => phone.request(m, p);
+    // A message: the planner first, then the chat; the desktop shows it too.
+    const sent = await phoneAsk("send", { session, text: "手机发的消息" });
+    assert.equal(sent.kind, "chat");
+    assert.equal(sent.session, session);
+    await panel
+      .locator(".chat-message.user")
+      .filter({ hasText: "手机发的消息" })
+      .waitFor();
+    await until(
+      () =>
+        phone.topics.chat.turn?.id === sent.turn &&
+        phone.topics.chat.turn.status === "complete",
+    );
+    await panel
+      .getByText("你好，我是 Otter。很高兴和你聊天。")
+      .last()
+      .waitFor();
+    // A planner card, confirmed on the phone; the receipt joins the chat.
+    const proposal = await phoneAsk("send", {
+      session,
+      text: "明天上午十点提醒我检查机器人",
+    });
+    assert.equal(proposal.kind, "proposal");
+    assert.equal(proposal.title, "确认创建本机提醒");
+    const done = await phoneAsk("confirm", {
+      id: proposal.id,
+      session: proposal.session,
+    });
+    assert.equal(done.ok, true);
+    assert.match(done.message, /已创建提醒：检查机器人/);
+    await panel
+      .locator(".chat-message.assistant")
+      .filter({ hasText: done.message })
+      .waitFor();
+    // Leave no reminder behind: a later group creates this one itself.
+    await panel.evaluate(async () => {
+      const { reminders } = await window.otter.action("assistant.get");
+      for (const r of reminders.filter((r) => r.title === "检查机器人"))
+        await window.otter.action("assistant.change", {
+          id: r.id,
+          status: "cancelled",
+        });
+      await window.otter.action("assistant.clear");
+    });
+    const dismissed = await phoneAsk("send", {
+      session,
+      text: "明天上午十点提醒我检查机器人",
+    });
+    assert.equal(dismissed.kind, "proposal");
+    assert.equal(
+      await phoneAsk("dismiss", { requestId: dismissed.requestId }),
+      true,
+    );
+    // A tool card waits on both sides; the phone answers it.
+    const asked = await phoneAsk("send", { session, text: "让 Codex 慢慢做" });
+    assert.equal(asked.kind, "chat");
+    await until(() =>
+      phone.topics.cards.tools.some((c) => c.session === session),
+    );
+    const toolCard = phone.topics.cards.tools.find(
+      (c) => c.session === session,
+    );
+    assert.equal(toolCard.label, "派任务给 AI 代理");
+    assert.equal(toolCard.alwaysAsk, true);
+    assert.match(toolCard.detail, /交给 Codex：慢慢做的检查/);
+    await panel
+      .getByRole("region", { name: "工具请求：派任务给 AI 代理" })
+      .waitFor();
+    await phoneAsk("tool", { id: toolCard.id, decision: "once" });
+    await panel
+      .getByRole("region", { name: "工具请求：派任务给 AI 代理" })
+      .waitFor({ state: "detached" });
+    await until(() => phone.topics.cards.tools.length === 0);
+    await until(() =>
+      phone.topics.agents.tasks.some((t) => t.status === "running"),
+    );
+    const running = phone.topics.agents.tasks.find(
+      (t) => t.status === "running",
+    );
+    await phoneAsk("stopAgent", { id: running.id });
+    await until(() =>
+      phone.topics.agents.tasks.some(
+        (t) => t.id === running.id && t.status === "stopped",
+      ),
+    );
+    // To-dos: add one and tick it off.
+    await phoneAsk("addTodo", { title: "手机加的待办" });
+    await until(() =>
+      phone.topics.today.todos.some((t) => t.title === "手机加的待办"),
+    );
+    const phoneTodo = phone.topics.today.todos.find(
+      (t) => t.title === "手机加的待办",
+    );
+    await phoneAsk("todo", { id: phoneTodo.id });
+    await until(() =>
+      phone.topics.today.todos.some((t) => t.id === phoneTodo.id && t.done),
+    );
+    await assert.rejects(phoneAsk("send", { session, text: " " }), /1 到 6000/);
     phone.report();
     await go(panel, "偏好设置");
     await settingsNav.getByRole("button", { name: "手机" }).click();
     await myPhones.getByText(/在线 · 延迟中位 \d+ ms/).waitFor();
+    // Only looking: the switch reaches the phone at once and actions stop.
+    await myPhones
+      .getByRole("checkbox", { name: "smoke 手机 可以操作", exact: true })
+      .uncheck();
+    await until(() => phone.control === false);
+    await assert.rejects(
+      phone.request("addTodo", { title: "不该加上" }),
+      /只能看/,
+    );
+    assert.deepEqual(
+      Object.keys(await phone.request("history", { session }))[0],
+      "0",
+      "Reading still works",
+    );
+    await myPhones
+      .getByRole("checkbox", { name: "smoke 手机 可以操作", exact: true })
+      .check();
+    await until(() => phone.control === true);
     await myPhones.scrollIntoViewIfNeeded();
     await panel.screenshot({
       path: path.join(output, "otter-mobile-settings.png"),
@@ -2184,7 +2304,7 @@ const { execFileSync } = require("node:child_process");
     await phoneLink.getByText(/正在等手机连接/).waitFor({ state: "detached" });
     await panel.keyboard.press("Escape");
     console.log(
-      `PASS: phone link: switched on in settings, paired from the QR link over the real Electron link, today and chat followed (a streamed reply as appended text), history read, nothing private sent, latency p50 ${Math.round(lag.p50)} ms / p95 ${Math.round(lag.p95)} ms shown in settings, revoked and kept out, switched off; the pet cannot reach it.`,
+      `PASS: phone link: switched on in settings, paired from the QR link over the real Electron link, today and chat followed (a streamed reply as appended text), history read, nothing private sent, latency p50 ${Math.round(lag.p50)} ms / p95 ${Math.round(lag.p95)} ms shown in settings; from the phone: a message sent (shown on the desktop), a planner card confirmed and one dismissed, a tool card answered (gone from the desktop too), a Codex task stopped, a to-do added and ticked; made view-only (actions refused, reading kept) and back; revoked and kept out, switched off; the pet cannot reach it.`,
     );
     console.log(
       "PASS: reading a web page asks first and refuses this Mac and the local network; MCP server added from settings: preview first, its tools offered, a writing call waits for the card, 允许一次 runs it, 拒绝 does not, 不用再问 skips the card, disable and remove; servers added from chat after a card (a pasted command, and a remote HTTP server with a token whose tool then runs after 允许); a skill found by 重新扫描, read through use_skill, and not offered once off; Codex, Claude Code and shared skill folders read in place, merged when linked, switched per folder and per skill, and one installed later offered with the next message; the shipped add-mcp-server skill read, then a server proposed through otter_add_mcp_server and added after 允许一次; a VS Code-shaped remote config pasted into settings.",

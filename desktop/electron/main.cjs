@@ -156,16 +156,18 @@ const evolution = new EvolutionController({
 });
 // Which phone topic each desktop event may have changed.
 const SYNC_TOPICS = {
-  preferences: "status",
-  connection: "status",
-  "job.changed": "status",
-  "pet.changed": "otter",
-  "body.changed": "otter",
+  preferences: ["status"],
+  // The backend coming (back) online also means the chat list can be read.
+  connection: ["status", "chat"],
+  "job.changed": ["status"],
+  "pet.changed": ["otter"],
+  "body.changed": ["otter"],
 };
 function broadcast(event) {
   body.observe(event);
   evolution.observe(event);
-  if (SYNC_TOPICS[event.type]) syncHub?.touch(SYNC_TOPICS[event.type]);
+  if (event.type === "connection") chatSessions = null;
+  for (const topic of SYNC_TOPICS[event.type] || []) syncHub?.touch(topic);
   for (const win of [pet, panel])
     if (win && !win.isDestroyed()) win.webContents.send("otter:event", event);
 }
@@ -561,6 +563,7 @@ const builtinTools = {
 const toolHost = new ToolHost({
   sources: [builtinTools],
   onChange: (pending) => {
+    syncHub?.touch("cards");
     if (panel && !panel.isDestroyed())
       panel.webContents.send("otter:event", {
         type: "tools.pending",
@@ -839,6 +842,179 @@ async function deliverReport(task) {
     data: { message: `${headline}：${task.title}` },
   });
 }
+// Planning, confirming and sending a message: one path for the desktop panel
+// and for phones, so a message from either goes through the same planner,
+// cards, password check and tools.
+const conversation = {
+  ready() {
+    if (!taskAssistant) throw new Error(assistantError);
+    if (!backend || backend.closed || switching)
+      throw new Error("后台尚未就绪。");
+    if (chatState?.status === "streaming")
+      throw new Error("请等待当前回复结束。");
+  },
+  async plan(value) {
+    this.ready();
+    // A password in the message stays here: the planner sees ••••, and
+    // only a 保存服务器 card may use it (it then goes to the keychain).
+    const { text, password } = takePassword(value?.text);
+    if (preferences.tasks?.enabled === false) {
+      if (password) throw new Error(PASSWORD_HELD);
+      return { kind: "chat" };
+    }
+    const id = value?.requestId;
+    evolution.begin("task", { id });
+    try {
+      const result = await taskAssistant.plan({
+        ...(value || {}),
+        text,
+        secret: password,
+      });
+      if (result.kind === "proposal") evolution.wait("task", id);
+      else evolution.cancel("task", id);
+      return result;
+    } catch (error) {
+      evolution.finish("task", id, { ok: false });
+      throw error;
+    }
+  },
+  async confirm(value) {
+    this.ready();
+    // Planner proposal IDs differ from the renderer's request ID. A cached
+    // receipt for an older proposal must not complete a newer visual task.
+    const id =
+      taskAssistant.pending && taskAssistant.pending.id === value?.id
+        ? taskAssistant.pending.requestId
+        : null;
+    evolution.resume("task", id);
+    try {
+      const result = await taskAssistant.confirm(value || {});
+      evolution.finish("task", id, {
+        ok: result.ok === true,
+        verified: result.ok === true,
+      });
+      return result;
+    } catch (error) {
+      evolution.finish("task", id, { ok: false });
+      throw error;
+    }
+  },
+  // The renderer never chooses tools; the host offers what is enabled,
+  // including skills installed in other tools since the last message.
+  async send(params) {
+    if (!backend || backend.closed || switching)
+      throw new Error("后台尚未就绪。");
+    if (takePassword(params.text).password) throw new Error(PASSWORD_HELD);
+    if (taskAssistant?.busy) throw new Error("请先等待或停止当前办事操作。");
+    try {
+      skills?.refresh();
+    } catch {}
+    const result = await backend.call("chat.send", {
+      ...params,
+      tools: toolsEnabled() ? toolHost.definitions() : [],
+    });
+    chatSessions = null;
+    syncHub?.touch("chat");
+    return result;
+  },
+};
+// After a phone changed a conversation, the desktop shows it too.
+function remoteChanged(sessionId) {
+  chatSessions = null;
+  syncHub?.touch("chat");
+  if (panel && !panel.isDestroyed())
+    panel.webContents.send("otter:event", {
+      type: "chat.note",
+      data: { sessionId },
+    });
+}
+// What a paired phone may do, when it is allowed to (设置 → 手机 → 可以操作).
+// Each goes through the same code as the desktop's own buttons.
+const phoneActions = {
+  send: async ({ session, text }) => {
+    if (typeof text !== "string" || !text.trim() || text.length > 6000)
+      throw new Error("消息要在 1 到 6000 字之间。");
+    conversation.ready();
+    let id = typeof session === "string" && session ? session : null;
+    if (!id) {
+      id = (await backend.call("chat.new")).id;
+      remoteChanged(id);
+    }
+    const requestId = randomUUID();
+    const plan = await conversation.plan({
+      text: text.trim(),
+      sessionId: id,
+      requestId,
+    });
+    if (plan.kind === "proposal")
+      return {
+        kind: "proposal",
+        session: id,
+        requestId,
+        id: plan.id,
+        title: plan.title,
+        detail: plan.detail,
+        expiresAt: plan.expiresAt,
+      };
+    if (plan.kind === "result") {
+      remoteChanged(id);
+      return {
+        kind: "result",
+        session: id,
+        ok: plan.ok,
+        message: plan.message,
+      };
+    }
+    if (plan.kind === "capture")
+      return {
+        kind: "result",
+        session: id,
+        ok: false,
+        message: "整理项目进度要在 Mac 上挑选资料，请到 Mac 上完成。",
+      };
+    if (plan.kind === "cancelled") return { kind: "cancelled", session: id };
+    const turn = await conversation.send({
+      session_id: id,
+      text: text.trim(),
+      request_id: randomUUID().replaceAll("-", ""),
+      use_memory: true,
+      context: "",
+    });
+    remoteChanged(id);
+    return { kind: "chat", session: id, turn: turn.id };
+  },
+  confirm: async ({ id, session }) => {
+    const result = await conversation.confirm({ id, sessionId: session });
+    remoteChanged(session);
+    return { ok: result.ok === true, message: result.message };
+  },
+  dismiss: ({ requestId }) => {
+    taskAssistant?.cancel(requestId);
+    evolution.cancel("task", requestId);
+    return true;
+  },
+  tool: ({ id, decision }) => {
+    toolHost.decide(id, decision);
+    return true;
+  },
+  stop: async ({ turn }) => {
+    if (!backend || backend.closed) throw new Error("后台尚未就绪。");
+    await backend.call("chat.cancel", { turn_id: turn });
+    return true;
+  },
+  stopAgent: ({ id }) => {
+    agentTasks.stop(id);
+    return true;
+  },
+  todo: ({ id }) => {
+    assistantStore.changeTodo(id, false);
+    return true;
+  },
+  addTodo: ({ title }) => {
+    assistantStore.addTodo({ title });
+    return true;
+  },
+};
 // What a phone sees, topic by topic: small, and free of anything private
 // (no app awareness, window contents, clipboard or passwords).
 const syncSources = {
@@ -874,8 +1050,10 @@ const syncSources = {
   chat: async () => {
     if (!chatSessions && backend && !backend.closed && !switching)
       chatSessions = await backend.call("chat.sessions").catch(() => null);
+    // Not readable yet (the backend is starting): keep what phones have.
+    if (!chatSessions) return undefined;
     return {
-      sessions: (chatSessions || [])
+      sessions: chatSessions
         .slice(0, 30)
         .map(({ id, title, updated }) => ({ id, title, updated })),
       turn: chatState
@@ -904,6 +1082,18 @@ const syncSources = {
       result: t.result.slice(0, 4000),
       changes: t.changes.slice(0, 20),
       error: t.error,
+    })),
+  }),
+  // Cards waiting for an answer, so a phone can answer them too.
+  cards: () => ({
+    tools: toolHost.pending().map((r) => ({
+      id: r.id,
+      session: r.sessionId,
+      label: r.label,
+      origin: r.origin || "",
+      detail:
+        r.detail || JSON.stringify(r.arguments || {}, null, 1).slice(0, 2000),
+      alwaysAsk: !!r.alwaysAsk,
     })),
   }),
   otter: () => {
@@ -1479,27 +1669,15 @@ ipcMain.handle("otter:call", async (event, method, params) => {
   )
     throw new Error("参数无效。");
   if (!backend || switching) throw new Error("后台尚未就绪。");
-  // The renderer never chooses tools; the host offers what is enabled,
-  // including skills installed in other tools since the last message.
   if (method === "chat.send") {
-    if (takePassword(params.text).password) throw new Error(PASSWORD_HELD);
-    try {
-      skills?.refresh();
-    } catch {}
+    if (event.sender !== panel.webContents)
+      throw new Error("请在设置面板中配置模型。");
+    return conversation.send(params);
   }
-  if (method === "chat.send")
-    params = {
-      ...params,
-      tools: toolsEnabled() ? toolHost.definitions() : [],
-    };
   if (
-    [
-      "models.save",
-      "models.reset",
-      "chat.send",
-      "chat.new",
-      "chat.delete",
-    ].includes(method) &&
+    ["models.save", "models.reset", "chat.new", "chat.delete"].includes(
+      method,
+    ) &&
     taskAssistant?.busy
   )
     throw new Error("请先等待或停止当前办事操作。");
@@ -1625,6 +1803,8 @@ async function panelAction(event, name, value) {
     if (name === "mobile.pair") return mobile.startPairing();
     if (name === "mobile.cancel") return mobile.cancelPairing();
     if (name === "mobile.revoke") return mobile.revoke(value?.id);
+    if (name === "mobile.control")
+      return mobile.setControl(value?.id, value?.control === true);
     throw new Error("不支持的手机操作。");
   }
   if (name.startsWith("agents.")) {
@@ -1769,56 +1949,12 @@ async function panelAction(event, name, value) {
       evolution.cancel("task", value?.requestId);
       return;
     }
-    if (!backend || backend.closed || switching)
-      throw new Error("后台尚未就绪。");
-    if (chatState?.status === "streaming")
-      throw new Error("请等待当前回复结束。");
-    if (name === "tasks.plan") {
-      // A password in the message stays here: the planner sees ••••, and
-      // only a 保存服务器 card may use it (it then goes to the keychain).
-      const { text, password } = takePassword(value?.text);
-      if (preferences.tasks?.enabled === false) {
-        if (password) throw new Error(PASSWORD_HELD);
-        return { kind: "chat" };
-      }
-      const id = value?.requestId;
-      evolution.begin("task", { id });
-      try {
-        const result = await taskAssistant.plan({
-          ...(value || {}),
-          text,
-          secret: password,
-        });
-        if (result.kind === "proposal") evolution.wait("task", id);
-        else evolution.cancel("task", id);
-        return result;
-      } catch (error) {
-        evolution.finish("task", id, { ok: false });
-        throw error;
-      }
-    }
-    if (name === "tasks.undo-setting")
+    if (name === "tasks.plan") return conversation.plan(value);
+    if (name === "tasks.undo-setting") {
+      conversation.ready();
       return taskAssistant.undoSetting(value || {});
-    if (name === "tasks.confirm") {
-      // Planner proposal IDs differ from the renderer's request ID. A cached
-      // receipt for an older proposal must not complete a newer visual task.
-      const id =
-        taskAssistant.pending && taskAssistant.pending.id === value?.id
-          ? taskAssistant.pending.requestId
-          : null;
-      evolution.resume("task", id);
-      try {
-        const result = await taskAssistant.confirm(value || {});
-        evolution.finish("task", id, {
-          ok: result.ok === true,
-          verified: result.ok === true,
-        });
-        return result;
-      } catch (error) {
-        evolution.finish("task", id, { ok: false });
-        throw error;
-      }
     }
+    if (name === "tasks.confirm") return conversation.confirm(value);
     throw new Error("不支持的办事操作。");
   }
   if (name === "snapshot")
@@ -2454,6 +2590,7 @@ else {
           });
       },
       requests: syncRequests,
+      actions: phoneActions,
     });
     if (mobile.enabled) void mobile.start();
     appContentReader = new AppContentReader(

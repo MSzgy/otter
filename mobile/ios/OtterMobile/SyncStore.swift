@@ -1,6 +1,9 @@
 import Foundation
 import Observation
 import UIKit
+import os
+
+private let log = Logger(subsystem: "dev.otter.mobile", category: "link")
 
 // Everything the app shows. Topics live as the Mac's JSON (patched in place)
 // and are decoded for the views after each change; the last state is cached
@@ -23,6 +26,9 @@ final class SyncStore {
   private(set) var chat: ChatTopic?
   private(set) var agents: AgentsTopic?
   private(set) var otter: OtterTopic?
+  private(set) var cards: CardsTopic?
+  // Whether the Mac lets this phone act (设置 → 手机 → 可以操作).
+  private(set) var control = true
   private(set) var updated: Date?
   private(set) var latency: (p50: Double, p95: Double)?
   private(set) var rtt: Double?
@@ -92,7 +98,11 @@ final class SyncStore {
   }
 
   func connect() {
-    guard let mac, connection == nil, active, link != .revoked else { return }
+    guard let mac, connection == nil, active, link != .revoked else {
+      log.info("connect skipped: mac \(self.mac != nil) connection \(self.connection != nil) active \(self.active) link \(String(describing: self.link))")
+      return
+    }
+    log.info("connecting")
     open(mac, code: nil)
   }
 
@@ -133,11 +143,15 @@ final class SyncStore {
         seqs = [:]
       }
       if let e = message["epoch"] as? String, e != epoch { epoch = e }
+      if let device = message["device"] as? [String: Any] {
+        control = device["control"] as? Bool ?? true
+      }
       link = .online
       startHeartbeat()
     case .message(let message):
       receive(message)
     case .closed(let code, let reason):
+      log.info("closed \(code ?? 0) \(reason) pairing \(pairing)")
       connection = nil
       heartbeat?.invalidate()
       heartbeat = nil
@@ -157,7 +171,8 @@ final class SyncStore {
       }
       link = .offline(reason)
       guard active else { return }
-      let delay = [0.3, 1, 2, 4, 8][min(retries, 4)]
+      // Short and capped: the Mac is usually back within seconds.
+      let delay = [0.3, 1, 2, 3][min(retries, 3)]
       retries += 1
       let work = DispatchWorkItem { [weak self] in
         MainActor.assumeIsolated { self?.connect() }
@@ -215,6 +230,8 @@ final class SyncStore {
       seqs[topic] = seq
       if let at = message["at"] as? Double, let offset { record(now - (at - offset)) }
       changed(topic)
+    case "device":
+      control = message["control"] as? Bool ?? control
     case "pong":
       guard let t0 = message["t0"] as? Double, let tm = message["tm"] as? Double else { return }
       let trip = now - t0
@@ -256,11 +273,12 @@ final class SyncStore {
     case "chat": chat = decodeJSON(ChatTopic.self, topics[topic])
     case "agents": agents = decodeJSON(AgentsTopic.self, topics[topic])
     case "otter": otter = decodeJSON(OtterTopic.self, topics[topic])
+    case "cards": cards = decodeJSON(CardsTopic.self, topics[topic])
     default: break
     }
   }
   private func decodeAll() {
-    for topic in ["status", "today", "chat", "agents", "otter"] { decode(topic) }
+    for topic in ["status", "today", "chat", "agents", "otter", "cards"] { decode(topic) }
   }
 
   // MARK: Requests
@@ -280,6 +298,32 @@ final class SyncStore {
       waiting[id] = continuation
       connection.send(["t": "req", "id": id, "m": method, "p": params])
     }
+  }
+
+  // MARK: Actions (each runs the desktop's own code on the Mac)
+
+  func send(session: String?, text: String) async throws -> SendResult {
+    var params: [String: Any] = ["text": text]
+    if let session { params["session"] = session }
+    let value = try await request("send", params)
+    guard let result = decodeJSON(SendResult.self, value) else {
+      throw RequestError.failed("Mac 的回答看不懂")
+    }
+    return result
+  }
+
+  func confirm(_ proposal: SendResult) async throws -> ConfirmResult {
+    let value = try await request(
+      "confirm", ["id": proposal.id ?? "", "session": proposal.session ?? ""])
+    return decodeJSON(ConfirmResult.self, value) ?? ConfirmResult(ok: false, message: "没有结果")
+  }
+
+  func dismiss(_ proposal: SendResult) async {
+    _ = try? await request("dismiss", ["requestId": proposal.requestId ?? ""])
+  }
+
+  func perform(_ method: String, _ params: [String: Any]) async throws {
+    _ = try await request(method, params)
   }
 
   private func failWaiting(_ reason: String) {

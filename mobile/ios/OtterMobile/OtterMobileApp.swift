@@ -44,7 +44,9 @@ struct MainTabs: View {
   var body: some View {
     TabView {
       TodayView().tabItem { Label("今天", systemImage: "sun.max") }
-      ChatListView().tabItem { Label("聊天", systemImage: "bubble.left.and.bubble.right") }
+      ChatListView()
+        .tabItem { Label("聊天", systemImage: "bubble.left.and.bubble.right") }
+        .badge(store.cards?.tools.count ?? 0)
       TasksView().tabItem { Label("任务", systemImage: "hammer") }
       MeView().tabItem { Label("我的", systemImage: "person.crop.circle") }
     }

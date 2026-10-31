@@ -98,7 +98,11 @@ class SyncClient {
   }
   receive(message) {
     const now = Date.now();
-    if (message.t === "ready") this.epoch = message.epoch;
+    if (message.t === "ready") {
+      this.epoch = message.epoch;
+      this.control = message.device?.control !== false;
+    }
+    if (message.t === "device") this.control = message.control;
     if (message.t === "snap") {
       this.epoch = message.epoch;
       this.topics[message.topic] = message.value;

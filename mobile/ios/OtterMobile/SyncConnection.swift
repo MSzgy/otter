@@ -72,7 +72,7 @@ final class SyncConnection {
       }
     }
     self.deadline = deadline
-    DispatchQueue.main.asyncAfter(deadline: .now() + 8, execute: deadline)
+    DispatchQueue.main.asyncAfter(deadline: .now() + 6, execute: deadline)
   }
 
   private func update(_ candidate: NWConnection, _ state: NWConnection.State) {
