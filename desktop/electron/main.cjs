@@ -34,6 +34,8 @@ const { SettingsRegistry } = require("./settings-registry.cjs");
 const { Backdrop, SCHEME, MAX_TRANSPARENCY } = require("./backdrop.cjs");
 const { AgentTasks, codexAgent, report } = require("./agents.cjs");
 const { shellPath } = require("./mcp-client.cjs");
+const { SyncHub } = require("./sync-hub.cjs");
+const { MobileLink } = require("./mobile.cjs");
 const { ToolHost } = require("./tool-host.cjs");
 const { WebReader } = require("./web-reader.cjs");
 const { Extensions, summary } = require("./extensions.cjs");
@@ -152,9 +154,18 @@ const evolution = new EvolutionController({
         });
   },
 });
+// Which phone topic each desktop event may have changed.
+const SYNC_TOPICS = {
+  preferences: "status",
+  connection: "status",
+  "job.changed": "status",
+  "pet.changed": "otter",
+  "body.changed": "otter",
+};
 function broadcast(event) {
   body.observe(event);
   evolution.observe(event);
+  if (SYNC_TOPICS[event.type]) syncHub?.touch(SYNC_TOPICS[event.type]);
   for (const win of [pet, panel])
     if (win && !win.isDestroyed()) win.webContents.send("otter:event", event);
 }
@@ -567,6 +578,9 @@ let ssh;
 let backdrop;
 // AI 代理: tasks handed to Codex (later Claude Code, Grok) from chat.
 let agentTasks;
+// 手机: what a paired phone sees of this desktop, and the link it uses.
+let syncHub, mobile;
+let chatSessions = null;
 // Pictures load as otter-backdrop://image/<file>; registered before ready.
 protocol.registerSchemesAsPrivileged([
   { scheme: SCHEME, privileges: { standard: true, secure: true } },
@@ -797,6 +811,10 @@ async function deliverReport(task) {
       ]);
     }
   }
+  if (delivered) {
+    chatSessions = null;
+    syncHub?.touch("chat");
+  }
   if (delivered && panel && !panel.isDestroyed())
     panel.webContents.send("otter:event", {
       type: "chat.note",
@@ -821,6 +839,105 @@ async function deliverReport(task) {
     data: { message: `${headline}：${task.title}` },
   });
 }
+// What a phone sees, topic by topic: small, and free of anything private
+// (no app awareness, window contents, clipboard or passwords).
+const syncSources = {
+  status: () => ({
+    mac: mobile?.name || "",
+    version: app.getVersion(),
+    online: !!currentHealth && !switching,
+    message: offlineMessage || "",
+    quiet: !!preferences.quiet,
+    theme: themeQuery(),
+    job: lastJob
+      ? { status: lastJob.status, date: lastJob.date || null }
+      : null,
+  }),
+  today: () => {
+    const s = assistantStore?.snapshot();
+    if (!s) return { reminders: [], todos: [], focus: null };
+    return {
+      reminders: s.reminders
+        .filter((r) => r.status === "pending")
+        .sort((a, b) => a.dueAt - b.dueAt)
+        .slice(0, 50)
+        .map(({ id, title, kind, dueAt }) => ({ id, title, kind, dueAt })),
+      todos: s.todos.slice(0, 80).map(({ id, title, done, createdAt }) => ({
+        id,
+        title,
+        done,
+        createdAt,
+      })),
+      focus: s.focus ? { id: s.focus.id, dueAt: s.focus.dueAt } : null,
+    };
+  },
+  chat: async () => {
+    if (!chatSessions && backend && !backend.closed && !switching)
+      chatSessions = await backend.call("chat.sessions").catch(() => null);
+    return {
+      sessions: (chatSessions || [])
+        .slice(0, 30)
+        .map(({ id, title, updated }) => ({ id, title, updated })),
+      turn: chatState
+        ? {
+            id: chatState.id,
+            session: chatState.session_id,
+            status: chatState.status,
+            content: chatState.content || "",
+            error: chatState.error || "",
+          }
+        : null,
+    };
+  },
+  agents: () => ({
+    tasks: (agentTasks?.snapshot().tasks || []).slice(0, 20).map((t) => ({
+      id: t.id,
+      agent: agentTasks.label(t.agent),
+      title: t.title,
+      status: t.status,
+      statusText: t.statusText,
+      progress: t.progress || "",
+      created: t.created,
+      ended: t.ended,
+      folder: short(t.cwd),
+      access: t.access,
+      result: t.result.slice(0, 4000),
+      changes: t.changes.slice(0, 20),
+      error: t.error,
+    })),
+  }),
+  otter: () => {
+    const pet = petState.snapshot();
+    const b = body.snapshot();
+    return {
+      mood: pet.mood,
+      // Only what the otter is doing now; its idle hint is about the mouse.
+      caption: pet.effect?.caption || (pet.asleep ? "水獭睡着了" : ""),
+      asleep: !!pet.asleep,
+      body: { enabled: b.enabled, status: b.status, message: b.message || "" },
+    };
+  },
+};
+// What a phone may ask for. Read-only for now.
+const syncRequests = {
+  history: async ({ session }) => {
+    if (typeof session !== "string" || !backend || backend.closed)
+      throw new Error("后台尚未就绪。");
+    const rows = await backend.call("chat.history", { session_id: session });
+    return rows.slice(-60).map((m) => ({
+      id: m.id,
+      role: m.role,
+      content: String(m.content || "").slice(0, 20000),
+      status: m.status,
+      agent: m.turn_id?.startsWith("agent-") ? m.turn_id.split("-")[1] : "",
+    }));
+  },
+  task: async ({ id }) => {
+    const t = agentTasks?.snapshot().tasks.find((t) => t.id === id);
+    if (!t) throw new Error("没有这个任务。");
+    return { prompt: t.prompt, result: t.result, changes: t.changes };
+  },
+};
 const toolsEnabled = () =>
   extensions ? extensions.enabled : preferences.extensions?.tools !== false;
 function preferencesPublic() {
@@ -918,7 +1035,9 @@ async function connect() {
         if (chatState.status !== "streaming") {
           toolHost.cancelTurn(chatState.id);
           for (const resolve of chatIdle.splice(0)) resolve();
+          chatSessions = null;
         }
+        syncHub?.touch("chat");
         body.observe({
           type: "chat.activity",
           data: { status: chatState.status },
@@ -1393,6 +1512,10 @@ ipcMain.handle("otter:call", async (event, method, params) => {
   )
     throw new Error("请在设置面板中配置模型。");
   const result = await backend.call(method, params);
+  if (/^(chat\.(new|delete)|tasks\.record)$/.test(method)) {
+    chatSessions = null;
+    syncHub?.touch("chat");
+  }
   if (method === "chat.delete") {
     taskAssistant?.forget(params.session_id);
     toolHost.forgetSession(params.session_id);
@@ -1492,6 +1615,17 @@ async function panelAction(event, name, value) {
       return backdrop.setTransparency(value);
     if (name === "backdrop.chat") return backdrop.chatSet(value);
     throw new Error("不支持的背景图操作。");
+  }
+  if (name.startsWith("mobile.")) {
+    if (event.sender !== panel.webContents)
+      throw new Error("请在设置里管理手机。");
+    if (!mobile) throw new Error("手机连接尚未就绪。");
+    if (name === "mobile.get") return mobile.snapshot();
+    if (name === "mobile.enable") return mobile.setEnabled(value === true);
+    if (name === "mobile.pair") return mobile.startPairing();
+    if (name === "mobile.cancel") return mobile.cancelPairing();
+    if (name === "mobile.revoke") return mobile.revoke(value?.id);
+    throw new Error("不支持的手机操作。");
   }
   if (name.startsWith("agents.")) {
     if (event.sender !== panel.webContents)
@@ -2288,6 +2422,7 @@ else {
       },
       home: app.getPath("home"),
       onChange: (data) => {
+        syncHub?.touch("agents");
         if (panel && !panel.isDestroyed())
           panel.webContents.send("otter:event", {
             type: "agents.changed",
@@ -2298,6 +2433,29 @@ else {
     });
     void agentTasks.detectAll().catch(() => {});
     toolHost.addSource(agentTools);
+    syncHub = new SyncHub({ sources: syncSources, delays: { chat: 33 } });
+    mobile = new MobileLink({
+      hub: syncHub,
+      dir: path.join(app.getPath("userData"), "mobile"),
+      load: () => preferences.mobile,
+      save: (value) => {
+        preferences.mobile = value;
+        save();
+      },
+      // Tests run their own Mac on a free port.
+      ...(process.env.OTTER_MOBILE_PORT
+        ? { port: Number(process.env.OTTER_MOBILE_PORT) }
+        : {}),
+      onChange: (data) => {
+        if (panel && !panel.isDestroyed())
+          panel.webContents.send("otter:event", {
+            type: "mobile.changed",
+            data,
+          });
+      },
+      requests: syncRequests,
+    });
+    if (mobile.enabled) void mobile.start();
     appContentReader = new AppContentReader(
       app.isPackaged
         ? path.join(process.resourcesPath, "native/otter-app-content")
@@ -2403,6 +2561,7 @@ else {
         {
           emit: (state) => {
             body.observe({ type: "assistant.changed", data: state });
+            syncHub?.touch("today");
             if (panel && !panel.isDestroyed())
               panel.webContents.send("otter:event", {
                 type: "assistant.changed",
@@ -2548,6 +2707,8 @@ else {
     evolution.close();
     extensions?.stopAll();
     agentTasks?.stopAll();
+    mobile?.stop();
+    syncHub?.stop();
     globalShortcut.unregisterAll();
     (backend ? backend.stop() : Promise.resolve()).finally(() => app.quit());
   });

@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>Otter 在局域网里找到你的 Mac，并直接连过去同步。</string>
+	<key>NSCameraUsageDescription</key>
+	<string>扫描 Mac 上 Otter 显示的配对二维码。</string>
+	<key>NSBonjourServices</key>
+	<array>
+		<string>_otter._tcp</string>
+	</array>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>dev.otter.mobile.pair</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>otter</string>
+			</array>
+		</dict>
+	</array>
+</dict>
+</plist>

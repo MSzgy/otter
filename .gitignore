@@ -40,3 +40,8 @@ venv/
 /desktop/test-results/
 /desktop/playwright-report/
 /output/
+
+# ─────── iOS(Xcode 本地状态)───────
+mobile/ios/OtterMobile.xcodeproj/xcuserdata/
+mobile/ios/OtterMobile.xcodeproj/project.xcworkspace/xcuserdata/
+mobile/ios/build/

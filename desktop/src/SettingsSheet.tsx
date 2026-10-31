@@ -6,6 +6,7 @@ export type SettingsSection =
   | "tools"
   | "ssh"
   | "agents"
+  | "mobile"
   | "privacy"
   | "handoff"
   | "body"

@@ -23,6 +23,7 @@ import { VoiceSettings } from "./VoiceControls";
 import { ExtensionsPane } from "./ExtensionsPane";
 import { SshPane } from "./SshPane";
 import { AgentsPane } from "./AgentTasks";
+import { MobilePane } from "./MobilePane";
 import { SettingsSheet, type SettingsSection } from "./SettingsSheet";
 import { ThemePicker, applyTheme, isTheme, useTheme } from "./ThemePicker";
 import { BackdropPicker, useBackdrop } from "./BackdropPicker";
@@ -736,6 +737,7 @@ function Panel() {
             },
             { id: "ssh", label: "SSH 服务器", content: <SshPane /> },
             { id: "agents", label: "AI 代理", content: <AgentsPane /> },
+            { id: "mobile", label: "手机", content: <MobilePane /> },
             { id: "privacy", label: "隐私与感知", content: <AwarenessPane /> },
             {
               id: "handoff",

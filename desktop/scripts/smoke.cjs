@@ -12,6 +12,8 @@ const { startFakeHttpMcp } = require("./fake-mcp-http.cjs");
 const { startSshd } = require("./local-sshd.cjs");
 const { extractPage } = require("../electron/page-reader.cjs");
 const { nativeRead } = require("../electron/awareness.cjs");
+const { SyncClient } = require("./sync-client.cjs");
+const { readPairingLink } = require("../electron/sync-crypto.cjs");
 const { execFileSync } = require("node:child_process");
 (async () => {
   const userData = fs.mkdtempSync(
@@ -632,6 +634,28 @@ const { execFileSync } = require("node:child_process");
         res.end(JSON.stringify({ error: "private-server-error" }));
         return;
       }
+      if (body.stream && lastUser === "手机看流式") {
+        // A long reply in pieces, so the phone gets it as appended text.
+        res.setHeader("Content-Type", "text/event-stream");
+        const pieces = [
+          "这是一段要流到手机上的回复，第一段已经超过三十二个字了，接下来一段一段地加上去。",
+          "第二段。",
+          "第三段。",
+          "最后一段。",
+        ];
+        let i = 0;
+        const timer = setInterval(() => {
+          res.write(
+            `data: ${JSON.stringify({ choices: [{ delta: { content: pieces[i++] } }] })}\n\n`,
+          );
+          if (i === pieces.length) {
+            clearInterval(timer);
+            res.end("data: [DONE]\n\n");
+          }
+        }, 120);
+        res.on("close", () => clearInterval(timer));
+        return;
+      }
       if (body.stream) {
         res.setHeader("Content-Type", "text/event-stream");
         const slow = body.messages.at(-1).content === "慢慢回答";
@@ -667,6 +691,13 @@ const { execFileSync } = require("node:child_process");
   const apiUrl = `http://127.0.0.1:${server.address().port}/v1`;
   let app;
   const errors = [];
+  const until = async (check, ms = 10000) => {
+    const end = Date.now() + ms;
+    while (!check()) {
+      if (Date.now() > end) throw new Error("timed out waiting");
+      await new Promise((r) => setTimeout(r, 10));
+    }
+  };
   try {
     app = await electron.launch({
       args: process.env.OTTER_TEST_APP ? [] : [path.resolve(__dirname, "..")],
@@ -680,6 +711,8 @@ const { execFileSync } = require("node:child_process");
         OTTER_TEST_NO_TERMINAL: "1",
         OTTER_TEST_BACKDROP_PICK: backdropPick,
         OTTER_CODEX_BIN: fakeCodex,
+        // The phone link listens on a free port, so it never meets a real Otter.
+        OTTER_MOBILE_PORT: "0",
         OTTER_TEST_AGENT_FOLDER: agentProject,
         FAKE_CODEX_LOG: codexLog,
       },
@@ -2022,6 +2055,136 @@ const { execFileSync } = require("node:child_process");
     );
     console.log(
       "PASS: AI agents: Codex found with its version and login; a default folder picked; a task handed to Codex from chat only after 允许一次 on a card with folder, access and task, run as codex exec in its sandbox with the task on stdin, its report posted to the conversation by itself and seen by the model next turn; a slow one shown above the chat box and stopped; a failing one reported with its reason; all kept in settings, opened back in chat, deleted and cleared; the pet cannot reach them.",
+    );
+    // 手机: switched on in settings, a QR code to pair, and a phone (the Node
+    // client the iOS app mirrors) pairs over the real Electron link, follows
+    // today and chat (a streamed reply arrives as appended text), reads the
+    // history, reports its latency to settings, and is revoked; the pet cannot
+    // reach any of it.
+    await go(panel, "偏好设置");
+    const settingsNav = panel.getByRole("navigation", { name: "设置分组" });
+    await settingsNav.getByRole("button", { name: "手机" }).click();
+    const phoneLink = panel.getByRole("region", { name: "手机连接" });
+    await phoneLink.getByRole("checkbox", { name: "允许手机连接" }).check();
+    await phoneLink.getByText(/正在等手机连接/).waitFor();
+    const myPhones = panel.getByRole("region", { name: "我的手机" });
+    await myPhones.getByRole("button", { name: "添加手机" }).click();
+    await myPhones.getByRole("img", { name: "配对二维码" }).waitFor();
+    await panel.screenshot({
+      path: path.join(output, "otter-mobile-pair.png"),
+    });
+    assert(
+      await pet.evaluate(async () => {
+        try {
+          await window.otter.action("mobile.get");
+          return false;
+        } catch {
+          return true;
+        }
+      }),
+      "The pet window cannot reach the phone link",
+    );
+    const pairLink = (
+      await panel.evaluate(() => window.otter.action("mobile.get"))
+    ).pairing.link;
+    const phone = SyncClient.fromLink(pairLink, {
+      name: "smoke 手机",
+      address: "127.0.0.1",
+    });
+    await phone.connect({ pair: true });
+    await myPhones.getByText("已配对：smoke 手机", { exact: true }).waitFor();
+    await myPhones
+      .getByRole("article", { name: "手机：smoke 手机" })
+      .getByText("在线", { exact: true })
+      .waitFor();
+    assert.deepEqual(Object.keys(phone.topics).sort(), [
+      "agents",
+      "chat",
+      "otter",
+      "status",
+      "today",
+    ]);
+    assert.equal(phone.topics.status.online, true);
+    // Nothing private travels: no awareness, windows, clipboard or keys.
+    assert.doesNotMatch(
+      JSON.stringify(phone.topics),
+      /awareness|clipboard|api_key|apiKey|password/i,
+    );
+    await panel.evaluate(() =>
+      window.otter.action("assistant.todo-add", { title: "手机能看到的待办" }),
+    );
+    await until(() =>
+      phone.topics.today.todos.some((t) => t.title === "手机能看到的待办"),
+    );
+    const ops = [];
+    phone.on((m) => {
+      if (m.t === "patch" && m.topic === "chat") ops.push(...m.ops);
+    });
+    await panel.keyboard.press("Escape");
+    await go(panel, "与水獭聊天");
+    await panel.getByRole("button", { name: "新对话", exact: true }).click();
+    const before = phone.topics.chat.turn?.id;
+    await noteSay("手机看流式");
+    await until(
+      () =>
+        phone.topics.chat.turn?.id !== before &&
+        phone.topics.chat.turn?.status === "complete",
+      15000,
+    );
+    assert.match(phone.topics.chat.turn.content, /最后一段。$/);
+    assert(
+      ops.some((o) => o.o === "a" && o.p.join("/") === "turn/content"),
+      "A streamed reply travels as appended text",
+    );
+    const session = phone.topics.chat.turn.session;
+    const phoneHistory = await phone.request("history", { session });
+    assert.deepEqual(
+      phoneHistory.map((m) => m.role),
+      ["user", "assistant"],
+    );
+    assert.equal(phoneHistory[0].content, "手机看流式");
+    await until(() => phone.topics.chat.sessions[0]?.id === session);
+    // Latency over the real link: 40 changes, each timed from the change.
+    await phone.ping();
+    phone.latencies = [];
+    for (let i = 0; i < 40; i++) {
+      await panel.evaluate(
+        (i) =>
+          window.otter.action("assistant.todo-add", { title: `延迟 ${i}` }),
+        i,
+      );
+      await until(() =>
+        phone.topics.today.todos.some((t) => t.title === `延迟 ${i}`),
+      );
+    }
+    const lag = phone.stats();
+    assert(lag.p95 < 100, `p50 ${lag.p50} ms, p95 ${lag.p95} ms`);
+    phone.report();
+    await go(panel, "偏好设置");
+    await settingsNav.getByRole("button", { name: "手机" }).click();
+    await myPhones.getByText(/在线 · 延迟中位 \d+ ms/).waitFor();
+    await myPhones.scrollIntoViewIfNeeded();
+    await panel.screenshot({
+      path: path.join(output, "otter-mobile-settings.png"),
+    });
+    await myPhones
+      .getByRole("button", { name: "撤销 smoke 手机", exact: true })
+      .click();
+    await until(() => phone.closed);
+    assert.equal(phone.closed.code, 4003);
+    await assert.rejects(
+      new SyncClient({
+        key: phone.saved(),
+        mac: readPairingLink(pairLink),
+        address: "127.0.0.1",
+      }).connect(),
+      /4003/,
+    );
+    await phoneLink.getByRole("checkbox", { name: "允许手机连接" }).uncheck();
+    await phoneLink.getByText(/正在等手机连接/).waitFor({ state: "detached" });
+    await panel.keyboard.press("Escape");
+    console.log(
+      `PASS: phone link: switched on in settings, paired from the QR link over the real Electron link, today and chat followed (a streamed reply as appended text), history read, nothing private sent, latency p50 ${Math.round(lag.p50)} ms / p95 ${Math.round(lag.p95)} ms shown in settings, revoked and kept out, switched off; the pet cannot reach it.`,
     );
     console.log(
       "PASS: reading a web page asks first and refuses this Mac and the local network; MCP server added from settings: preview first, its tools offered, a writing call waits for the card, 允许一次 runs it, 拒绝 does not, 不用再问 skips the card, disable and remove; servers added from chat after a card (a pasted command, and a remote HTTP server with a token whose tool then runs after 允许); a skill found by 重新扫描, read through use_skill, and not offered once off; Codex, Claude Code and shared skill folders read in place, merged when linked, switched per folder and per skill, and one installed later offered with the next message; the shipped add-mcp-server skill read, then a server proposed through otter_add_mcp_server and added after 允许一次; a VS Code-shaped remote config pasted into settings.",
